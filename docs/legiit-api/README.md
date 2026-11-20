@@ -298,7 +298,7 @@ The extension accepts more than this. A list entry that it cannot read (a busine
 
 ### Rate limits
 
-- Limit each user, not each IP address and not all users together.
+- Limit each user, not each IP address and not all users together. A request without a valid token belongs to no user: if you limit such requests by IP address, allow the 20 that the check sends within a second.
 - A starting point: 120 reads and 60 saves per minute for a user, and an AI allowance per day (decision 6). A `GET` is a read and a `POST` is a save. Count calls to the AI endpoint separately.
 - Keep `GET /v1/session` out of tight limits. Every page of the extension calls it when it opens.
 - Answer `429` with the error body, and say in the message when to try again. The extension does not read `Retry-After` and does not retry. An allowance that is used up is `429` too.
@@ -582,7 +582,7 @@ npm run api:check -- https://your-staging-host your-test-token
 
 The command is the same in bash, PowerShell and cmd. Write the `--` before the arguments: without it npm keeps the options for itself. The first line of the summary says whether the run was read-only, so you can see that the options were read.
 
-The token can come from the environment variable `LEGIIT_API_TOKEN` instead. Use this form in a build pipeline and wherever the output is kept, because npm prints the command line, the token included. The check itself never prints the token.
+The token can come from the environment variable `LEGIIT_API_TOKEN` instead. Use this form in a build pipeline and wherever the output is kept: npm prints the command line, the token included, and writes it into its log file. The check does not print the token. When a reply of your server repeats the token, the check shows `<token>` in its place.
 
 ```bash
 LEGIIT_API_TOKEN=your-test-token npm run api:check -- https://your-staging-host

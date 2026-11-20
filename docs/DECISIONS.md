@@ -296,6 +296,27 @@ Section 8 has one part for every framework and one each for Laravel and PHP, MyS
 **D-80 · "URL" in everything a developer reads.**
 The kit said "address" for a web address, which in one sentence also meant an IP address and elsewhere a postal or e-mail address. Developer-facing text now says URL. The page for the product owner keeps "web address".
 
+**D-81 · Contract 1.0.0-draft.4 changes no request.**
+The first-reader review asked for rules that were missing, not for other fields. The new draft lists `409` on the five saves (only for a key whose first request is still running), drops the minimum length of the `Idempotency-Key` header (an empty value means "no key"), makes `updatedAt` of Industry Pulse plain text (the extension does not read it), and states five rules that were open: a used-up allowance is `429`; which competitor is returned when the domains of a request belong to different competitors; a "running" mark must end by itself; both AI tries must fit into the 60 seconds; a `413` page of a proxy is acceptable. An API built from draft.3 stays valid. The guide has the list of changes (section 13), because a team must be able to see what moved between two copies of the kit.
+
+**D-82 · The reference says once what five endpoints share, and puts what can be validated in one column.**
+The `Idempotency-Key` row, the `businessId` row and the reply to a save were printed five times. They are now in "Shared parameters and responses", and each endpoint links there. Closed lists moved to the "Limits" column, because the guide tells teams to validate that column; open lists stay in "Meaning". Every request body also exists as a standalone JSON Schema file (`schemas/`), for teams that validate with a schema library.
+
+**D-83 · Examples for the cases a team meets first, also where the mock has no such case.**
+The mock answers with text ids, a link and all capabilities. A Laravel and MySQL system answers with integer ids, and "API done" allows `"url": null`. Six replies and six error bodies are therefore written by hand; a unit test feeds each one to the extension's own client, so none of them can show something that the extension would refuse. Request examples now carry an emoji and a Japanese title, so a 3-byte database fails on the first save and not in production. The content-analysis example uses the scores of the bundled sentence model, recorded once, because the model does not run inside the unit test environment.
+
+**D-84 · The check is tested against wrong servers.**
+Nothing proved that a check fails when it should. The checks are now plain functions behind one runner, so the same code runs as `npm run api:check` and in-process. About ninety variants of the mock, each with one mistake that a real team makes or with an unusual but correct behaviour, run over HTTP inside `npm test`, and each variant states exactly which checks must fail and with which message. Nine weaknesses of the check were found this way and fixed (among them: the check followed redirects that the extension never follows, and a server that returned the same id for every save passed).
+
+**D-85 · The check sends what the examples do not have.**
+Every endpoint gets one request without a token and one with an unknown token. Every save gets `{}`, a wrong type and a cut-off body. Each save is also sent with every value empty that the extension can send empty, with a value of a later version in every open list, with a URL that strict validators refuse, and with an emoji. An id of another form is probed with three ids when the ids are numbers. A full run sends about a hundred requests and stores about thirty items; that is the price of a result that a team can trust.
+
+**D-86 · The runner's exit code means one thing.**
+`0`: the checks ran and none failed. `1`: at least one check failed. `2`: the check did not run to a result (wrong arguments, project not prepared, the test runner stopped). The runner never prints an argument back, because an argument can be the token; options that npm kept for itself (a missing `--`) are still used, with a note.
+
+**D-87 · The guide shows the extension.**
+Backend developers have never seen the extension, and they write the messages that it shows. Five screenshots are taken from the built extension against the mock (`npm run screenshots:kit`): the settings after Connect, the dialog with the JSON, "Saved" with its link, a rejected save, and the side panel. Nothing is drawn or edited. The save in the images is a competitor, because its JSON has no time in it, so the files are the same on every run.
+
 ---
 
 ## 3. Assumptions that a person must confirm
