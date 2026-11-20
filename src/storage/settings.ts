@@ -57,10 +57,13 @@ export const SettingsSchema = v.object({
   ),
   legiit: v.optional(
     v.object({
+      /** The Command Center business that tracked brands were pre-filled from and that saves go to. */
       businessId: v.optional(v.nullable(text(120)), null),
       businessName: v.optional(v.nullable(text(200)), null),
+      focusKeywords: v.optional(v.pipe(v.array(text(200)), v.maxLength(200)), []),
+      avatars: v.optional(v.pipe(v.array(v.object({ name: text(160), description: text(2000) })), v.maxLength(20)), []),
     }),
-    { businessId: null, businessName: null },
+    { businessId: null, businessName: null, focusKeywords: [], avatars: [] },
   ),
   onboardingSeen: v.optional(v.boolean(), false),
 });

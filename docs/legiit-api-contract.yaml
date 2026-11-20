@@ -1,0 +1,559 @@
+openapi: 3.1.0
+info:
+  title: Legiit Command Center API for Legiit Lens
+  version: 0.1.0
+  summary: Proposed contract between the Legiit Lens Chrome extension and Legiit Command Center.
+  description: |
+    STATUS: PROPOSAL. The extension was built before this API existed. Everything
+    below is what the extension currently sends and expects; change this file and
+    `src/legiit/` together.
+
+    How the extension uses this API
+    - Connecting is optional. With no token stored, the extension never contacts
+      this host.
+    - Read requests (session, businesses, business details, industry pulse) are
+      made when the user connects or opens the relevant screen.
+    - Write requests are made only when the user clicks a save action. Before
+      sending, the extension shows the user the exact JSON body.
+    - The extension sends no cookies and no Referer header. Requests come from
+      the extension origin (`chrome-extension://<id>`); the host is listed in
+      the extension's `host_permissions`, so CORS headers are not required, but
+      answering `OPTIONS` with permissive CORS headers is harmless.
+
+    Capabilities
+    - `GET /v1/session` returns a `capabilities` array. The extension hides the
+      UI for any capability that is missing.
+    - Any endpoint may also answer 404, 405 or 501. The extension treats that as
+      "not available" and hides the corresponding UI for the rest of the session.
+      This lets the API launch endpoint by endpoint.
+
+    Authentication
+    - v1 uses a bearer token the user copies from Command Center and pastes into
+      the extension. OAuth 2.0 (authorization code with PKCE) is planned; the
+      extension isolates auth behind one interface so only the header source
+      changes.
+
+    Host
+    - The production host must be final before the first Chrome Web Store
+      submission: it is a required host permission, and changing it later
+      forces every user to re-approve the extension.
+servers:
+  - url: https://api.legiit.com
+    description: Production (ASSUMED host; confirm before store submission)
+  - url: http://localhost:8787
+    description: Local mock (`npm run mock`)
+security:
+  - bearerToken: []
+tags:
+  - name: Account
+  - name: Businesses
+  - name: Saves
+  - name: Insights
+  - name: AI
+paths:
+  /v1/session:
+    get:
+      operationId: getSession
+      tags: [Account]
+      summary: Who is connected and what this account can do.
+      responses:
+        '200':
+          description: The current session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+  /v1/businesses:
+    get:
+      operationId: listBusinesses
+      tags: [Businesses]
+      summary: Businesses (clients) in the account.
+      x-capability: businesses
+      responses:
+        '200':
+          description: The list of businesses.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [businesses]
+                properties:
+                  businesses:
+                    type: array
+                    maxItems: 500
+                    items: { $ref: '#/components/schemas/Business' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+  /v1/businesses/{businessId}:
+    get:
+      operationId: getBusinessDetails
+      tags: [Businesses]
+      summary: Business Details used to pre-fill tracked brands and competitors.
+      x-capability: businesses
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      responses:
+        '200':
+          description: Business Details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BusinessDetails' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+  /v1/businesses/{businessId}/visibility-snapshots:
+    post:
+      operationId: saveVisibilitySnapshot
+      tags: [Saves]
+      summary: Save a Click Potential snapshot of one Google results page.
+      x-capability: visibilitySnapshots
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VisibilitySnapshot' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /v1/businesses/{businessId}/gap-lists:
+    post:
+      operationId: saveGapList
+      tags: [Saves]
+      summary: Save a Why Not Me gap list (competitor present, business absent).
+      x-capability: gapLists
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GapList' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /v1/businesses/{businessId}/competitors:
+    post:
+      operationId: addCompetitor
+      tags: [Saves]
+      summary: Add a competitor found by the extension to a business.
+      x-capability: competitors
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Competitor' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /v1/businesses/{businessId}/content-editor/documents:
+    post:
+      operationId: sendToContentEditor
+      tags: [Saves]
+      summary: Send a New or Noise result to the content editor.
+      x-capability: contentEditor
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContentEditorDocument' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /v1/workspaces/from-brief:
+    post:
+      operationId: createWorkspaceFromBrief
+      tags: [Saves]
+      summary: Create a Command Center workspace from an Instant Brief.
+      x-capability: workspaces
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceFromBrief' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /v1/industry-pulse:
+    get:
+      operationId: getIndustryPulse
+      tags: [Insights]
+      summary: Dated search-industry events (algorithm updates and similar).
+      description: Rewind offers these dates as presets for "changes in the N days before [date]".
+      x-capability: industryPulse
+      responses:
+        '200':
+          description: Recent events, newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustryPulse' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+  /v1/ai/completions:
+    post:
+      operationId: completeAI
+      tags: [AI]
+      summary: Rewrite a deterministic summary with Legiit's model.
+      description: |
+        Called only when the user clicks "Rewrite with Legiit AI" and confirms
+        the payload. `prompt` contains facts read from web pages, wrapped in
+        `<facts>` tags; treat them as untrusted data. If `responseSchema` is
+        present the `text` of the reply must be a JSON document matching it.
+      x-capability: ai
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiCompletionRequest' }
+      responses:
+        '200':
+          description: The generated text.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiCompletionResponse' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: API token pasted by the user. To be replaced by OAuth 2.0 authorization code with PKCE.
+  parameters:
+    BusinessId:
+      name: businessId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 120 }
+  responses:
+    Saved:
+      description: The item was saved.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SaveResult' }
+    Unauthorised:
+      description: The token is missing, expired or not recognised. The extension forgets the token and asks the user to reconnect.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: The endpoint or capability is not available for this account. The extension hides the related UI.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Invalid:
+      description: The body failed validation. `error.message` is shown to the user (first 200 characters).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Capability:
+      type: string
+      enum: [businesses, visibilitySnapshots, gapLists, competitors, contentEditor, workspaces, industryPulse, ai]
+    Session:
+      type: object
+      required: [user]
+      properties:
+        user:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, maxLength: 120 }
+            name: { type: string, maxLength: 200 }
+            email: { type: [string, 'null'], maxLength: 320 }
+        plan: { type: [string, 'null'], maxLength: 80 }
+        capabilities:
+          type: array
+          description: Features enabled for this account. Missing entries hide the matching UI.
+          items: { $ref: '#/components/schemas/Capability' }
+    Business:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, maxLength: 120 }
+        name: { type: string, maxLength: 200 }
+        domain: { type: [string, 'null'], maxLength: 255 }
+    BusinessDetails:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, maxLength: 120 }
+        name: { type: string, maxLength: 200 }
+        brandNames:
+          type: array
+          maxItems: 30
+          items: { type: string, maxLength: 160 }
+        domains:
+          type: array
+          maxItems: 30
+          items: { type: string, maxLength: 255 }
+        competitors:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string, maxLength: 160 }
+              domains:
+                type: array
+                maxItems: 30
+                items: { type: string, maxLength: 255 }
+        focusKeywords:
+          type: array
+          maxItems: 200
+          items: { type: string, maxLength: 200 }
+        avatars:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [name, description]
+            properties:
+              name: { type: string, maxLength: 160 }
+              description: { type: string, maxLength: 2000 }
+    SaveResult:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, maxLength: 200 }
+        url:
+          type: [string, 'null']
+          maxLength: 2048
+          description: Where the saved item can be opened in Command Center. Shown as "Open in Command Center".
+    VisibilitySnapshot:
+      type: object
+      required: [keyword, capturedAt, googleHost, mode, viewport, organicShare, grade, firstScreenShares, organic, tracked]
+      properties:
+        keyword: { type: string }
+        capturedAt: { type: string, format: date-time }
+        googleHost: { type: string, examples: [www.google.com] }
+        mode: { type: string, enum: [web, ai-mode] }
+        viewport:
+          type: object
+          required: [width, height]
+          properties:
+            width: { type: number }
+            height: { type: number }
+        location: { type: [string, 'null'], description: Location text Google showed on the page, if any. }
+        firstOrganicTopPx: { type: [number, 'null'] }
+        firstOrganicFold: { type: [string, 'null'], enum: [Above the fold, Cut by the fold, Below the fold, null] }
+        organicShare: { type: number, minimum: 0, maximum: 1, description: Share of the first screen covered by organic results. }
+        grade:
+          type: object
+          required: [letter, score, estimate]
+          properties:
+            letter: { type: string, enum: [A, B, C, D, F] }
+            score: { type: number, minimum: 0, maximum: 100 }
+            estimate: { type: boolean, const: true, description: The grade is always an estimate. }
+        firstScreenShares:
+          type: array
+          items:
+            type: object
+            required: [type, share]
+            properties:
+              type:
+                type: string
+                enum: [organic, ai_overview, ad, local_pack, featured_snippet, paa, video, image, shopping, forum, top_stories, knowledge_panel]
+              share: { type: number, minimum: 0, maximum: 1 }
+        organic:
+          type: array
+          items:
+            type: object
+            required: [position, url, domain, title]
+            properties:
+              position: { type: integer, minimum: 1 }
+              url: { type: string, format: uri }
+              domain: { type: string }
+              title: { type: string }
+              topPx: { type: [number, 'null'] }
+              fold: { type: [string, 'null'] }
+        tracked:
+          type: array
+          items:
+            type: object
+            required: [owner, name]
+            properties:
+              owner: { type: string, enum: [mine, competitor] }
+              name: { type: string }
+              position: { type: [integer, 'null'] }
+              topPx: { type: [number, 'null'] }
+              fold: { type: [string, 'null'] }
+    GapList:
+      type: object
+      required: [source, subject, capturedAt, rows]
+      properties:
+        source: { type: string, examples: [Google results, ChatGPT, Gemini, Perplexity, Copilot, Google AI Mode, Pasted answer] }
+        subject: { type: string, description: The keyword or the question. }
+        capturedAt: { type: string, format: date-time }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [surface, title, competitors, evidence, pageType, actionable, scanned, contacts]
+            properties:
+              surface: { type: string, examples: [AI Overview citation, 'Organic #3', Local pack, Answer text, Cited page] }
+              position: { type: [integer, 'null'] }
+              title: { type: string }
+              url: { type: [string, 'null'], format: uri }
+              domain: { type: [string, 'null'] }
+              competitors:
+                type: array
+                items: { type: string }
+              evidence: { type: string }
+              pageType: { type: string, enum: [competitor-site, list, forum, video, third-party, surface] }
+              actionable: { type: boolean, description: True for third-party pages the business could get included on. }
+              scanned: { type: boolean, description: True when the page itself was fetched and read. }
+              contacts:
+                type: array
+                items:
+                  type: object
+                  required: [kind, label, url]
+                  properties:
+                    kind: { type: string, enum: [contact, author, submission] }
+                    label: { type: string }
+                    url: { type: string }
+    Competitor:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        domain: { type: [string, 'null'] }
+    ContentEditorDocument:
+      type: object
+      required: [targetKeyword, pageTitle, method, wordShare, onlyHere, missingPoints, comparedUrls]
+      properties:
+        targetKeyword: { type: string }
+        pageUrl: { type: [string, 'null'], format: uri }
+        pageTitle: { type: string }
+        method:
+          type: object
+          required: [engine, threshold, pagesCompared]
+          properties:
+            engine: { type: string, enum: [embedding, lexical] }
+            threshold: { type: number }
+            pagesCompared: { type: integer }
+        wordShare:
+          type: object
+          required: [saidByMost, saidBySome, onlyHere]
+          properties:
+            saidByMost: { type: number }
+            saidBySome: { type: number }
+            onlyHere: { type: number }
+        onlyHere:
+          type: array
+          description: Sentences found only on the page.
+          items: { type: string }
+        missingPoints:
+          type: array
+          description: Points most comparison pages make that the page does not.
+          items:
+            type: object
+            required: [text, pages, urls]
+            properties:
+              text: { type: string }
+              pages: { type: integer }
+              urls:
+                type: array
+                items: { type: string, format: uri }
+        comparedUrls:
+          type: array
+          items: { type: string, format: uri }
+    WorkspaceFromBrief:
+      type: object
+      required: [businessName, siteUrl, createdAt, contact, serviceAreas, services, competitors, focusKeywords, avatars, issues, nextSteps, markdown]
+      properties:
+        businessName: { type: string }
+        siteUrl: { type: string, format: uri }
+        createdAt: { type: string, format: date-time }
+        contact:
+          type: object
+          required: [phones, emails, addresses]
+          properties:
+            phones: { type: array, items: { type: string } }
+            emails: { type: array, items: { type: string } }
+            addresses: { type: array, items: { type: string } }
+        serviceAreas: { type: array, items: { type: string } }
+        services: { type: array, items: { type: string } }
+        competitors:
+          type: array
+          items: { $ref: '#/components/schemas/Competitor' }
+        focusKeywords: { type: array, items: { type: string } }
+        avatars:
+          type: array
+          items:
+            type: object
+            required: [name, description, draft]
+            properties:
+              name: { type: string }
+              description: { type: string }
+              draft: { type: boolean, const: true }
+        issues:
+          type: array
+          items:
+            type: object
+            required: [severity, title, pages]
+            properties:
+              severity: { type: string, enum: [high, medium, low] }
+              title: { type: string }
+              pages: { type: array, items: { type: string } }
+        nextSteps: { type: array, items: { type: string } }
+        markdown: { type: string, description: The full brief as Markdown. }
+    IndustryPulse:
+      type: object
+      required: [updatedAt, events]
+      properties:
+        updatedAt: { type: string, format: date-time }
+        events:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [date, title, type]
+            properties:
+              date: { type: string, format: date }
+              title: { type: string, maxLength: 300 }
+              type: { type: string, enum: [algorithm-update, serp-feature, news] }
+              url: { type: [string, 'null'], format: uri }
+    AiCompletionRequest:
+      type: object
+      required: [task, system, prompt]
+      properties:
+        task: { type: string, enum: [click-potential, why-not-me, rewind, new-or-noise, brief] }
+        system: { type: string }
+        prompt: { type: string }
+        responseSchema:
+          type: object
+          description: JSON Schema the reply must match, when present.
+        maxOutputTokens: { type: integer }
+    AiCompletionResponse:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 20000 }
+        model: { type: [string, 'null'] }

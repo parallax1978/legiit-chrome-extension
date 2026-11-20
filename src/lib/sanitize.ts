@@ -3,7 +3,6 @@
  * page-derived strings before they are stored, rendered, exported or sent.
  */
 
-// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F​-‏‪-‮⁠-⁤﻿]/g;
 
 /** Collapse whitespace, strip control and bidi-override characters, cap the length. */

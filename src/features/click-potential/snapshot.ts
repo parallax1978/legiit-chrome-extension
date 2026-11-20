@@ -23,13 +23,21 @@ export interface SnapshotRecord {
   shares: BlockShare[];
   organic: { position: number; domain: string; url: string; title: string; top: number | null; fold: FoldStatus | null }[];
   tracked: TrackedRow[];
+  /** Why Not Me summary for the same page, when brands were tracked at the time. Reused by Instant Brief. */
+  presence: SnapshotPresence | null;
+}
+
+export interface SnapshotPresence {
+  surfaces: { id: string; label: string; status: string; competitors: string[] }[];
+  /** Labels of surfaces where competitors appear and the user's brand does not. */
+  gapSurfaces: string[];
 }
 
 export function keywordKey(keyword: string): string {
   return keyword.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-export function toSnapshot(serp: SerpData, cp: ClickPotential): SnapshotRecord {
+export function toSnapshot(serp: SerpData, cp: ClickPotential, presence: SnapshotPresence | null = null): SnapshotRecord {
   return {
     id: serp.pageId,
     keyword: serp.keyword,
@@ -48,6 +56,7 @@ export function toSnapshot(serp: SerpData, cp: ClickPotential): SnapshotRecord {
     shares: cp.shares,
     organic: cp.organic.map((o) => ({ position: o.position, domain: o.domain, url: o.url, title: o.title, top: o.top, fold: o.fold })),
     tracked: cp.tracked,
+    presence,
   };
 }
 
