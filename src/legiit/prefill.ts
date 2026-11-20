@@ -34,8 +34,9 @@ export function applyBusinessDetails(settings: Settings, details: LegiitBusiness
 
   const myDomains = domains(details.domains);
   const names = details.brandNames.map(brandName).filter(Boolean);
-  const myName = brandName(details.name) || names[0] || myDomains[0] || 'My brand';
-  if (next.myBrands.length < MAX.myBrands && !next.myBrands.some((b) => sameBrand(b, myName, myDomains))) {
+  const myName = brandName(details.name) || names[0] || brandName(myDomains[0] ?? '');
+  // A business with no name, no other spelling and no domain gives nothing to look for: no brand is added for it.
+  if (myName && next.myBrands.length < MAX.myBrands && !next.myBrands.some((b) => sameBrand(b, myName, myDomains))) {
     next.myBrands.push({
       id: `legiit-${hashString(details.id)}`,
       name: myName,
@@ -48,7 +49,7 @@ export function applyBusinessDetails(settings: Settings, details: LegiitBusiness
     if (next.competitors.length >= MAX.competitors) break;
     const competitorDomains = domains(competitor.domains);
     // A competitor known only by its domain is tracked under that domain.
-    const name = brandName(competitor.name) || competitorDomains[0] || '';
+    const name = brandName(competitor.name) || brandName(competitorDomains[0] ?? '');
     if (!name || next.competitors.some((b) => sameBrand(b, name, competitorDomains))) continue;
     next.competitors.push({
       id: `legiit-${hashString(`${details.id}|${name}`)}`,

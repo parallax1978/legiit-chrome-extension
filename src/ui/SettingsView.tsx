@@ -4,6 +4,7 @@ import { chromeModelAvailability, downloadChromeModel } from '@/ai/provider';
 import { PRODUCT_NAME } from '@/config/constants';
 import { LEGIIT_API_BASE_URL } from '@/config/runtime';
 import { isUnavailable, LegiitError } from '@/legiit/client';
+import { noteFailure } from '@/legiit/connection';
 import { competitorPayload } from '@/legiit/payloads';
 import { applyBusinessDetails, clearBusinessDetails } from '@/legiit/prefill';
 import type { LegiitBusiness } from '@/legiit/types';
@@ -190,14 +191,14 @@ function AgencySection() {
 }
 
 function LegiitSection() {
-  const { connection, loading, connect, disconnect, can } = useConnection();
+  const { connection, loading, connect, disconnect, can, refreshCapabilities } = useConnection();
   const { settings, update } = useSettings();
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<LegiitBusiness[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const client = connection.client;
   const canList = can('listBusinesses');
 
@@ -211,14 +212,19 @@ function LegiitSection() {
       (e: unknown) => {
         if (!alive) return;
         setBusinesses([]);
-        // An account without this feature simply has no list; anything else is worth saying.
-        if (!isUnavailable(e)) setListError(`Could not load your businesses: ${errorMessage(e)}`);
+        if (isUnavailable(e)) {
+          // Legiit does not offer the list (yet): the drop-down goes away, like any other feature that is not there.
+          noteFailure('listBusinesses', e);
+          refreshCapabilities();
+        } else {
+          setListError(`Could not load your businesses: ${errorMessage(e)}`);
+        }
       },
     );
     return () => {
       alive = false;
     };
-  }, [client, canList]);
+  }, [client, canList, refreshCapabilities]);
 
   const onConnect = async () => {
     setBusy(true);
@@ -248,11 +254,12 @@ function LegiitSection() {
       return;
     }
     try {
-      const details = await client.getBusinessDetails(id);
+      // The id the user chose is the one that is kept and used for saves, whatever form the reply gives it in.
+      const details = { ...(await client.getBusinessDetails(id)), id };
       await update((draft) => applyBusinessDetails(draft, details));
-      setNote(`Tracked brands and ${details.competitors.length} competitor${details.competitors.length === 1 ? '' : 's'} were pre-filled from ${details.name}.`);
+      setNote({ tone: 'ok', text: `Tracked brands and ${details.competitors.length} competitor${details.competitors.length === 1 ? '' : 's'} were pre-filled from ${details.name || 'this business'}.` });
     } catch (e) {
-      setNote(`Could not load that business: ${errorMessage(e)}`);
+      setNote({ tone: 'error', text: `Could not load that business: ${isUnavailable(e) ? 'Legiit does not offer business details yet.' : errorMessage(e)}` });
     }
   };
 
@@ -299,7 +306,11 @@ function LegiitSection() {
               This Legiit account has no businesses yet. Add one in Command Center, then open this page again.
             </p>
           )}
-          {note && <Notice tone="ok">{note}</Notice>}
+          {note && (
+            <Notice tone={note.tone} testId="legiit-business-note">
+              {note.text}
+            </Notice>
+          )}
           {settings.legiit.focusKeywords.length > 0 && (
             <div className="small">
               <strong>Focus keywords:</strong> {settings.legiit.focusKeywords.join(' · ')}

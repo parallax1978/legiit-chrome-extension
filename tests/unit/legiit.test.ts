@@ -203,8 +203,102 @@ describe('HTTP client against the mock API', () => {
       ],
     });
     expect(await client.addCompetitor('7', { name: 'n', domains: [] })).toEqual({ id: '9001', url: null });
-    await expect(answering(() => Response.json({ events: [{ date: 'March 5', title: 'x' }] })).client.getIndustryPulse()).rejects.toMatchObject({ code: 'invalid-response' });
     await expect(answering(() => Response.json({ user: { id: 'u' }, capabilities: 'all' })).client.getSession()).rejects.toMatchObject({ code: 'invalid-response' });
+  });
+
+  it('skips a row it cannot read instead of losing the whole reply', async () => {
+    const { client } = answering((url) => {
+      const path = new URL(url).pathname;
+      if (path === '/v1/session') return Response.json({ user: { id: 'u', name: 365, email: { nested: true } }, plan: { name: 'agency' }, capabilities: ['ai'] });
+      if (path === '/v1/businesses') {
+        return Response.json({
+          businesses: [{ id: 1, name: null }, { name: 'No id at all' }, 'not an object', null, { id: '', name: 'Empty id' }, { id: 2, name: 2024, domain: 7 }, { id: 9007199254740993, name: 'Id too large for a number' }],
+        });
+      }
+      if (path === '/v1/businesses/1') {
+        return Response.json({
+          id: 'another-form-of-the-id',
+          name: null,
+          brandNames: ['Acme', null, 42, { no: 1 }],
+          domains: 'acme.example',
+          competitors: [{ name: null, domains: ['rival.example', null] }, 'junk', { name: 'Named Only' }, { domains: 'solo.example' }],
+          focusKeywords: { not: 'a list' },
+          avatars: [{ name: 'A', description: 5 }, { description: 'no name' }],
+        });
+      }
+      return Response.json({
+        updatedAt: 1763640000,
+        events: [
+          { date: 'March 5', title: 'Not a date' },
+          { date: '2026-13-45', title: 'Not a real day' },
+          { date: '2026-03-05', title: 'Good', type: 9, url: ['x'] },
+          { title: 'No date' },
+          null,
+          { date: '2026-01-02T23:00:00-05:00', title: 404 },
+        ],
+      });
+    });
+    expect(await client.getSession()).toEqual({ user: { id: 'u', name: '365', email: null }, plan: null, capabilities: ['ai'] });
+    expect(await client.listBusinesses()).toEqual([
+      { id: '1', name: '', domain: null },
+      { id: '2', name: '2024', domain: '7' },
+    ]);
+    const details = await client.getBusinessDetails('1');
+    expect(details).toEqual({
+      id: 'another-form-of-the-id',
+      name: '',
+      brandNames: ['Acme', '42'],
+      domains: ['acme.example'],
+      competitors: [
+        { name: '', domains: ['rival.example'] },
+        { name: 'Named Only', domains: [] },
+        { name: '', domains: ['solo.example'] },
+      ],
+      focusKeywords: [],
+      avatars: [{ name: 'A', description: '5' }],
+    });
+    expect(await client.getIndustryPulse()).toEqual({
+      updatedAt: '1763640000',
+      events: [
+        { date: '2026-03-05', title: 'Good', type: '9', url: null },
+        { date: '2026-01-02', title: '404', type: 'news', url: null },
+      ],
+    });
+    // Whatever was read can be stored: a competitor without a name is tracked under its domain, and a business
+    // with a name but nothing else still becomes the user's own brand.
+    const stored = applyBusinessDetails(DEFAULT_SETTINGS, { ...details, id: '1' });
+    expect(parseSettings(stored)).toEqual(stored);
+    expect(stored.myBrands.map((b) => [b.name, b.domains])).toEqual([['Acme', ['acme.example']]]);
+    expect(stored.competitors.map((b) => [b.name, b.domains])).toEqual([
+      ['rival.example', ['rival.example']],
+      ['Named Only', []],
+      ['solo.example', ['solo.example']],
+    ]);
+    expect(stored.legiit.businessId).toBe('1');
+    // A business with nothing to look for adds no brand of the user's own.
+    const empty = applyBusinessDetails(DEFAULT_SETTINGS, { id: '3', name: '', brandNames: [], domains: [], competitors: [], focusKeywords: [], avatars: [] });
+    expect(empty.myBrands).toEqual([]);
+    expect(empty.legiit.businessId).toBe('3');
+    // A fallback name taken from a very long domain is cut to what the settings can hold.
+    const longDomain = `${'a'.repeat(60)}.${'b'.repeat(60)}.${'c'.repeat(60)}.example`;
+    const long = applyBusinessDetails(DEFAULT_SETTINGS, { id: '4', name: '', brandNames: [], domains: [longDomain], competitors: [{ name: '', domains: [longDomain] }], focusKeywords: [], avatars: [] });
+    expect(parseSettings(long)).toEqual(long);
+    expect(long.myBrands[0]!.name).toHaveLength(160);
+    expect(long.myBrands[0]!.domains).toEqual([longDomain]);
+
+    // What a reply cannot do without is still required.
+    for (const body of [{}, { businesses: null }, { businesses: { 0: { id: 1 } } }, [{ id: 1, name: 'bare array' }], { data: { businesses: [] } }]) {
+      await expect(answering(() => Response.json(body)).client.listBusinesses()).rejects.toMatchObject({ code: 'invalid-response' });
+    }
+    for (const body of [{}, { events: null }, [{ date: '2026-03-05', title: 'bare array' }]]) {
+      await expect(answering(() => Response.json(body)).client.getIndustryPulse()).rejects.toMatchObject({ code: 'invalid-response' });
+    }
+    for (const body of [{}, { text: null }, { text: ['a'] }, { data: { text: 'wrapped' } }]) {
+      await expect(answering(() => Response.json(body)).client.completeAI({ task: 'rewind', system: 's', prompt: 'p', maxOutputTokens: 700 })).rejects.toMatchObject({ code: 'invalid-response' });
+    }
+    for (const body of [{ data: { id: 1 } }, { id: null }, { id: 1.5 }, { id: 9007199254740993 }, { id: '   ' }]) {
+      await expect(answering(() => Response.json(body, { status: 201 })).client.addCompetitor('b', { name: 'n', domains: [] })).rejects.toMatchObject({ code: 'invalid-response' });
+    }
   });
 
   it('cuts text and lists that are longer than the limits instead of failing', async () => {

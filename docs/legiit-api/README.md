@@ -88,7 +88,7 @@ sequenceDiagram
 - Every request carries `Authorization: Bearer <token>`. The token is the only credential.
 - No cookies are sent. There is nothing to protect against CSRF: exempt these routes from CSRF checks.
 - The token is opaque to the extension: any text of up to 4,096 characters without line breaks. The extension stores it as pasted (trimmed) and keeps using it until the API answers `401` to `GET /v1/session`.
-- Answer `401` only when the token itself is bad. A `401` makes the extension delete the token.
+- Answer `401` only when the token itself is bad, and answer it as JSON, not as a redirect to a login page. A `401` on `GET /v1/session` makes the extension delete the token.
 
 ### What arrives at the server
 
@@ -123,12 +123,17 @@ Captured from Chrome with a production build of the extension.
 
 ### Replies
 
-- JSON, with `Content-Type: application/json`. Also for errors.
-- **A successful save must return a JSON body with an `id`.** `201` and `200` are both accepted. A `204`, an empty body or an HTML page is treated as a failed save, and the user is told so.
-- An `id` can be a string or an integer, whichever your database uses. The extension treats it as opaque text.
-- The extension ignores fields it does not know, so you can add fields at any time.
+- JSON, with `Content-Type: application/json`, on the address that was called. Also for errors: no HTML error pages, and no redirect to a login page.
+- **The body is the object shown in the reference, at the top level.** No wrapper such as `{"data": …}`, and no bare array.
+- **Keys are camelCase and case-sensitive.** An optional key under another spelling (`brand_names`, `focus_keywords`) is treated as absent, without any error. Compare your replies with the files in [`examples/`](examples).
+- **A successful save must return a JSON body with an `id`.** `201` and `200` are both accepted. A `204`, an empty body or an HTML page is treated as a failed save: the user is told so and will probably send it again.
+- An `id` can be a string or an integer, whichever your database uses. Send an integer larger than 2^53 − 1 as a string. Ids are never cut.
+- Text is a JSON string. Use `""` for empty text.
 - An optional field can be left out or be `null`.
-- Text longer than the stated maximum is cut, and a list longer than the maximum is cut. A reply that lacks a required field, or has one of the wrong type, is rejected as a whole.
+- You can add fields at any time. The extension ignores fields it does not know.
+- Text longer than the stated maximum is cut, and a list longer than the maximum is cut. If an account can have more than 500 businesses, return the most relevant first.
+
+The extension is forgiving beyond this, so that one odd row in your data does not break a user's screen: a list entry it cannot read (a business without an id, an event without a valid date) is skipped and the rest is used. Do not rely on it. `npm run api:check` checks the strict form.
 
 ### Time limits and retries
 
@@ -162,7 +167,7 @@ A user can send the same save twice: after a timeout, or by saving the same resu
 - The smallest useful launch is `GET /v1/session` returning `"capabilities": []`. The user can connect and sees no Legiit feature. Add capabilities as endpoints go live.
 - Use capabilities for plans too: leave out what the user's plan does not include.
 - List `businesses` whenever you list one of the four capabilities below it in the table. Without it the user cannot choose a business, and those four saves stay disabled.
-- The extension ignores capability names it does not know. Do not rename the eight above.
+- Send the names exactly as written, in a JSON array. They are case-sensitive. The extension ignores a name it does not know, so a misspelt name hides its feature without any error. `npm run api:check` reports unknown names.
 - Safety net: if an endpoint answers `404`, `405` or `501` although its capability is listed, the extension tells the user, then hides the feature until the side panel or settings page is opened again.
 
 ## 5. Errors
@@ -206,7 +211,7 @@ Three things to get right:
 
 ### An address for every saved item
 
-Each save returns `url`: a page in Command Center that shows the saved item to a signed-in user. The extension opens it in a new tab. If you have no such page yet, return `"url": null`; the extension then shows "Saved" without a link.
+Each save returns `url`: the absolute `https://` address of a page in Command Center that shows the saved item. The extension shows it as a link next to "Saved". A click opens it in a new tab, without the token, so the page must work with the user's normal Command Center login. If you have no such page yet, return `"url": null`; the extension then shows "Saved" without a link.
 
 For `POST /v1/workspaces/from-brief` the link matters most: the button is called "Open in Command Center", and the user expects to land in the new workspace.
 

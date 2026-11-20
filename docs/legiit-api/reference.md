@@ -32,7 +32,7 @@ Checks the token. Returns who is connected and which features are switched on.
 | | |
 | --- | --- |
 | Capability | none: always available |
-| Called when | The user clicks Connect. After that, once each time the side panel or the settings page opens while a token is stored. |
+| Called when | The user clicks Connect. After that, once each time the side panel or the settings page opens while a token is stored, and again in every open extension page when the stored token changes. |
 | Success | `200` |
 | Errors | `401`, `403`, `429`, `5xx`. See [Errors](#errors). |
 | Operation id | `getSession` |
@@ -50,11 +50,11 @@ The token is valid.
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `user` | object | yes |  | The person the token belongs to. |
-| `user.id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | Stable id of the user. Not shown. |
+| `user.id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Stable id of the user. Not shown. |
 | `user.name` | string or null | no | 0 to 200 chars | Display name, shown after "Connected". When it is null or empty the e-mail is shown instead. |
 | `user.email` | string or null | no | 0 to 320 chars | Shown only when there is no name. |
 | `plan` | string or null | no | 0 to 80 chars | Name of the user's plan, as text to show next to the name. Not used for any decision. For example: `agency`. |
-| `capabilities` | array of string | yes |  | The features this token may use. The extension shows a feature only when its capability is listed, and ignores names it does not know. To launch endpoint by endpoint, list only what is live. Values: `businesses`, `visibilitySnapshots`, `gapLists`, `competitors`, `contentEditor`, `workspaces`, `industryPulse`, `ai`. |
+| `capabilities` | array of string | yes |  | The features this token may use, as a JSON array of names. The extension shows a feature only when its capability is listed. Names are case-sensitive; a name the extension does not know, or a misspelt one, is ignored without an error. To launch endpoint by endpoint, list only what is live. Values: `businesses`, `visibilitySnapshots`, `gapLists`, `competitors`, `contentEditor`, `workspaces`, `industryPulse`, `ai`. |
 
 **Example response**
 
@@ -88,7 +88,7 @@ Lists the businesses the user can save into.
 | | |
 | --- | --- |
 | Capability | `businesses` |
-| Called when | The settings screen is shown while connected. |
+| Called when | Each time the settings screen is shown while connected (the settings page, or the Settings tab of the side panel). |
 | Success | `200` |
 | Errors | `401`, `403`, `404` (feature not available), `429`, `5xx`. See [Errors](#errors). |
 | Operation id | `listBusinesses` |
@@ -103,7 +103,7 @@ The businesses. An empty list is fine; the extension then tells the user to add 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `businesses` | array of object | yes | 0 to 500 items | All businesses of the user, in the order to show them. Only the first 500 are used. |
-| `businesses[].id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | Used as {businessId} in every path below a business. |
+| `businesses[].id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Used as {businessId} in every path below a business. |
 | `businesses[].name` | string | yes | 0 to 200 chars | Shown in the drop-down. Longer names are cut at 200 characters. |
 | `businesses[].domain` | string or null | no | 0 to 255 chars | The main domain. Shown only when the name is empty. |
 
@@ -144,6 +144,10 @@ The extension copies these values once, into the user's tracked brands on their 
 not ask again until the user chooses the business again, so a later change in Command Center is
 not picked up on its own. Disconnecting removes the copies.
 
+The copy is a merge. Brands the user typed themselves are kept and win: a competitor with the same
+name or domain as one of them is not added again. The device holds at most 50 own brands and 200
+competitors.
+
 ### Path parameters
 
 | Name | Type | Always sent | Limits | Meaning |
@@ -158,11 +162,11 @@ What the extension pre-fills as "tracked brands". Brands are how it tells the us
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | The same id as in the path. |
+| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | The same id as in the path, in the same form as GET /v1/businesses lists it. |
 | `name` | string | yes | 0 to 200 chars | Name of the business. Becomes the name of the user's own tracked brand (cut at 160 characters). |
 | `brandNames` | array of string or null | no | 0 to 30 items; each: 0 to 160 chars | Other ways people write the business's name ("BrightPath", "Bright Path Dental"). Used to find the brand in AI answers and page text. Absent or null means none. |
-| `domains` | array of string or null | no | 0 to 30 items; each: 0 to 255 chars | Domains that belong to the business. A result on one of them counts as the user's own. "example.com", "www.example.com" and "https://www.example.com/page" are all read as example.com. Subdomains of a listed domain count too. Values that are not a domain are skipped. |
-| `competitors` | array of object or null | no | 0 to 200 items | The business's competitors. Each becomes a tracked competitor. |
+| `domains` | array of string or null | no | 0 to 30 items; each: 0 to 255 chars | Domains the business owns, one per entry. A result on one of them counts as the user's own. "example.com", "www.example.com" and "https://www.example.com/page" are all read as example.com: the path is dropped, and subdomains of a listed domain count too. So do not list a profile on a shared site (facebook.com/yourbusiness, a marketplace listing): every result on that whole site would count as the business. Values that are not a domain (an e-mail address, a wildcard) are skipped. |
+| `competitors` | array of object or null | no | 0 to 200 items | The business's competitors. Each becomes a tracked competitor, unless the user already tracks one with that name or domain. |
 | `competitors[].name` | string | yes | 0 to 160 chars | Display name. A competitor with an empty name is tracked under its first domain. |
 | `competitors[].domains` | array of string or null | no | 0 to 30 items; each: 0 to 255 chars | Domains of the competitor, read the same way as the business's own domains. |
 | `focusKeywords` | array of string or null | no | 0 to 200 items; each: 0 to 200 chars | Keywords the business wants to rank for. Shown as a line of text under Settings; nothing else uses them yet. |
@@ -362,12 +366,12 @@ Shortened here (`organic`: 2 of 9 items shown; `tracked`: 2 of 4 items shown). C
 
 ### Response 201
 
-The item was stored. 200 is accepted as well as 201. The body is required: a 204 or an empty body is treated as a failed save.
+The item was stored. 200 is accepted as well as 201. The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | Id of the stored item. Not shown to the user. |
-| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Address of a page in Command Center that shows the stored item. The extension shows it as an "Open in Command Center" link that opens in a new tab, so the page must work for a signed-in user. null or absent: "Saved" is shown without a link. |
+| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item. Not shown to the user. |
+| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Absolute https address of a page in Command Center that shows the stored item. Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent: "Saved" is shown without a link. |
 
 **Example response**
 
@@ -510,12 +514,12 @@ Shortened here (`rows`: 2 of 20 items shown; `rows[].contacts`: 2 of 6 items sho
 
 ### Response 201
 
-The item was stored. 200 is accepted as well as 201. The body is required: a 204 or an empty body is treated as a failed save.
+The item was stored. 200 is accepted as well as 201. The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | Id of the stored item. Not shown to the user. |
-| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Address of a page in Command Center that shows the stored item. The extension shows it as an "Open in Command Center" link that opens in a new tab, so the page must work for a signed-in user. null or absent: "Saved" is shown without a link. |
+| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item. Not shown to the user. |
+| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Absolute https address of a page in Command Center that shows the stored item. Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent: "Saved" is shown without a link. |
 
 **Example response**
 
@@ -594,12 +598,12 @@ File: `examples/addCompetitor.request.json`.
 
 ### Response 201
 
-The item was stored. 200 is accepted as well as 201. The body is required: a 204 or an empty body is treated as a failed save.
+The item was stored. 200 is accepted as well as 201. The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | Id of the stored item. Not shown to the user. |
-| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Address of a page in Command Center that shows the stored item. The extension shows it as an "Open in Command Center" link that opens in a new tab, so the page must work for a signed-in user. null or absent: "Saved" is shown without a link. |
+| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item. Not shown to the user. |
+| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Absolute https address of a page in Command Center that shows the stored item. Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent: "Saved" is shown without a link. |
 
 **Example response: name only**
 
@@ -780,12 +784,12 @@ File: `examples/sendToContentEditor.request.json`.
 
 ### Response 201
 
-The item was stored. 200 is accepted as well as 201. The body is required: a 204 or an empty body is treated as a failed save.
+The item was stored. 200 is accepted as well as 201. The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | Id of the stored item. Not shown to the user. |
-| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Address of a page in Command Center that shows the stored item. The extension shows it as an "Open in Command Center" link that opens in a new tab, so the page must work for a signed-in user. null or absent: "Saved" is shown without a link. |
+| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item. Not shown to the user. |
+| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Absolute https address of a page in Command Center that shows the stored item. Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent: "Saved" is shown without a link. |
 
 **Example response: pasted text**
 
@@ -825,8 +829,8 @@ The extension read up to eight pages of a prospect's website and wrote a client 
 business is, what it offers, where, who its competitors are, and what is wrong with the site.
 
 Create a new workspace (a new business) from it. This is the one save that is not tied to an
-existing business, so the path has no business id. The `url` you return is opened by the user
-straight away: the button is labelled "Open in Command Center".
+existing business, so the path has no business id. Return a `url`: the button that starts this
+save is labelled "Open in Command Center", so the user expects a link into the new workspace.
 
 Everything in the body was read from a public website by a program. Treat the values as
 suggestions the user will review, not as verified facts.
@@ -983,12 +987,12 @@ Shortened here (`issues`: 2 of 6 items shown; `markdown`: first 300 of 5,367 cha
 
 ### Response 201
 
-The item was stored. 200 is accepted as well as 201. The body is required: a 204 or an empty body is treated as a failed save.
+The item was stored. 200 is accepted as well as 201. The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 or more | Id of the stored item. Not shown to the user. |
-| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Address of a page in Command Center that shows the stored item. The extension shows it as an "Open in Command Center" link that opens in a new tab, so the page must work for a signed-in user. null or absent: "Saved" is shown without a link. |
+| `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item. Not shown to the user. |
+| `url` | string or null | no | 0 to 2,048 chars; starts with https:// | Absolute https address of a page in Command Center that shows the stored item. Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent: "Saved" is shown without a link. |
 
 **Example response**
 
@@ -1008,14 +1012,16 @@ Returns dated search-industry events, such as Google algorithm updates.
 | | |
 | --- | --- |
 | Capability | `industryPulse` |
-| Called when | The Rewind tab is opened while connected. |
+| Called when | Each time the Rewind tab is opened while connected. |
 | Success | `200` |
 | Errors | `401`, `403`, `404` (feature not available), `429`, `5xx`. See [Errors](#errors). |
 | Operation id | `getIndustryPulse` |
 
 The Rewind tab shows how a page changed over time. It offers the dates of the first eight events
-as shortcuts: one click filters the page history to the 30 days before that date. Only `date`
-and `title` are shown.
+as shortcuts: one click filters the page history to the days before that date (30 by default;
+the user can change the number). Only `date` and `title` are shown.
+
+An event whose date cannot be read is skipped.
 
 The data is the same for every user, so the reply can be cached on your side.
 
@@ -1025,9 +1031,9 @@ The events, newest first.
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `updatedAt` | string or null | no | date and time (ISO 8601) | When the list was last edited. Not shown. |
+| `updatedAt` | string or null | no | date and time (ISO 8601) | When the list was last edited, as an ISO 8601 text. Not shown. |
 | `events` | array of object | yes | 0 to 200 items | The events, newest first. The extension uses the first 8. |
-| `events[].date` | string | yes | date (YYYY-MM-DD) | The day of the event, as YYYY-MM-DD. For a rollout, the day it started. |
+| `events[].date` | string | yes | date (YYYY-MM-DD) | The calendar day of the event as the text YYYY-MM-DD (zero-padded). For a rollout, the day it started. Not a timestamp and not a number. |
 | `events[].title` | string | yes | 1 to 300 chars | What happened. Shown as the tooltip of the date. |
 | `events[].type` | string or null | no | 0 to 40 chars | Kind of event. Not used by the extension yet; any text is accepted. For example: `algorithm-update`, `serp-feature`, `news`. |
 | `events[].url` | string or null | no | 0 to 2,048 chars | A page that describes the event. Not shown yet. |
@@ -1220,8 +1226,8 @@ The same for every endpoint. A reply that is not listed here (any other 4xx) is 
 | --- | --- | --- |
 | `401` | The token is missing, unknown, expired or revoked. Use 401 for nothing else. | On GET /v1/session: deletes the stored token and asks the user to paste a new one. On any other request: shows "Legiit did not accept the token"; the token is deleted the next time the session is checked. |
 | `403` | The token is valid but this user may not do this (plan, role, quota). For a feature that is simply switched off, leave its capability out of the session instead: the extension then never calls it. | Shows "Legiit rejected the request (403)" followed by your `error.message`. Keeps the token. |
-| `404` | Two cases share this status. (1) The business does not exist or does not belong to this user: answer with `error.code` "not_found". (2) The endpoint is not built or not enabled: any other 404 (also 405 or 501), with or without a body. | With `error.code` "not_found": shows "Legiit could not find it (404)" followed by your `error.message`; the feature stays. Any other 404, 405 or 501: hides this feature until the side panel or settings page is opened again. |
-| `404, 405, 501` | The endpoint is not built or not enabled. 405 and 501 mean the same to the extension. | Hides this feature until the side panel or settings page is opened again. During Connect, shows "The Legiit API is not available yet". |
+| `404` | Two cases share this status. (1) The business does not exist or does not belong to this user: answer with `error.code` "not_found". (2) The endpoint is not built or not enabled: any other 404 (also 405 or 501), with or without a body. | With `error.code` "not_found": shows "Legiit could not find it (404)" followed by your `error.message`; the feature stays. Any other 404, 405 or 501: says that Legiit cannot receive this yet, then hides the feature until the side panel or settings page is opened again. |
+| `404, 405, 501` | The endpoint is not built or not enabled. 405 and 501 mean the same to the extension. | A save: says "Legiit cannot receive this yet", then hides the button until the side panel or settings page is opened again. The business list: hides the drop-down. Industry pulse: shows no date shortcuts. AI: keeps the built-in summary and says why. The session check: shows "The Legiit API is not available yet". |
 | `422, 400` | The body was understood but cannot be accepted. 400 is treated the same way. Say what is wrong in `error.message`, in words a user can act on. | Keeps the dialog open and shows "Legiit rejected the request (422)" followed by your `error.message`. The user can send again. |
 | `429` | Too many requests from this user. The extension does not read Retry-After. | Shows "Legiit rejected the request (429)" followed by your `error.message`. Never retries on its own. |
 | `5xx` | Something failed on your side (any 5xx). A body is optional and is not shown. | Shows "Legiit had a problem" with the status code. Never retries on its own; the user can click again. |

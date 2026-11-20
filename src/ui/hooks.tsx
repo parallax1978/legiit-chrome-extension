@@ -105,7 +105,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     setLoading(true);
-    setConnection(await loadConnection());
+    const next = await loadConnection();
+    // Loading can delete a token that Legiit refused. The reload that deletion triggers finds no token and no
+    // error; the reason must stay on screen until the user connects again.
+    setConnection((previous) => (next.status === 'disconnected' && next.error === null && previous.error !== null ? previous : next));
     setLoading(false);
   }, []);
 
@@ -116,6 +119,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       if (!changingRef.current) void reload();
     });
   }, [reload]);
+
+  /** Stable, so effects can depend on it without running again. */
+  const refreshCapabilities = useCallback(() => bump((n) => n + 1), []);
 
   const value = useMemo<ConnectionValue>(
     () => ({
@@ -139,9 +145,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         }
       },
       can: (method) => can(connection, method),
-      refreshCapabilities: () => bump((n) => n + 1),
+      refreshCapabilities,
     }),
-    [connection, loading],
+    [connection, loading, refreshCapabilities],
   );
   return <ConnectionContext.Provider value={value}>{children}</ConnectionContext.Provider>;
 }

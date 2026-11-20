@@ -22,17 +22,30 @@ import type {
 } from './types';
 
 /*
- * Replies are read tolerantly, so the server can grow without breaking an
- * extension that is already installed:
+ * Replies are read tolerantly, so the server can grow, and can have an odd row
+ * in its data, without breaking an extension that is already installed:
  *   - unknown fields are ignored;
- *   - an optional field may be absent or null;
+ *   - an optional field may be absent or null, and one of the wrong type is
+ *     treated as absent;
+ *   - text may arrive as a JSON number (some encoders turn "365" into 365);
  *   - text longer than its limit is cut, a list longer than its limit is cut;
- *   - an id may be a string or an integer (it is used as a string).
- * A reply that lacks a required field, or has one of the wrong type, is
- * rejected as a whole ("invalid-response"): half a reply is never used.
+ *   - an id may be a string or an integer (it is used as a string);
+ *   - a list entry that cannot be read is skipped, the rest of the list is used.
+ * What a reply cannot do without (the id of the user, the list of businesses,
+ * the id of a saved item, the text of an AI reply) is required: a reply
+ * without it is rejected as a whole ("invalid-response"). The contract in
+ * docs/legiit-api is stricter than this on purpose.
  */
-const text = (max: number) => v.pipe(v.string(), v.transform((value) => cutText(value, max)));
-const optionalText = (max: number) => v.nullish(text(max), null);
+const text = (max: number) =>
+  v.pipe(
+    v.union([v.string(), v.pipe(v.number(), v.finite())]),
+    v.transform((value) => cutText(String(value), max)),
+  );
+/** Text the extension can do without: absent, null or unreadable reads as null. */
+const optionalText = (max: number) => v.fallback(v.nullish(text(max), null), null);
+/** The same, read as an empty string. */
+const looseText = (max: number) => v.fallback(v.nullish(text(max), ''), '');
+/** An id is never cut: one that is too long, empty or not a whole number is refused. */
 const id = (max: number) =>
   v.pipe(
     v.union([v.string(), v.pipe(v.number(), v.safeInteger())]),
@@ -40,11 +53,37 @@ const id = (max: number) =>
     v.minLength(1),
     v.maxLength(max),
   );
-const list = <TItem extends v.GenericSchema>(item: TItem, max: number) => v.pipe(v.array(item), v.transform((items) => items.slice(0, max)));
-const optionalList = <TItem extends v.GenericSchema>(item: TItem, max: number) => v.nullish(list(item, max), []);
+/** A list in which an entry that cannot be read is skipped, so one bad row never costs the user the whole list. */
+const list = <TItem extends v.GenericSchema>(item: TItem, max: number) =>
+  v.pipe(
+    v.array(v.unknown()),
+    v.transform((entries) => {
+      const kept: v.InferOutput<TItem>[] = [];
+      for (const entry of entries) {
+        if (kept.length >= max) break;
+        const parsed = v.safeParse(item, entry);
+        if (parsed.success) kept.push(parsed.output);
+      }
+      return kept;
+    }),
+  );
+const optionalList = <TItem extends v.GenericSchema>(item: TItem, max: number) => v.fallback(v.nullish(list(item, max), []), []);
+/** A list of text. A single text is read as a list of one. */
+const textList = (maxLength: number, maxItems: number) =>
+  v.fallback(
+    v.nullish(
+      v.pipe(
+        v.union([v.array(v.unknown()), v.string()]),
+        v.transform((value) => (typeof value === 'string' ? [value] : value)),
+        list(text(maxLength), maxItems),
+      ),
+      [],
+    ),
+    [],
+  );
 
 const SessionSchema = v.object({
-  user: v.object({ id: id(120), name: v.nullish(text(200), ''), email: optionalText(320) }),
+  user: v.object({ id: id(120), name: looseText(200), email: optionalText(320) }),
   plan: optionalText(80),
   /** Names this version does not know are ignored, so new capabilities can be added on the server at any time. */
   capabilities: v.nullish(
@@ -55,26 +94,32 @@ const SessionSchema = v.object({
     [],
   ),
 });
-const BusinessSchema = v.object({ id: id(120), name: text(200), domain: optionalText(255) });
+const BusinessSchema = v.object({ id: id(120), name: looseText(200), domain: optionalText(255) });
 const BusinessListSchema = v.object({ businesses: list(BusinessSchema, 500) });
 const BusinessDetailsSchema = v.object({
-  id: id(120),
-  name: text(200),
-  brandNames: optionalList(text(160), 30),
-  domains: optionalList(text(255), 30),
-  competitors: optionalList(v.object({ name: text(160), domains: optionalList(text(255), 30) }), 200),
-  focusKeywords: optionalList(text(200), 200),
-  avatars: optionalList(v.object({ name: text(160), description: v.nullish(text(2000), '') }), 20),
+  /** The extension keeps the id it asked for; the one in the reply is not needed. */
+  id: v.fallback(id(120), ''),
+  name: looseText(200),
+  brandNames: textList(160, 30),
+  domains: textList(255, 30),
+  competitors: optionalList(v.object({ name: looseText(160), domains: textList(255, 30) }), 200),
+  focusKeywords: textList(200, 200),
+  avatars: optionalList(v.object({ name: text(160), description: looseText(2000) }), 20),
 });
 const SaveResultSchema = v.object({ id: id(200), url: optionalText(2048) });
 const PulseSchema = v.object({
   updatedAt: optionalText(40),
   events: list(
     v.object({
-      /** A calendar day. A full timestamp is accepted and cut to its day. */
-      date: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}/), v.transform((value) => value.slice(0, 10))),
+      /** A calendar day. A full timestamp is accepted and cut to its day; anything that is not a real date drops the event. */
+      date: v.pipe(
+        v.string(),
+        v.regex(/^\d{4}-\d{2}-\d{2}/),
+        v.transform((value) => value.slice(0, 10)),
+        v.check((day) => !Number.isNaN(Date.parse(`${day}T00:00:00Z`))),
+      ),
       title: text(300),
-      type: v.nullish(text(40), 'news'),
+      type: v.fallback(v.nullish(text(40), 'news'), 'news'),
       url: optionalText(2048),
     }),
     200,
