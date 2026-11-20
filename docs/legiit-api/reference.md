@@ -266,7 +266,7 @@ One measurement of one Google results page, exactly as the user's Chrome laid it
 | `viewport.height` | integer | yes | 1 or more | Height of the first screen. This is the fold. |
 | `location` | string or null | yes | 0 to 160 chars | The place name Google printed on the page (for example "Austin, Texas"), in the language of Google's interface. null when the page shows none. |
 | `firstOrganicTopPx` | integer or null | yes | 0 or more | Top edge of the topmost organic result. null when no organic result could be measured. |
-| `firstOrganicFold` | string or null | yes |  | Fold position of the topmost organic result. null exactly when firstOrganicTopPx is null. One of: `above`, `partly`, `below`. |
+| `firstOrganicFold` | string or null | yes |  | Where the topmost organic result sits relative to the fold, the bottom edge of the first screen (y = viewport.height). above: it ends at or above the fold. partly: the fold cuts through it. below: it starts at or below the fold. null exactly when firstOrganicTopPx is null. One of: `above`, `partly`, `below`. |
 | `organicShare` | number | yes | 0 to 1 | Part of the first screen covered by organic results (0.25 means 25 %), rounded to 4 decimals. Equal to the "organic" entry of firstScreenShares, or 0 when there is none. |
 | `grade` | object | yes |  | The extension's "organic click potential" for this page. It is a layout score, not a measured click-through rate. |
 | `grade.letter` | string | yes |  | Band of the score. A is 85 to 100, B 70 to 84, C 50 to 69, D 30 to 49, F 0 to 29. One of: `A`, `B`, `C`, `D`, `F`. |
@@ -281,7 +281,7 @@ One measurement of one Google results page, exactly as the user's Chrome laid it
 | `organic[].domain` | string | yes | 0 to 255 chars | Host of url, in lower case, without a leading "www." (other subdomains are kept). |
 | `organic[].title` | string | yes | 1 to 400 chars | The result's title as shown on the page. |
 | `organic[].topPx` | integer or null | yes | 0 or more | Top edge of the result. null when it could not be measured. |
-| `organic[].fold` | string or null | yes |  | Fold position of the result. null exactly when topPx is null. One of: `above`, `partly`, `below`. |
+| `organic[].fold` | string or null | yes |  | Fold position of the result, with the same three values as firstOrganicFold. null exactly when topPx is null. One of: `above`, `partly`, `below`. |
 | `tracked` | array of object | yes | 0 to 250 items | Every brand the user tracks in the extension, their own and competitors: brands found among the organic results first, in result order, then the brands that were not found. The names come from the extension's settings (typed by the user, or pre-filled from Business Details). They are labels, not ids, and need not match the competitors stored for the business. |
 | `tracked[].owner` | string | yes |  | mine is one of the user's own brands, competitor one of their competitors. One of: `mine`, `competitor`. |
 | `tracked[].name` | string | yes | 0 to 160 chars | The brand's display name. Can be empty when the user tracked a domain without a name. |
@@ -671,11 +671,11 @@ The result of comparing one text with competing pages, sentence by sentence. Two
 | `method.pagesCompared` | integer | yes | 1 to 8 | How many competing pages the text was compared with. Always the number of comparedUrls. "Most" below means more than half of this number. |
 | `wordShare` | object | yes |  | How the words of the checked text divide by how common their sentence is: fractions of 1 (not percentages), counted in words (not sentences), rounded to 4 decimals. The three add up to 1 within rounding. |
 | `wordShare.saidByMost` | number | yes | 0 to 1 | In sentences that more than half of the compared pages also make. |
-| `wordShare.saidBySome` | number | yes | 0 to 1 | In sentences that at least one compared page makes |
+| `wordShare.saidBySome` | number | yes | 0 to 1 | In sentences that at least one compared page makes, but not more than half. Always 0 when one page was compared. |
 | `wordShare.onlyHere` | number | yes | 0 to 1 | In sentences that no compared page makes. The sentences themselves are in the onlyHere list. |
 | `onlyHere` | array of string | yes | 0 to 200 items; each: 1 to 600 chars | The sentences of the checked text that no compared page makes, in the order they appear. This is what is new in the text. Empty when every sentence has a match. Sentences shorter than five words are never checked. |
 | `missingPoints` | array of object | yes | 0 to 12 items | Points that more than half of the compared pages make and the checked text does not, most widespread first. Near-duplicates are merged. Always empty when fewer than two pages were compared. |
-| `missingPoints[].text` | string | yes | 1 to 600 chars | One sentence that makes the point |
+| `missingPoints[].text` | string | yes | 1 to 600 chars | One sentence that makes the point, quoted from one of the pages in urls. |
 | `missingPoints[].pages` | integer | yes | 2 to 8 | How many compared pages make the point. Always the number of urls. |
 | `missingPoints[].urls` | array of string | yes | 2 to 8 items; each: 0 to 2,048 chars; starts with http:// or https:// | The compared pages that make the point. Each one is also in comparedUrls. |
 | `comparedUrls` | array of string | yes | 1 to 8 items; each: 0 to 2,048 chars; starts with http:// or https:// | The competing pages the text was compared with, in comparison order: the addresses that were requested, before any redirect. Pages that could not be read or had no text are left out. |

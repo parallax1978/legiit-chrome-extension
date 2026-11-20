@@ -1,4 +1,5 @@
 /** A. Click Potential: how much room organic results get on the Google results page in the current tab. */
+import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BLOCK_LABELS,
@@ -371,7 +372,7 @@ export function ClickPotentialTab() {
         <ShareBar cp={cp} />
       </Card>
 
-      <Summary request={{ task: 'click-potential', instruction: 'Explain in plain language how much room organic results get on this Google results page and why.', facts: explanation, fallback: explanation }} testId="cp-summary" />
+      <Summary request={{ task: 'click-potential', instruction: SUMMARY_INSTRUCTIONS['click-potential'], facts: explanation, fallback: explanation }} testId="cp-summary" />
 
       {matcher.hasMine || matcher.hasCompetitors ? (
         <Card title="Tracked brands" testId="cp-tracked">

@@ -1,4 +1,5 @@
 /** C. Rewind: what changed on a page over time, from Wayback Machine captures. */
+import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
 import { useEffect, useMemo, useState } from 'react';
 import { formatCaptureDate, viewCaptureUrl, type Capture } from '@/features/rewind/cdx';
 import { buildTimeline, changesBefore, diffFacts, explainTimeline, FIELD_LABELS, FIELD_ORDER, wordDiff, type CaptureFacts, type FieldChange, type TimelineEntry } from '@/features/rewind/diff';
@@ -274,7 +275,7 @@ export function RewindTab() {
             </details>
           </Card>
 
-          <Summary title="What changed" request={{ task: 'rewind', instruction: "Summarise how this page's on-page SEO changed over time and which changes most likely mattered.", facts: explanation, fallback: explanation }} testId="rewind-summary" />
+          <Summary title="What changed" request={{ task: 'rewind', instruction: SUMMARY_INSTRUCTIONS.rewind, facts: explanation, fallback: explanation }} testId="rewind-summary" />
 
           <Card title="Timeline of changes" testId="rewind-timeline">
             <div className="row">

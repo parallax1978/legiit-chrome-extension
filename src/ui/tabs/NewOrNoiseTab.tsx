@@ -1,4 +1,5 @@
 /** D. New or Noise: which sentences of a page say something the competing pages do not. */
+import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
 import { useEffect, useMemo, useState } from 'react';
 import type { PageDigest } from '@/extract/digest';
 import { parseHtml } from '@/extract/html';
@@ -362,7 +363,7 @@ export function NewOrNoiseTab() {
             {highlightError && <Notice tone="error">{highlightError}</Notice>}
           </Card>
 
-          <Summary request={{ task: 'new-or-noise', instruction: 'Explain how much of this page is new compared with competing pages, and what it should add.', facts: explanation, fallback: explanation }} testId="noise-summary" />
+          <Summary request={{ task: 'new-or-noise', instruction: SUMMARY_INSTRUCTIONS['new-or-noise'], facts: explanation, fallback: explanation }} testId="noise-summary" />
 
           <Card title={`Covered by most competitors, missing here (${result.report.missing.length})`} testId="noise-missing">
             {result.report.missing.length === 0 ? (

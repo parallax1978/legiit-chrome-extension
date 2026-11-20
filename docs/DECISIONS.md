@@ -169,6 +169,46 @@ web.archive.org is not reachable from the build environment. CDX parsing, sampli
 **D-38 · The development build is not the release build.**
 `npm run dev` produces `.output/chrome-mv3-dev`. For hot reloading WXT adds things to that manifest that the release does not have: the `tabs` permission, `http://localhost/*`, a reload shortcut, localhost in the CSP, and content scripts registered at run time instead of in the manifest. The dev build also carries the fixture-saver shortcut. Permissions, the install prompt and the activeTab behaviour must therefore be judged on `dist/` only; every check in `scripts/package-release.mjs` and `e2e/` runs against `dist/`.
 
+### The Legiit API contract
+
+The API did not exist when the extension was built. These decisions shape the contract the Legiit backend team builds from (`docs/legiit-api/`).
+
+**D-40 · The contract is the source of truth, and everything around it is generated from it or tested against it.**
+`docs/legiit-api/openapi.yaml` states a meaning and a limit for every field. `reference.md` is generated from it. The example requests are built by the payload code from the test fixtures, the example replies come from the mock server, and unit tests fail when the client, the mock server, the limits in the code, the examples or the reference drift from the contract. `npm run api:check` runs the same client code against a real server.
+
+**D-41 · Tolerant in what it reads, exact in what it sends.**
+An installed extension cannot be changed quickly, so replies are read loosely: unknown fields and unknown capability names are ignored, optional fields may be missing or null, an id may be an integer, over-long text and lists are cut. A reply that lacks a required field is refused as a whole. A save counts as saved only when the reply is JSON with an `id`: an empty 2xx could be a login page or a proxy, and "Saved" must not be shown for it. Requests are the opposite: every field is always present, and nothing exceeds its stated limit.
+
+**D-42 · Only 401 means "this token is bad".**
+A 401 on the session check deletes the token. A 403 used to do the same; it now shows the server's message and keeps the token, because backends commonly answer 403 for plan limits, and that must not disconnect the user.
+
+**D-43 · "This business does not exist" is told apart from "this endpoint does not exist".**
+Both are 404. The first carries `error.code: "not_found"` and is shown as an error; the feature stays. Any other 404, 405 or 501 means the endpoint is not built: the user is told, then the feature is hidden until the page is reopened. Before this, a deleted business made the save button disappear without a word.
+
+**D-44 · Every save carries an `Idempotency-Key`.**
+A random UUID, created when the save dialog opens and repeated for every send from that dialog, so a retry after a timeout need not store the item twice. It is a header, not part of the body the user reviews, so the dialog says that the token, the extension's version and a one-time number go with the body, and so does the privacy policy.
+
+**D-45 · Hard limits on everything that is sent.**
+`src/legiit/limits.ts` holds the maximum length of every text and list; the payload builders enforce them, and a test keeps them equal to the contract. No body is larger than 1 MB (the client refuses to send more), which is the default request limit of nginx. All text is made valid Unicode before sending: a cut can no longer leave half an emoji, which strict JSON stores refuse.
+
+**D-46 · Codes for machines, text for people.**
+Where the server may want to act on a value, the payload carries a code and not an English label: `above`/`partly`/`below` for the fold, `surfaceId` next to the gap list's display label, `code` next to an issue's title.
+
+**D-47 · A competitor has one shape everywhere: `name` and `domains`.**
+Business Details already returned `domains` as a list; the add-competitor body and the brief sent a single `domain`. They now match.
+
+**D-48 · A snapshot lists every tracked brand.**
+Brands with no organic result on the page are sent with `position: null`, so "not ranking" is stated and does not have to be inferred from a missing entry. `resultsOffset` says which results page was measured.
+
+**D-49 · A content analysis says what was checked and when; a brief says which brief it is.**
+The content-editor body carries `source` (page, selection or pasted text) and `capturedAt`, and `pagesCompared` always equals the number of `comparedUrls`. The workspace body carries the extension's own `briefId`, so a brief that is sent again can be recognised.
+
+**D-50 · 20 seconds for a reply, 60 for AI, never from cache.**
+The time limit covers the whole reply, not only its headers. Requests are sent with `cache: 'no-store'`, so a session or a business is always read fresh. Nothing is retried automatically.
+
+**D-51 · The mock server is the reference implementation.**
+It validates every request body against the contract and implements the recommended behaviours (idempotency keys, no duplicate competitors, the two kinds of 404). The conformance check is run against it in the unit tests, so the check itself is known to pass against a correct server.
+
 ---
 
 ## 3. Assumptions that a person must confirm

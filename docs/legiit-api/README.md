@@ -157,10 +157,11 @@ A user can send the same save twice: after a timeout, or by saving the same resu
 | `contentEditor` | "Send to content editor" on the New or Noise tab | 7 |
 | `workspaces` | "Open in Command Center" on the Instant Brief tab | 8 |
 | `industryPulse` | Date shortcuts on the Rewind tab | 9 |
-| `ai` | "Rewrite with Legiit AI" on every tab | 10 |
+| `ai` | "Rewrite with Legiit AI" on four tabs, and "Improve drafts with Legiit AI" on the Instant Brief tab | 10 |
 
 - The smallest useful launch is `GET /v1/session` returning `"capabilities": []`. The user can connect and sees no Legiit feature. Add capabilities as endpoints go live.
 - Use capabilities for plans too: leave out what the user's plan does not include.
+- List `businesses` whenever you list one of the four capabilities below it in the table. Without it the user cannot choose a business, and those four saves stay disabled.
 - The extension ignores capability names it does not know. Do not rename the eight above.
 - Safety net: if an endpoint answers `404`, `405` or `501` although its capability is listed, the extension tells the user, then hides the feature until the side panel or settings page is opened again.
 
@@ -183,6 +184,8 @@ Every error reply has the same JSON body:
 | `422` or `400` | The body cannot be accepted | Keeps the dialog open, shows "Legiit rejected the request (422)" and your message |
 | `429` | Too many requests | Shows your message. Does not read `Retry-After`, does not retry |
 | `5xx` | Something failed on your side | Shows "Legiit had a problem" and the status. Does not retry |
+
+The table describes the saves. For the other calls the extension falls back quietly when an endpoint is not there: no business list, no date shortcuts on the Rewind tab, and the built-in summary instead of the AI text, with a note that says why.
 
 Three things to get right:
 
@@ -283,7 +286,7 @@ Then open `chrome://extensions`, switch on Developer mode, choose "Load unpacked
 5. Click "Rewrite with Legiit AI" on any tab. The summary is replaced by your model's text.
 6. Revoke the token in Command Center and open the extension's settings again. It asks for a new token.
 
-To see what the extension sent and received: right-click inside the side panel, choose Inspect, and open the Network tab. Settings also lists every request the extension made, with its status, under "Privacy and data".
+To see what the extension sent and received: right-click inside the side panel (or the settings page), choose Inspect, and open the Network tab. Do this before you click, so the request is recorded.
 
 ## 9. Decisions we need from Legiit
 

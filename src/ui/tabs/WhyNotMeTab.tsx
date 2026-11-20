@@ -1,4 +1,5 @@
 /** B. Why Not Me: where competitors appear and you do not, on Google results and in AI answers. */
+import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
 import { useEffect, useMemo, useState } from 'react';
 import { answerFromPastedText } from '@/answers/read';
 import { loadPages } from '@/features/shared/load-pages';
@@ -347,7 +348,7 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
         </div>
       </Card>
 
-      <Summary request={{ task: 'why-not-me', instruction: 'Explain where this brand is missing while competitors are present, and what explains it.', facts: explanation, fallback: explanation }} testId="wnm-summary" />
+      <Summary request={{ task: 'why-not-me', instruction: SUMMARY_INSTRUCTIONS['why-not-me'], facts: explanation, fallback: explanation }} testId="wnm-summary" />
 
       <Card title="Scan sources" testId="wnm-scan">
         {targets.length === 0 ? (

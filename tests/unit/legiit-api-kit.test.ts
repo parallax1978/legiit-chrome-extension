@@ -9,6 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
 import { problemWith } from '@@/mock-server/contract.mjs';
 import { createMockState, handleMockRequest, MOCK_TOKENS } from '@@/mock-server/handlers.mjs';
@@ -382,6 +383,45 @@ describe('limits: what the code enforces is what the contract promises', () => {
 });
 
 describe('contract hygiene', () => {
+  it('is a well-formed OpenAPI 3.1 document: every reference resolves and no schema keyword is misspelt', () => {
+    expect((contract as unknown as { openapi: string }).openapi).toMatch(/^3\.1\./);
+    // Every "$ref" in the document points at something that exists.
+    const dangling: string[] = [];
+    const visit = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (node === null || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === '$ref' && typeof value === 'string') {
+          const target = value.replace(/^#\//, '').split('/').reduce<unknown>((at, part) => (at as Record<string, unknown> | undefined)?.[part], contract);
+          if (target === undefined) dangling.push(value);
+        } else visit(value);
+      }
+    };
+    visit(contract);
+    expect(dangling).toEqual([]);
+
+    // Strict compilation refuses unknown keywords ("maxlength", "require"…), so a typo cannot silently switch a rule off.
+    const strict = new Ajv2020({ strict: true, allowUnionTypes: true, validateFormats: false });
+    for (const keyword of ['components', 'x-examples', 'x-capability', 'x-called-when', 'x-extension-reaction']) strict.addKeyword(keyword);
+    strict.addSchema({ $id: 'https://legiit.invalid/strict', components: { schemas: contract.components.schemas } });
+    for (const name of Object.keys(contract.components.schemas)) {
+      expect(() => strict.getSchema(`https://legiit.invalid/strict#/components/schemas/${name}`), name).not.toThrow();
+    }
+
+    // Every operation has an id, a summary, when it is called, and a reply with a JSON schema; every parameter and reply it names exists.
+    for (const [path, methods] of Object.entries(contract.paths)) {
+      for (const [method, operation] of Object.entries(methods)) {
+        const op = operation as unknown as { operationId?: string; summary?: string; 'x-called-when'?: string; parameters?: { $ref: string }[]; responses: Record<string, unknown> };
+        const where = `${method.toUpperCase()} ${path}`;
+        expect(op.operationId, where).toMatch(/^[a-zA-Z]+$/);
+        expect(op.summary?.length ?? 0, where).toBeGreaterThan(10);
+        expect(op['x-called-when']?.length ?? 0, where).toBeGreaterThan(10);
+        expect(Object.keys(op.responses).some((status) => /^2\d\d$/.test(status)), where).toBe(true);
+        expect((path.match(/\{(\w+)\}/g) ?? []).length, where).toBe((op.parameters ?? []).filter((p) => p.$ref.endsWith('/BusinessId')).length);
+      }
+    }
+  });
+
   it('has one operation per client method, in the documented order', () => {
     expect(operations.map((o) => o.operationId).sort()).toEqual((Object.keys(METHOD_CAPABILITY) as LegiitMethod[]).sort());
   });

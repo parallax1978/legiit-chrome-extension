@@ -657,7 +657,10 @@ components:
           description: Top edge of the topmost organic result. null when no organic result could be measured.
         firstOrganicFold:
           $ref: '#/components/schemas/Fold'
-          description: Fold position of the topmost organic result. null exactly when firstOrganicTopPx is null.
+          description: >-
+            Where the topmost organic result sits relative to the fold, the bottom edge of the first screen
+            (y = viewport.height). above: it ends at or above the fold. partly: the fold cuts through it.
+            below: it starts at or below the fold. null exactly when firstOrganicTopPx is null.
         organicShare:
           type: number
           minimum: 0
@@ -742,7 +745,7 @@ components:
                 description: Top edge of the result. null when it could not be measured.
               fold:
                 $ref: '#/components/schemas/Fold'
-                description: Fold position of the result. null exactly when topPx is null.
+                description: Fold position of the result, with the same three values as firstOrganicFold. null exactly when topPx is null.
         tracked:
           type: array
           maxItems: 250
@@ -1004,7 +1007,7 @@ components:
           required: [saidByMost, saidBySome, onlyHere]
           properties:
             saidByMost: { type: number, minimum: 0, maximum: 1, description: In sentences that more than half of the compared pages also make. }
-            saidBySome: { type: number, minimum: 0, maximum: 1, description: In sentences that at least one compared page makes, but not more than half. Always 0 when one page was compared. }
+            saidBySome: { type: number, minimum: 0, maximum: 1, description: 'In sentences that at least one compared page makes, but not more than half. Always 0 when one page was compared.' }
             onlyHere: { type: number, minimum: 0, maximum: 1, description: In sentences that no compared page makes. The sentences themselves are in the onlyHere list. }
         onlyHere:
           type: array
@@ -1024,7 +1027,7 @@ components:
             type: object
             required: [text, pages, urls]
             properties:
-              text: { type: string, minLength: 1, maxLength: 600, description: One sentence that makes the point, quoted from one of the pages in urls. }
+              text: { type: string, minLength: 1, maxLength: 600, description: 'One sentence that makes the point, quoted from one of the pages in urls.' }
               pages: { type: integer, minimum: 2, maximum: 8, description: How many compared pages make the point. Always the number of urls. }
               urls:
                 type: array
