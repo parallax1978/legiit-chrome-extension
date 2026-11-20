@@ -165,7 +165,11 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     if (method === 'POST' && !headers.has('origin')) headers.set('Origin', EXTENSION_ORIGIN);
     const started = Date.now();
     try {
-      return await fetch(target, { ...init, headers });
+      const response = await fetch(target, { ...init, headers });
+      // The time counts until the whole reply is here, as the extension's time limit does.
+      const body = await response.arrayBuffer();
+      const empty = [101, 103, 204, 205, 304].includes(response.status);
+      return new Response(empty ? null : body, { status: response.status, statusText: response.statusText, headers: response.headers });
     } finally {
       timings.push({ what: `${method} ${new URL(target).pathname}`, ms: Date.now() - started });
     }
@@ -429,8 +433,8 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       const reply = await send(url('/v1/session'), { headers: { Authorization: `Bearer ${options.token()}`, Accept: 'application/json', Origin: EXTENSION_ORIGIN }, redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS.default) });
       await reply.text();
       const allowed = reply.headers.get('access-control-allow-origin') ?? '';
-      if (allowed !== '*' && allowed !== EXTENSION_ORIGIN) missing.push('GET /v1/session with an Origin header: the reply has no Access-Control-Allow-Origin for the extension');
-      expect(reply.status, 'GET /v1/session with an Origin header must be answered like any other: do not allow or block by Origin').toBe(200);
+      if (reply.status !== 200) missing.push(`GET /v1/session with an Origin header was answered ${reply.status}: do not allow or block requests by Origin`);
+      else if (allowed !== '*' && allowed !== EXTENSION_ORIGIN) missing.push('GET /v1/session with an Origin header: the reply has no Access-Control-Allow-Origin for the extension');
       if (missing.length > 0) {
         warnings.push(`A8: the CORS safety net is not in place. The extension works without it, except for a user who has switched off its access to this host in Chrome: for them nothing works. ${missing.join('. ')}. See the guide, section 3, "CORS".`);
       }
