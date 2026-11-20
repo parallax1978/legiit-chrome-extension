@@ -418,6 +418,7 @@ export function ClickPotentialTab() {
             {snapshot && cp.measured && snapshot.keyword !== '' && connection.client && (
               <SaveToLegiit
                 method="saveVisibilitySnapshot"
+                subject={snapshot.id}
                 payload={() => snapshotPayload(snapshot, trackedBrands(settings))}
                 send={(payload, businessId, options) => connection.client!.saveVisibilitySnapshot(businessId, payload, options)}
               />

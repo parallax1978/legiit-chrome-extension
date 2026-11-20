@@ -99,7 +99,10 @@ export function stripWww(host: string): string {
  */
 export function normalizeDomainInput(value: string): string | null {
   const raw = value.trim().toLowerCase();
-  if (!raw || raw.includes('@')) return null;
+  // The "@" of an e-mail address or of user info sits before the first "/", "?" or "#". One further on is part of
+  // an ordinary address ("https://medium.com/@name").
+  const authority = raw.replace(/^[a-z][a-z0-9+.-]*:(\/\/)?/, '').split(/[/?#]/)[0] ?? '';
+  if (!raw || authority.includes('@')) return null;
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//.test(raw) ? raw : `https://${raw}`;
   const safe = safeHttpUrl(withScheme);
   if (!safe) return null;

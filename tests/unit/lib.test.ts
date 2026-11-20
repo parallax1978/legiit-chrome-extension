@@ -54,6 +54,11 @@ describe('sanitize', () => {
     expect(normalizeDomainInput('javascript:alert(1)')).toBeNull();
     // An e-mail address is not read as its domain.
     for (const value of ['info@example.com', 'mailto:info@example.com', 'https://user@example.com/', 'jane.doe@gmail.com']) expect(normalizeDomainInput(value), value).toBeNull();
+    // An "@" further on is part of an ordinary address.
+    expect(normalizeDomainInput('https://medium.com/@brightpath')).toBe('medium.com');
+    expect(normalizeDomainInput('example.com/team/@jane')).toBe('example.com');
+    expect(normalizeDomainInput('example.com/?email=a@b.c')).toBe('example.com');
+    expect(normalizeDomainInput('https://user:pw@example.com/')).toBeNull();
     expect(normalizeDomainInput('*.example.com')).toBeNull();
   });
 

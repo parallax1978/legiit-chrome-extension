@@ -396,7 +396,13 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
             <div className="row">
               <CsvButton filename={`gap-list-${slugify(presence.subject || presence.sourceLabel)}.csv`} build={() => gapCsv(presence, rows)} testId="gap-export" />
               {connection.client && (
-                <SaveToLegiit method="saveGapList" payload={() => gapPayload(presence, rows)} send={(payload, businessId, options) => connection.client!.saveGapList(businessId, payload, options)} />
+                <SaveToLegiit
+                  method="saveGapList"
+                  // The same reading with scanned sources is another list than the one saved before the scan.
+                  subject={`${presence.site}|${presence.subject}|${presence.capturedAt}|${rows.length}|${rows.filter((r) => r.scanned).length}`}
+                  payload={() => gapPayload(presence, rows)}
+                  send={(payload, businessId, options) => connection.client!.saveGapList(businessId, payload, options)}
+                />
               )}
             </div>
           ) : undefined

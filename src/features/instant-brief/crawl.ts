@@ -5,6 +5,7 @@
  */
 import { documentBase, resolveHref } from '@/extract/html';
 import { cleanText } from '@/lib/sanitize';
+import { urlKey } from '@/lib/url';
 
 export type PageKind = 'home' | 'about' | 'services' | 'contact' | 'pricing' | 'locations' | 'other';
 
@@ -17,9 +18,9 @@ export interface SitePageLink {
 export const MAX_SITE_PAGES = 8;
 
 /**
- * The same page, for the brief: same site and same path. Query string and
- * fragment are ignored, exactly as they are when the pages are picked, so an
- * address that arrived with "?gad_source=1" or "?ref=…" is still that page.
+ * The same path on the same site. Query string and fragment are ignored, exactly as they are when the pages are
+ * picked. Two addresses with the same path are usually one page ("/?ref=newsletter" is the home page), but not
+ * always: a site can route its pages by query string ("/?page_id=2").
  */
 export function samePage(a: string, b: string): boolean {
   const key = (value: string): string | null => {
@@ -34,43 +35,81 @@ export function samePage(a: string, b: string): boolean {
   return first !== null && first === key(b);
 }
 
-/** The picked links that still have to be read: every one except the open page, which is already in hand. */
-export function linksToRead(links: readonly SitePageLink[], openUrl: string): SitePageLink[] {
-  return links.filter((link) => !samePage(link.url, openUrl));
+/** Certainly the same page: the same address once known tracking parameters are removed. */
+const sameAddress = (a: string, b: string): boolean => urlKey(a) === urlKey(b);
+
+/** Two readings of one page: the same title and the same main heading. */
+export function sameDocument(a: Document, b: Document): boolean {
+  const mark = (doc: Document): string => `${cleanText(doc.querySelector('title')?.textContent ?? '', 300)}|${cleanText(doc.querySelector('h1')?.textContent ?? '', 300)}`.toLowerCase();
+  return mark(a) === mark(b);
 }
 
 /**
- * Puts the open page and the pages read from the site into one list, each page
- * once. A page listed twice would be reported as "duplicate titles" and would
- * double every count taken across pages, so:
- * - the open page is never taken from a second read, whatever its query string;
- * - two links that end on one page (a redirect) count once.
+ * The picked links that still have to be read: every one except the open page, which is already in hand. A link to
+ * the path of the open page is read as well when the open address carries a query string that is not known
+ * tracking: only its content can tell whether it is the same page.
+ */
+export function linksToRead(links: readonly SitePageLink[], openUrl: string): SitePageLink[] {
+  return links.filter((link) => !sameAddress(link.url, openUrl));
+}
+
+/**
+ * Puts the open page and the pages read from the site into one list, each page once. A page listed twice would be
+ * reported as "duplicate titles" and would double every count taken across pages, so:
+ * - the open page is never listed from a second read. A read of its path is that page when the address is the same
+ *   or when it reads the same (`sameContent`); otherwise the site has another page at that path, and both are kept;
+ * - two links that end on one page (a redirect) count once, under the more telling kind: a home link that
+ *   redirects to the open page makes that page the home page.
+ * The list never holds more pages than `MAX_SITE_PAGES`.
  */
 export function assembleSitePages<D>(
   open: { url: string; doc: D },
   links: readonly SitePageLink[],
   read: readonly { url: string; ok: boolean; finalUrl: string | null; html: string }[],
   parse: (html: string) => D,
+  sameContent: (a: D, b: D) => boolean = () => true,
 ): { pages: { url: string; kind: PageKind; doc: D }[]; unread: string[] } {
-  const pages: { url: string; kind: PageKind; doc: D }[] = [];
+  type Entry = { url: string; kind: PageKind; doc: D };
+  const pages: Entry[] = [];
   const unread: string[] = [];
+  const found: { open: Entry | null } = { open: null };
+  /** "home" says most about a page, "other" least. */
+  const better = (now: PageKind, offered: PageKind): PageKind => (offered === 'home' || now === 'other' ? offered : now);
+  const isOpenPage = (kind: PageKind): void => {
+    if (found.open) found.open.kind = better(found.open.kind, kind);
+    else pages.push((found.open = { url: open.url, kind, doc: open.doc }));
+  };
+
   for (const link of links) {
-    if (samePage(link.url, open.url)) {
-      if (!pages.some((p) => samePage(p.url, open.url))) pages.push({ url: open.url, kind: link.kind, doc: open.doc });
+    if (sameAddress(link.url, open.url)) {
+      isOpenPage(link.kind);
       continue;
     }
     const page = read.find((p) => p.url === link.url);
     if (!page?.ok) {
-      unread.push(link.url);
+      // The plain address of the open page could not be read again. The page itself is in hand: nothing is missing.
+      if (samePage(link.url, open.url)) isOpenPage(link.kind);
+      else unread.push(link.url);
       continue;
     }
     const url = page.finalUrl ?? link.url;
-    if (samePage(url, open.url) || pages.some((p) => samePage(p.url, url))) continue;
-    pages.push({ url, kind: link.kind, doc: parse(page.html) });
+    const doc = parse(page.html);
+    if (sameAddress(url, open.url) || (samePage(url, open.url) && sameContent(doc, open.doc))) {
+      isOpenPage(link.kind);
+      continue;
+    }
+    const listed = pages.find((p) => p !== found.open && samePage(p.url, url));
+    if (listed) listed.kind = better(listed.kind, link.kind);
+    else pages.push({ url, kind: link.kind, doc });
   }
-  // The open page is always part of the brief, also when no picked link names it.
-  if (!pages.some((p) => samePage(p.url, open.url))) {
-    pages.unshift({ url: open.url, kind: classifyPage(new URL(open.url).pathname, ''), doc: open.doc });
+  if (!found.open) {
+    // No link leads to the open page: it is still part of the brief. When another page lives at its path (a site
+    // that routes by query string), the path says nothing about what kind of page it is.
+    const elsewhere = pages.some((p) => samePage(p.url, open.url));
+    pages.unshift((found.open = { url: open.url, kind: elsewhere ? 'other' : classifyPage(new URL(open.url).pathname, ''), doc: open.doc }));
+  }
+  for (let i = pages.length - 1; i >= 0 && pages.length > MAX_SITE_PAGES; i--) {
+    if (pages[i] !== found.open) pages.splice(i, 1);
   }
   return { pages, unread };
 }
@@ -91,7 +130,14 @@ const SKIP_PATH = /\.(pdf|jpe?g|png|gif|webp|svg|zip|docx?|xlsx?|mp4|mp3|ics|xml
 export function classifyPage(path: string, label: string): PageKind {
   if (path === '/' || path === '') return 'home';
   // The last path segment and the link text say most about what a page is.
-  const segment = decodeURIComponent(path.replace(/\/+$/, '').split('/').pop() ?? '').replace(/[-_]+/g, ' ');
+  const last = path.replace(/\/+$/, '').split('/').pop() ?? '';
+  let decoded = last;
+  try {
+    decoded = decodeURIComponent(last);
+  } catch {
+    // A stray "%" or a legacy escape ("/sale-50%-off", "/caf%E9"): the raw segment is good enough.
+  }
+  const segment = decoded.replace(/[-_]+/g, ' ');
   for (const { kind, pattern } of KIND_PATTERNS) if (pattern.test(segment)) return kind;
   for (const { kind, pattern } of KIND_PATTERNS) if (pattern.test(label)) return kind;
   return 'other';

@@ -349,6 +349,7 @@ export function NewOrNoiseTab() {
                 <SaveToLegiit
                   method="sendToContentEditor"
                   label="Send to content editor"
+                  subject={String(result.at)}
                   payload={() => contentEditorPayload({ targetKeyword: result.keyword, source: result.mode, pageUrl: result.pageUrl, pageTitle: result.mode === 'pasted' ? '' : result.pageTitle, capturedAt: result.at, report: result.report })}
                   send={(payload, businessId, options) => connection.client!.sendToContentEditor(businessId, payload, options)}
                 />

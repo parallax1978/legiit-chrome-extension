@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { PRODUCT_NAME } from '@/config/constants';
 import { ConnectionProvider, SettingsProvider } from '@/ui/hooks';
 import { SettingsView } from '@/ui/SettingsView';
+import { SaveHostProvider } from '@/ui/shared';
 import '@/ui/styles.css';
 
 function OptionsPage() {
@@ -24,7 +25,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <SettingsProvider>
       <ConnectionProvider>
-        <OptionsPage />
+        <SaveHostProvider>
+          <OptionsPage />
+        </SaveHostProvider>
       </ConnectionProvider>
     </SettingsProvider>
   </StrictMode>,

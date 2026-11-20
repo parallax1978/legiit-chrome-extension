@@ -8,7 +8,7 @@ import type { LegiitMethod } from '@/legiit/client';
 import type { InvokeIntent, PanelEvent } from '@/model/messages';
 import { requestLegiitAccess } from '@/net/permissions';
 import { activeTabId, pinnedTabId, probeTab, type Access } from '@/panel/tabs';
-import { DEFAULT_SETTINGS, getSettings, onLegiitTokenChanged, onSettingsChanged, trackedBrands, updateSettings, type Settings } from '@/storage/settings';
+import { DEFAULT_SETTINGS, getLegiitToken, getSettings, onLegiitTokenChanged, onSettingsChanged, trackedBrands, updateSettings, type Settings } from '@/storage/settings';
 
 /* ------------------------------ Settings ------------------------------ */
 
@@ -107,15 +107,28 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   /** True while this page itself is connecting or disconnecting: its own token change needs no reload. */
   const changingRef = useRef(false);
+  /** Counts the session checks of this page: only the latest one may say what the connection is. */
+  const seq = useRef(0);
+
+  /**
+   * Applies the result of a session check, unless a later check or action has started meanwhile. One result is
+   * never dropped: "this token was refused and deleted", whose reason has to reach the screen.
+   */
+  const settle = useCallback((mine: number, next: Connection) => {
+    const refusal = next.status === 'disconnected' && next.error !== null && !next.tokenKept;
+    if (mine !== seq.current && !refusal) return;
+    // A check can delete a token that Legiit refused. The reload which that deletion triggers finds no token and no
+    // error: the reason stays on screen until the user connects again. An error about a token that was still
+    // stored does not stay: without a token there is nothing left to "try again".
+    setConnection((previous) => (next.status === 'disconnected' && next.error === null && previous.error !== null && !previous.tokenKept ? previous : next));
+    if (mine === seq.current) setLoading(false);
+  }, []);
 
   const reload = useCallback(async () => {
+    const mine = ++seq.current;
     setLoading(true);
-    const next = await loadConnection();
-    // Loading can delete a token that Legiit refused. The reload that deletion triggers finds no token and no
-    // error; the reason must stay on screen until the user connects again.
-    setConnection((previous) => (next.status === 'disconnected' && next.error === null && previous.error !== null ? previous : next));
-    setLoading(false);
-  }, []);
+    settle(mine, await loadConnection());
+  }, [settle]);
 
   useEffect(() => {
     void reload();
@@ -139,26 +152,42 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         // First thing in the click: if the user withheld the Legiit host in Chrome, this is where Chrome asks.
         await requestLegiitAccess();
         resetUnavailable();
+        const mine = ++seq.current;
         setLoading(true);
-        setConnection(await loadConnection());
-        setLoading(false);
+        const next = await loadConnection();
+        if (mine === seq.current) {
+          setConnection(next);
+          setLoading(false);
+        }
       },
       connect: async (token) => {
         await requestLegiitAccess();
         changingRef.current = true;
+        // A check that is still under way belongs to the state before this click.
+        seq.current += 1;
         try {
           const next = await connectLegiit(token);
           setConnection(next);
+          setLoading(false);
           return next;
+        } catch (error) {
+          // A failed attempt stores nothing. It removes a token only when Legiit itself refused the one that was
+          // stored. What this page says about a stored token follows the device.
+          const kept = (await getLegiitToken()) !== null;
+          setConnection((current) => (kept ? (current.status === 'connected' ? current : { ...current, tokenKept: true }) : DISCONNECTED));
+          setLoading(false);
+          throw error;
         } finally {
           changingRef.current = false;
         }
       },
       disconnect: async () => {
         changingRef.current = true;
+        seq.current += 1;
         try {
           await disconnectLegiit();
           setConnection(DISCONNECTED);
+          setLoading(false);
         } finally {
           changingRef.current = false;
         }

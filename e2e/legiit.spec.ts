@@ -118,6 +118,29 @@ test.describe('without a Legiit account', () => {
     await expect(options.getByTestId('legiit-error')).toHaveText('Legiit answered 401 without saying why, so your token was kept. Try again, or paste a new token.');
     await expect(options.getByTestId('legiit-retry')).toBeVisible();
     expect(await lens.worker.evaluate(async () => Object.keys(await chrome.storage.local.get('legiitAuth')))).toEqual(['legiitAuth']);
+    // The user can still take the token off the device, although Legiit cannot be reached to "disconnect".
+    await options.getByTestId('legiit-forget').click();
+    await expect(options.getByTestId('legiit-error')).toHaveCount(0);
+    await expect(options.getByTestId('legiit-retry')).toHaveCount(0);
+    await expect.poll(async () => lens.worker.evaluate(async () => Object.keys(await chrome.storage.local.get('legiitAuth')))).toEqual([]);
+  });
+
+  test('pasting the stored token again while Legiit is failing does not delete it', async ({ lens }) => {
+    await lens.worker.evaluate(async () => chrome.storage.local.set({ legiitAuth: { token: 'demo-token', savedAt: 1 } }));
+    let down = true;
+    await lens.context.route('**/v1/session', (route) => (down ? route.fulfill({ status: 503, contentType: 'text/html', body: 'Service Unavailable' }) : route.fallback()));
+    const options = await lens.openExtensionPage('options.html');
+    await expect(options.getByTestId('legiit-error')).toHaveText('Legiit had a problem (503)');
+    await options.getByTestId('legiit-token').fill('demo-token');
+    await options.getByTestId('legiit-connect').click();
+    await expect(options.getByTestId('legiit-connect')).toHaveText('Connect');
+    await expect(options.getByTestId('legiit-error')).toHaveText('Legiit had a problem (503)');
+    expect(await lens.worker.evaluate(async () => ((await chrome.storage.local.get('legiitAuth'))['legiitAuth'] as { token: string }).token)).toBe('demo-token');
+    // "Try again" tries what is in the field, and works once Legiit is back.
+    await expect(options.getByTestId('legiit-kept')).toHaveText('The token stored before is still on this device.');
+    down = false;
+    await options.getByTestId('legiit-retry').click();
+    await expect(options.getByTestId('legiit-connected')).toBeVisible();
   });
 
   test('connecting as another Legiit user forgets the business that was chosen', async ({ lens }) => {
@@ -125,7 +148,7 @@ test.describe('without a Legiit account', () => {
     await expect(options.getByTestId('brand-mine')).toHaveCount(1);
     // The token is revoked; the same person then connects with a token of another account.
     await lens.worker.evaluate(async () => chrome.storage.local.set({ legiitAuth: { token: 'revoked-token', savedAt: 1 } }));
-    await options.reload();
+    // The open page notices the new token by itself, checks it and shows the refusal.
     await expect(options.getByTestId('legiit-error')).toContainText('was not accepted');
     // What was pre-filled is still there for now: the user did not disconnect.
     await expect(options.getByTestId('brand-mine')).toHaveCount(1);
@@ -135,8 +158,9 @@ test.describe('without a Legiit account', () => {
     await expect(options.getByTestId('legiit-connected')).toBeVisible();
     await expect(options.getByTestId('legiit-business')).toHaveValue('');
     await expect(options.getByTestId('brand-mine')).toHaveCount(0);
-    const stored = await lens.worker.evaluate(async () => (await chrome.storage.local.get('settings'))['settings'] as { legiit: { userId: string; businessId: string | null } });
-    expect(stored.legiit).toMatchObject({ userId: 'usr_another_account', businessId: null });
+    await expect
+      .poll(async () => (await lens.worker.evaluate(async () => (await chrome.storage.local.get('settings'))['settings'] as { legiit: { userId: string; businessId: string | null } })).legiit)
+      .toMatchObject({ userId: 'usr_another_account', businessId: null });
   });
 });
 
@@ -371,7 +395,7 @@ test.describe('an account with some endpoints switched off', () => {
     // The backend team fixes it, and the user connects again on the settings page. The open panel follows.
     lens.legiit.session.capabilities = all;
     await options.getByTestId('legiit-disconnect').click();
-    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toHaveCount(0);
+    await expect(panel.getByTestId('connection-chip')).toHaveCount(0);
     await options.getByTestId('legiit-token').fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-connected')).toBeVisible();
@@ -421,6 +445,51 @@ test.describe('an account with some endpoints switched off', () => {
     await expect(panel.getByTestId('save-cancel')).toBeEnabled();
     await panel.getByTestId('save-cancel').click();
     await expect(panel.getByTestId('save-dialog')).toHaveCount(0);
+  });
+
+  test('a save that is under way stays on screen when the page behind it changes, and "Saved" belongs to what was saved', async ({ lens }) => {
+    await connect(lens, 'demo-token');
+    const { page, tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    let release: () => void = () => undefined;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    let answer: 'fail' | 'pass' = 'fail';
+    const keys: (string | undefined)[] = [];
+    await lens.context.route('**/v1/businesses/*/visibility-snapshots', async (route) => {
+      keys.push(route.request().headers()['idempotency-key']);
+      await held;
+      if (answer === 'fail') await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+      else await route.fallback();
+    });
+    await panel.getByTestId('save-saveVisibilitySnapshot').click();
+    // While a dialog is open the page behind it cannot be used, by mouse or by keyboard.
+    await expect(panel.locator('#root')).toHaveAttribute('inert', '');
+    await panel.getByTestId('save-confirm').click();
+    await expect(panel.getByTestId('save-confirm')).toHaveText('Sending…');
+    // The browser tab moves on to a page that is not a results page: the save button goes, the dialog stays.
+    await page.goto(scenario.urls.site!);
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toHaveCount(0);
+    await expect(panel.getByTestId('save-dialog')).toBeVisible();
+    release();
+    await expect(panel.getByTestId('save-error')).toHaveText('Legiit had a problem (503)');
+    // Sending again from the same dialog repeats the one-time key, and this time it goes through.
+    held = Promise.resolve();
+    answer = 'pass';
+    await panel.getByTestId('save-confirm').click();
+    await expect(panel.getByTestId('save-dialog')).toHaveCount(0);
+    await expect(panel.locator('#root')).not.toHaveAttribute('inert', '');
+    expect(lens.legiit.saved.visibilitySnapshots).toHaveLength(1);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+
+    // Back on a results page for another search: nothing claims that this one was saved.
+    await page.goto(scenario.urls.serpPlain!);
+    // Access to a page is given per site, by the user: invoking the extension on the new page gives it again.
+    await lens.invoke(page);
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toBeVisible();
+    await expect(panel.getByTestId('save-result')).toHaveCount(0);
+    await reviewAndSend(lens, panel, 'saveVisibilitySnapshot');
+    await expect(panel.getByTestId('save-result')).toContainText('Saved');
   });
 
   test('a business list that Legiit does not offer hides the drop-down instead of showing an empty one', async ({ lens }) => {
@@ -487,14 +556,18 @@ test.describe('an account with some endpoints switched off', () => {
       redirected += 1;
       return route.fulfill({ status: 302, headers: { location: `${LEGIIT_ORIGIN}/v1/session` } });
     });
-    const before = legiitRequests(lens).length;
+    // A request that follows a redirect is not routed, so it is watched for where it does show: as an event.
+    const hops: string[] = [];
+    lens.context.on('request', (request) => {
+      if (request.redirectedFrom()) hops.push(request.url());
+    });
     await panel.getByTestId('save-saveVisibilitySnapshot').click();
     await panel.getByTestId('save-confirm').click();
     await expect(panel.getByTestId('save-error')).toHaveText('Could not reach Legiit: The Legiit API answered with a redirect instead of a reply');
     expect(redirected).toBe(1);
     expect(lens.legiit.saved.visibilitySnapshots).toEqual([]);
     // The address the redirect pointed to was never requested.
-    expect(legiitRequests(lens)).toHaveLength(before);
+    expect(hops).toEqual([]);
     await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toBeVisible();
   });
 

@@ -69,12 +69,19 @@ export function applyBusinessDetails(settings: Settings, details: LegiitBusiness
   return next;
 }
 
-/** Removes everything that came from Command Center (used on disconnect). */
+/** Removes everything that came from Command Center, and forgets the user (used on disconnect). */
 export function clearBusinessDetails(settings: Settings): Settings {
   const next = structuredClone(settings);
   next.myBrands = next.myBrands.filter((b) => b.source !== 'legiit');
   next.competitors = next.competitors.filter((b) => b.source !== 'legiit');
   next.legiit = { userId: null, businessId: null, businessName: null, focusKeywords: [], avatars: [] };
+  return next;
+}
+
+/** Unselects the business ("Choose a business…"): what came from it goes, the connected user stays. */
+export function unselectBusiness(settings: Settings): Settings {
+  const next = clearBusinessDetails(settings);
+  next.legiit.userId = settings.legiit.userId;
   return next;
 }
 
@@ -85,7 +92,8 @@ export function clearBusinessDetails(settings: Settings): Settings {
  * business of the previous account.
  */
 export function applyConnectedUser(settings: Settings, userId: string): Settings {
-  const changed = settings.legiit.userId !== null && settings.legiit.userId !== userId;
+  // A business whose user is not known (chosen before the user was recorded) is treated as another user's.
+  const changed = settings.legiit.userId !== userId && (settings.legiit.userId !== null || settings.legiit.businessId !== null);
   const next = changed ? clearBusinessDetails(settings) : structuredClone(settings);
   next.legiit.userId = userId;
   return next;

@@ -250,7 +250,8 @@ export function buildSections(brief: Omit<Brief, 'sections'>): BriefSection[] {
     facts: [],
     lists: brief.avatars.map((a) => ({
       label: `Draft — ${a.name}`,
-      items: [a.who, `Wants: ${a.wants}`, `Worries about: ${a.worries}`, `Searches for: ${a.searches.join(' · ')}`, a.proof],
+      // An AI rewrite may leave out the searches or the proof: a line with nothing in it is not printed.
+      items: [a.who, `Wants: ${a.wants}`, `Worries about: ${a.worries}`, ...(a.searches.length ? [`Searches for: ${a.searches.join(' · ')}`] : []), ...(a.proof ? [a.proof] : [])],
     })),
     paragraphs: [],
   };
@@ -260,7 +261,7 @@ export function buildSections(brief: Omit<Brief, 'sections'>): BriefSection[] {
     title: 'Competitors',
     note: null,
     facts: [],
-    lists: brief.competitors.length ? [{ label: 'Named competitors', items: brief.competitors.map((c) => (c.domain ? `${c.name} (${c.domain})` : c.name)) }] : [],
+    lists: brief.competitors.length ? [{ label: 'Named competitors', items: brief.competitors.map((c) => (c.domain && c.domain !== c.name ? `${c.name} (${c.domain})` : c.name)) }] : [],
     paragraphs: brief.competitors.length === 0 ? ['No competitors have been added yet.'] : [],
   };
 

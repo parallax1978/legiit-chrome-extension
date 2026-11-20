@@ -275,7 +275,7 @@ Four things to get right:
 
 1. **The two kinds of 404.** "This business does not exist" must carry `"code": "not_found"`, on every path with a business id. Without that code, a deleted business is taken for "not built": the user reads "Legiit cannot receive this yet" and the save button then disappears. An id that cannot exist in your scheme (text where you use numbers) should get the same answer, and must never cause a `500`.
 2. **`not_found` is reserved for a missing business.** An unknown path, a wrong method or a switched-off capability must use another code, or no body at all. Check what your framework puts in its own 404.
-3. **Never `401` for anything but the token.**
+3. **Never `401` for anything but the token.** The extension takes a `401` for your API's own verdict only when its body has `error.code` as text; any other `401` keeps the token and offers "Try again".
 4. **A business that belongs to another user is `404` `not_found`**, the same as one that does not exist. Do not reveal that it exists.
 
 When several errors apply at once, any order passes the check. The mock answers in this order: token (`401`), body size (`413`), JSON syntax (`400`), endpoint and capability (`404`), business (`404` `not_found`), fields (`422`). Rate limiting (`429`) can come anywhere after the token.

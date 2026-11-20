@@ -18,7 +18,7 @@ import { can, connect, disconnect, DISCONNECTED, loadConnection, noteFailure, re
 import { HttpLegiitClient, type HttpClientOptions } from '@/legiit/http-client';
 import { MockLegiitClient } from '@/legiit/mock-client';
 import { contentEditorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
-import { applyBusinessDetails, applyConnectedUser, clearBusinessDetails } from '@/legiit/prefill';
+import { applyBusinessDetails, applyConnectedUser, clearBusinessDetails, unselectBusiness } from '@/legiit/prefill';
 import { LIMITS, MAX_REPLY_BYTES, MAX_REQUEST_BYTES, TIMEOUT_MS } from '@/legiit/limits';
 import { ALL_CAPABILITIES, type GapListPayload, type WorkspaceFromBriefPayload } from '@/legiit/types';
 import { hasLegiitAccess, requestLegiitAccess } from '@/net/permissions';
@@ -139,7 +139,16 @@ describe('HTTP client against the mock API', () => {
   it('takes a 401 as a verdict on the token only when the API says so in its error body', async () => {
     const confirmed = await answering(() => errorBody(401, 'unauthorised', 'Token revoked')).client.getSession().catch((e: unknown) => e);
     expect(confirmed).toMatchObject({ code: 'unauthorised', status: 401, definite: true });
-    for (const reply of [new Response('', { status: 401 }), new Response('<html>401 Authorization Required</html>', { status: 401 }), Response.json({ message: 'Unauthenticated.' }, { status: 401 })]) {
+    for (const reply of [
+      new Response('', { status: 401 }),
+      new Response('<html>401 Authorization Required</html>', { status: 401 }),
+      Response.json({ message: 'Unauthenticated.' }, { status: 401 }),
+      // Other envelopes that use the key "error": a text, an empty object, a list, a gateway's numeric code.
+      Response.json({ error: 'Unauthorized' }, { status: 401 }),
+      Response.json({ error: {} }, { status: 401 }),
+      Response.json({ error: [] }, { status: 401 }),
+      Response.json({ error: { code: 401, message: 'Jwt is missing', status: 'UNAUTHENTICATED' } }, { status: 401 }),
+    ]) {
       const bare = await answering(() => reply).client.getSession().catch((e: unknown) => e);
       expect(bare).toMatchObject({ code: 'unauthorised', status: 401, definite: false });
     }
@@ -151,14 +160,26 @@ describe('HTTP client against the mock API', () => {
     const removed = await loadConnection(answering(() => errorBody(401, 'unauthorised', 'Token revoked')).client);
     expect(removed).toMatchObject({ status: 'disconnected', error: 'Your Legiit token was not accepted. Paste a new one to reconnect.' });
     expect(await getLegiitToken()).toBeNull();
-    // A slow 401 for an old token does not delete a newer token stored in the meantime.
+    // A slow 401 for an old token says nothing about a newer token stored in the meantime: that one is checked instead.
     await new TokenAuthProvider().store('old');
+    let asked = 0;
     const slow = answering(async () => {
+      asked += 1;
+      if (asked > 1) return Response.json({ user: { id: 'u-new' }, capabilities: [] });
       await new TokenAuthProvider().store('new');
       return errorBody(401, 'unauthorised', 'Token revoked');
     });
-    await loadConnection(slow.client);
+    expect(await loadConnection(slow.client)).toMatchObject({ status: 'connected', error: null });
+    expect(asked).toBe(2);
     expect(await getLegiitToken()).toBe('new');
+    // When the newer token is refused as well, it is that refusal which counts.
+    await new TokenAuthProvider().store('old');
+    const both = answering(async () => {
+      await new TokenAuthProvider().store('new');
+      return errorBody(401, 'unauthorised', 'Token revoked');
+    });
+    expect(await loadConnection(both.client)).toMatchObject({ status: 'disconnected', tokenKept: false, error: 'Your Legiit token was not accepted. Paste a new one to reconnect.' });
+    expect(await getLegiitToken()).toBeNull();
     await disconnect();
   });
 
@@ -785,6 +806,17 @@ describe('pre-filling tracked brands from Business Details', () => {
     expect(parseSettings(other)).toEqual(other);
     // Disconnecting forgets the user as well.
     expect(clearBusinessDetails(chosen).legiit.userId).toBeNull();
+    // Unselecting the business ("Choose a business…") does not: the same user is still connected.
+    const unselected = unselectBusiness(chosen);
+    expect(unselected.legiit).toEqual({ userId: 'user-1', businessId: null, businessName: null, focusKeywords: [], avatars: [] });
+    expect(unselected.myBrands).toEqual([]);
+    // So choosing again, and then connecting as another user, still clears the business.
+    const chosenAgain = applyBusinessDetails(unselected, details);
+    expect(applyConnectedUser(chosenAgain, 'user-2').legiit).toMatchObject({ userId: 'user-2', businessId: null });
+    // A business whose user was never recorded is treated as another user's.
+    const unknownOwner = { ...chosen, legiit: { ...chosen.legiit, userId: null } };
+    expect(applyConnectedUser(unknownOwner, 'user-1').legiit).toMatchObject({ userId: 'user-1', businessId: null });
+    expect(applyConnectedUser(DEFAULT_SETTINGS, 'user-1').legiit).toMatchObject({ userId: 'user-1', businessId: null });
   });
 });
 
@@ -840,6 +872,46 @@ describe('connection', () => {
     await disconnect();
   });
 
+  it('stores a token only after Legiit accepted it, and never deletes the stored one for a failure that is no verdict', async () => {
+    // Nothing is on the device while the check is under way, so no other extension page sees an unconfirmed token.
+    const during: (string | null)[] = [];
+    const state = createMockState();
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      during.push(await getLegiitToken());
+      return mockLegiitFetch(state)(url, init);
+    }));
+    try {
+      await expect(connect('not-a-real-token')).rejects.toMatchObject({ code: 'unauthorised' });
+      expect(await getLegiitToken()).toBeNull();
+      expect((await connect('demo-token')).status).toBe('connected');
+      expect(during).toEqual([null, null]);
+      expect(await getLegiitToken()).toBe('demo-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    // The user pastes the token that is already stored while Legiit is failing: it stays.
+    class Failing extends MockLegiitClient {
+      constructor(private readonly failure: LegiitError) {
+        super();
+      }
+      override async getSession(): Promise<never> {
+        throw this.failure;
+      }
+    }
+    for (const failure of [
+      new LegiitError('server', 'Legiit had a problem (503)', 503),
+      new LegiitError('network', 'Legiit did not answer in time'),
+      new LegiitError('rejected', 'Legiit rejected the request (403): Your account is suspended', 403),
+      new LegiitError('unauthorised', 'Legiit did not accept the token', 401, false),
+    ]) {
+      await expect(connect('demo-token', new Failing(failure))).rejects.toBe(failure);
+      expect(await getLegiitToken(), failure.message).toBe('demo-token');
+    }
+    // Legiit's own refusal of that very token deletes it, as at any other session check.
+    await expect(connect('demo-token', new Failing(new LegiitError('unauthorised', 'Legiit did not accept the token', 401, true)))).rejects.toMatchObject({ code: 'unauthorised' });
+    expect(await getLegiitToken()).toBeNull();
+  });
+
   it('says so when Chrome is not letting the extension reach Legiit, and can ask for the access back', async () => {
     const chromeMock = (globalThis as unknown as { __chromeMock: ChromeMock }).__chromeMock;
     class Unreachable extends MockLegiitClient {
@@ -855,6 +927,9 @@ describe('connection', () => {
     chromeMock.withheld.add('https://api.legiit.com/*');
     expect(await hasLegiitAccess()).toBe(false);
     expect(await loadConnection(new Unreachable())).toMatchObject({ status: 'disconnected', tokenKept: true, error: 'Chrome is not letting Legiit Lens reach api.legiit.com. Click “Try again” to allow it.' });
+    expect(await getLegiitToken()).toBe('demo-token');
+    // At Connect the same reason is given, not just "failed to fetch".
+    await expect(connect('another-token', new Unreachable())).rejects.toMatchObject({ code: 'network', message: 'Chrome is not letting Legiit Lens reach api.legiit.com. Click Connect again and allow it.' });
     expect(await getLegiitToken()).toBe('demo-token');
     // A click asks Chrome for exactly that host, and nothing is asked when it is already there.
     chromeMock.requestAnswer = false;

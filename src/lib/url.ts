@@ -1,7 +1,7 @@
 import { safeHttpUrl, stripWww } from './sanitize';
 
 /** Query parameters that only track clicks. Removed for display, de-duplication and fetching. */
-const TRACKING_PARAMS = /^(utm_[a-z_]+|gclid|gbraid|wbraid|dclid|fbclid|msclkid|srsltid|ved|usg|sa|ei|mc_cid|mc_eid|_hsenc|_hsmi|igshid|ref_src)$/i;
+const TRACKING_PARAMS = /^(utm_[a-z_]+|gclid|gclsrc|gbraid|wbraid|gad_source|gad_campaignid|dclid|fbclid|msclkid|yclid|ttclid|twclid|li_fat_id|srsltid|ved|usg|sa|ei|mc_cid|mc_eid|mkt_tok|_hsenc|_hsmi|_gl|_ga|igshid|ref_src)$/i;
 
 /** Removes tracking parameters and scroll-to-text fragments. Returns null for non-http(s) input. */
 export function cleanUrl(value: string, base?: string): string | null {

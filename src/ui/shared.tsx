@@ -1,5 +1,5 @@
 /** Building blocks shared by the feature tabs. */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { legiitAiPayload, runProvider, type AiRequest } from '@/ai/provider';
 import { PRODUCT_NAME, SUGGESTED_SHORTCUT } from '@/config/constants';
 import { downloadText } from '@/lib/csv';
@@ -181,92 +181,106 @@ export function Summary({ title = 'What explains it', request, testId }: { title
 
 const NOT_OFFERED = 'Legiit cannot receive this yet. Nothing was saved.';
 
-/**
- * "Save to Command Center". Hidden unless a Legiit account is connected and
- * the endpoint is available. Shows the exact payload and sends that same
- * object only after the user confirms.
- */
-export function SaveToLegiit<T>({
-  method,
-  label = 'Save to Command Center',
-  payload,
-  send,
-  needsBusiness = true,
-  testId,
-}: {
+/** One save the user asked for: what is sent, where, and how. */
+interface SaveRequest {
   method: LegiitMethod;
-  label?: string;
-  /** Built when the dialog opens, so it reflects what is on screen. */
-  payload: () => T;
-  send: (payload: T, businessId: string, options: SaveOptions) => Promise<SaveResult>;
-  needsBusiness?: boolean;
-  testId?: string;
-}) {
+  label: string;
+  /** Names the thing that is saved (a snapshot, a brief…). The "Saved" mark belongs to it, not to the button. */
+  subject: string;
+  body: unknown;
+  needsBusiness: boolean;
+  send: (payload: unknown, businessId: string, options: SaveOptions) => Promise<SaveResult>;
+}
+
+interface SaveHostValue {
+  /** Opens the dialog that shows the body. Nothing is sent before the user confirms there. */
+  open: (request: SaveRequest) => void;
+  /** The result of saving this thing, as long as it was saved into the business that is chosen now. */
+  saved: (method: LegiitMethod, subject: string) => SaveResult | null;
+  /** A dialog is open: no second one can be started. */
+  busy: boolean;
+}
+
+const SaveHostContext = createContext<SaveHostValue | null>(null);
+
+/**
+ * Owns the "send to Legiit" dialog for a whole extension page. It sits above the tabs, so a save that is under way
+ * stays on screen whatever the user does meanwhile (the side panel follows the browser tab, and a tab's content is
+ * removed when the user looks at another page): the user always sees whether it was saved, and a result is never
+ * lost in a way that invites sending the same thing twice.
+ */
+export function SaveHostProvider({ children }: { children: ReactNode }) {
   const { can, refreshCapabilities } = useConnection();
   const { settings } = useSettings();
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState<T | null>(null);
-  const [state, setState] = useState<{ status: 'idle' | 'sending' | 'saved' | 'error'; message?: string; result?: SaveResult }>({ status: 'idle' });
-  /** The one-time key of this dialog, and the business it was last sent for. */
+  const [request, setRequest] = useState<SaveRequest | null>(null);
+  const [state, setState] = useState<{ status: 'idle' | 'sending' | 'error'; message?: string }>({ status: 'idle' });
+  /** What was saved in this page: by method and subject. */
+  const [marks, setMarks] = useState<Record<string, { result: SaveResult; businessId: string | null }>>({});
+  /** The one-time key of the open dialog, and the business it was last sent for. */
   const attempt = useRef<{ key: string; sentTo: string | null }>({ key: '', sentTo: null });
-  /** Counts the sends of this button, so the reply to an earlier one cannot be shown as the outcome of a later one. */
-  const run = useRef(0);
+  /** True while a dialog is open (known at once, before the next render). */
+  const occupied = useRef(false);
 
-  // The button goes away when Legiit turns out not to offer this. An open dialog stays, so the user reads why.
-  const available = can(method);
-  if (!available && !open) return null;
   const businessId = settings.legiit.businessId;
   const sending = state.status === 'sending';
+  const available = request ? can(request.method) : true;
 
-  const start = () => {
-    setBody(payload());
+  const open = useCallback((next: SaveRequest) => {
+    // One dialog at a time: a second one could only be started from behind the first.
+    if (occupied.current) return;
+    occupied.current = true;
     attempt.current = { key: crypto.randomUUID(), sentTo: null };
-    run.current += 1;
     setState({ status: 'idle' });
-    setOpen(true);
-  };
+    setRequest(next);
+  }, []);
+
   /** While a send is under way the dialog stays, so its outcome is always seen. */
   const close = () => {
-    if (!sending) setOpen(false);
+    if (sending) return;
+    occupied.current = false;
+    setRequest(null);
   };
+
   const confirm = async () => {
-    if (body === null) return;
-    const target = businessId ?? '';
+    if (request === null || sending) return;
+    const target = request.needsBusiness ? (businessId ?? '') : '';
     // One key per save: sending again from this dialog repeats the key, so Legiit can avoid storing the item twice.
     // The same item for another business (chosen meanwhile on another page) is another save and gets its own key.
     if (attempt.current.sentTo !== null && attempt.current.sentTo !== target) attempt.current.key = crypto.randomUUID();
     attempt.current.sentTo = target;
-    const mine = ++run.current;
     setState({ status: 'sending' });
     try {
-      const result = await send(body, target, { idempotencyKey: attempt.current.key });
-      if (mine !== run.current) return;
-      setState({ status: 'saved', result });
-      setOpen(false);
+      const result = await request.send(request.body, target, { idempotencyKey: attempt.current.key });
+      setMarks((current) => ({ ...current, [`${request.method}|${request.subject}`]: { result, businessId: request.needsBusiness ? target : null } }));
+      setState({ status: 'idle' });
+      occupied.current = false;
+      setRequest(null);
     } catch (error) {
-      noteFailure(method, error);
+      noteFailure(request.method, error);
       refreshCapabilities();
-      if (mine !== run.current) return;
       const message = isUnavailable(error) ? NOT_OFFERED : error instanceof LegiitError ? error.message : errorMessage(error);
       setState({ status: 'error', message });
     }
   };
 
+  const value = useMemo<SaveHostValue>(
+    () => ({
+      open,
+      saved: (method, subject) => {
+        const mark = marks[`${method}|${subject}`];
+        return mark && (mark.businessId === null || mark.businessId === (businessId ?? '')) ? mark.result : null;
+      },
+      busy: request !== null,
+    }),
+    [open, marks, businessId, request],
+  );
+
   return (
-    <>
-      {available && (
-        <Button small onClick={start} data-testid={testId ?? `save-${method}`}>
-          {label}
-        </Button>
-      )}
-      {state.status === 'saved' && (
-        <span className="small" data-testid="save-result">
-          <Chip tone="ok">Saved</Chip> {state.result?.url && <ExternalLink href={state.result.url}>Open in Command Center</ExternalLink>}
-        </span>
-      )}
-      {open && (
+    <SaveHostContext.Provider value={value}>
+      {children}
+      {request && (
         <Dialog
-          title={label}
+          title={request.label}
           onClose={close}
           testId="save-dialog"
           footer={
@@ -274,21 +288,21 @@ export function SaveToLegiit<T>({
               <Button disabled={sending} onClick={close} data-testid="save-cancel">
                 Cancel
               </Button>
-              <Button variant="primary" disabled={sending || !available || (needsBusiness && !businessId)} onClick={() => void confirm()} data-testid="save-confirm">
+              <Button variant="primary" disabled={sending || !available || (request.needsBusiness && !businessId)} onClick={() => void confirm()} data-testid="save-confirm">
                 {sending ? 'Sending…' : 'Send to Legiit'}
               </Button>
             </>
           }
         >
-          {needsBusiness && !businessId ? (
+          {request.needsBusiness && !businessId ? (
             <Notice tone="warn">Choose a business under Settings → Legiit account first.</Notice>
           ) : (
             <p>
-              This is exactly what will be sent to Legiit Command Center{needsBusiness && settings.legiit.businessName ? ` for ${settings.legiit.businessName}` : ''}. Nothing else leaves your device.
+              This is exactly what will be sent to Legiit Command Center{request.needsBusiness && settings.legiit.businessName ? ` for ${settings.legiit.businessName}` : ''}. Nothing else leaves your device.
             </p>
           )}
           <pre className="payload" data-testid="save-payload">
-            {JSON.stringify(body, null, 2)}
+            {JSON.stringify(request.body, null, 2)}
           </pre>
           <p className="small muted" data-testid="save-also-sent">
             Sent with it: your Legiit token, this extension’s version number, and a one-time number that stops an accidental repeat from being stored twice.
@@ -306,6 +320,57 @@ export function SaveToLegiit<T>({
             )
           )}
         </Dialog>
+      )}
+    </SaveHostContext.Provider>
+  );
+}
+
+function useSaveHost(): SaveHostValue {
+  const value = useContext(SaveHostContext);
+  if (!value) throw new Error('SaveHostProvider is missing');
+  return value;
+}
+
+/**
+ * "Save to Command Center". Hidden unless a Legiit account is connected and
+ * the endpoint is available. The dialog (in SaveHostProvider) shows the exact
+ * payload and sends that same object only after the user confirms.
+ */
+export function SaveToLegiit<T>({
+  method,
+  label = 'Save to Command Center',
+  subject,
+  payload,
+  send,
+  needsBusiness = true,
+  testId,
+}: {
+  method: LegiitMethod;
+  label?: string;
+  /** Names what is saved, so that "Saved" is shown for that thing only: an id, or a short signature of the content. */
+  subject: string;
+  /** Built when the dialog opens, so it reflects what is on screen. */
+  payload: () => T;
+  send: (payload: T, businessId: string, options: SaveOptions) => Promise<SaveResult>;
+  needsBusiness?: boolean;
+  testId?: string;
+}) {
+  const { can } = useConnection();
+  const host = useSaveHost();
+  // The button goes away when Legiit turns out not to offer this. An open dialog stays, so the user reads why.
+  if (!can(method)) return null;
+  const result = host.saved(method, subject);
+  const start = () =>
+    host.open({ method, label, subject, body: payload(), needsBusiness, send: (body, businessId, options) => send(body as T, businessId, options) });
+  return (
+    <>
+      <Button small disabled={host.busy} onClick={start} data-testid={testId ?? `save-${method}`}>
+        {label}
+      </Button>
+      {result && (
+        <span className="small" data-testid="save-result">
+          <Chip tone="ok">Saved</Chip> {result.url && <ExternalLink href={result.url}>Open in Command Center</ExternalLink>}
+        </span>
       )}
     </>
   );

@@ -242,7 +242,9 @@ async function readError(response: Response, signal: AbortSignal): Promise<{ agr
     const parsed = JSON.parse(raw) as { error?: { code?: unknown; message?: unknown } } | null;
     const error = parsed?.error;
     return {
-      agreed: typeof error === 'object' && error !== null,
+      // The agreed body has a text code. Other envelopes that happen to use the key "error" (a gateway's
+      // {"error":{"code":401,…}}, an empty object, a list) are not the API's own verdict.
+      agreed: typeof error === 'object' && error !== null && !Array.isArray(error) && typeof error.code === 'string',
       code: typeof error?.code === 'string' ? error.code : '',
       // Shown to the user as plain text: one line, no control characters.
       message: typeof error?.message === 'string' ? cleanText(error.message, 200) : '',

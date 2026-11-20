@@ -2,10 +2,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { briefRewriteRequest, rewriteBrief } from '@/ai/brief-rewrite';
 import { legiitAiPayload } from '@/ai/provider';
+import { displayName } from '@/brands/matcher';
 import { parseHtml } from '@/extract/html';
 import { extractPageFacts } from '@/extract/page-facts';
 import { composeBrief, withRewrites, type Brief, type BriefCompetitor } from '@/features/instant-brief/compose';
-import { assembleSitePages, linksToRead, pickSitePages } from '@/features/instant-brief/crawl';
+import { assembleSitePages, linksToRead, pickSitePages, sameDocument } from '@/features/instant-brief/crawl';
 import { extractBusinessFacts } from '@/features/instant-brief/extract';
 import { findIssues } from '@/features/instant-brief/issues';
 import { briefToMarkdown } from '@/features/instant-brief/markdown';
@@ -61,7 +62,8 @@ export function InstantBriefTab() {
   // Tracked competitors are offered first; the user decides which belong in this brief.
   useEffect(() => {
     setCandidates((current) => {
-      const tracked: Candidate[] = settings.competitors.map((c) => ({ name: c.name, domain: c.domains[0] ?? null, source: 'tracked', checked: true }));
+      // A competitor tracked without a name is called by its domain, here as everywhere else.
+      const tracked: Candidate[] = settings.competitors.map((c) => ({ name: displayName(c), domain: c.domains[0] ?? null, source: 'tracked', checked: true }));
       const others = current.filter((c) => c.source !== 'tracked');
       return [...tracked.map((t) => ({ ...t, checked: current.find((c) => c.source === 'tracked' && c.name === t.name)?.checked ?? true })), ...others];
     });
@@ -83,7 +85,7 @@ export function InstantBriefTab() {
         progress(1, links.length, 'Reading site pages');
         // The other pages are fetched from inside the tab: same site, no extra permission, no cookies.
         const fetched = others.length > 0 ? await sendToTab(tabId, { type: 'lens:fetch-same-origin', urls: others.map((l) => l.url) }, SameOriginFetchReplySchema) : { pages: [] };
-        const { pages, unread: skipped } = assembleSitePages<Document>({ url: snapshot.url, doc: currentDoc }, links, fetched.pages, parseHtml);
+        const { pages, unread: skipped } = assembleSitePages<Document>({ url: snapshot.url, doc: currentDoc }, links, fetched.pages, parseHtml, sameDocument);
         progress(links.length, links.length, 'Reading brand styling');
         let style: BrandStyle | null = null;
         try {
@@ -160,8 +162,15 @@ export function InstantBriefTab() {
         setAiNote('Legiit AI is not available yet. The draft text is unchanged.');
       } else if (outcome.keptTemplateBecause) setAiNote(`${provider.label} could not be used (${outcome.keptTemplateBecause}). The draft text is unchanged.`);
       else {
-        await saveBrief(outcome.brief);
-        setBrief(outcome.brief);
+        // The model can take a minute. The rewrite goes onto the brief as it is stored now, not as it was at the
+        // click: a brief that was deleted meanwhile stays deleted, competitors that were changed meanwhile stay
+        // changed, and the screen only changes if it still shows this brief.
+        const latest = (await listBriefs()).find((stored) => stored.id === brief.id);
+        if (!latest) return;
+        const rewritten = withRewrites(latest, { avatars: outcome.brief.avatars, nextSteps: outcome.brief.nextSteps, writtenBy: outcome.brief.writtenBy });
+        await saveBrief(rewritten);
+        setBrief((current) => (current?.id === brief.id ? rewritten : current));
+        void reloadSaved();
       }
     } finally {
       setAiBusy(false);
@@ -279,6 +288,8 @@ export function InstantBriefTab() {
                 method="createWorkspaceFromBrief"
                 label="Open in Command Center"
                 needsBusiness={false}
+                // The same brief with other competitors, or rewritten by AI, has not been sent yet.
+                subject={`${brief.id}|${brief.writtenBy}|${brief.competitors.map((c) => `${c.name}/${c.domain ?? ''}`).join(',')}`}
                 payload={() => workspacePayload(brief, briefToMarkdown(brief, agency))}
                 send={(payload, _businessId, options) => connection.client!.createWorkspaceFromBrief(payload, options)}
               />

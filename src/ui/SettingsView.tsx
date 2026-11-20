@@ -6,7 +6,7 @@ import { LEGIIT_API_BASE_URL } from '@/config/runtime';
 import { isUnavailable, LegiitError } from '@/legiit/client';
 import { noteFailure } from '@/legiit/connection';
 import { competitorPayload } from '@/legiit/payloads';
-import { applyBusinessDetails, applyConnectedUser, clearBusinessDetails } from '@/legiit/prefill';
+import { applyBusinessDetails, applyConnectedUser, clearBusinessDetails, unselectBusiness } from '@/legiit/prefill';
 import type { LegiitBusiness } from '@/legiit/types';
 import { errorMessage } from '@/lib/async';
 import { randomId } from '@/lib/hash';
@@ -74,6 +74,7 @@ function BrandEditor({ brand, kind, onChange, onRemove }: { brand: StoredBrand; 
           <SaveToLegiit
             method="addCompetitor"
             label="Add to Command Center"
+            subject={`${brand.id}|${JSON.stringify(competitorPayload(typed()))}`}
             payload={() => competitorPayload(typed())}
             send={(payload, businessId, options) => connection.client!.addCompetitor(businessId, payload, options)}
           />
@@ -242,8 +243,19 @@ function LegiitSection() {
     }
   };
 
+  /** "Try again": the token in the field when one was typed, otherwise the one that is stored. */
+  const tryAgain = () => {
+    if (token.trim()) {
+      void onConnect();
+      return;
+    }
+    setError(null);
+    void retry();
+  };
+
   const onDisconnect = async () => {
     setNote(null);
+    setError(null);
     await disconnect();
     // Nothing from the account stays behind: brands, competitors, focus keywords and avatars that were pre-filled.
     await update((draft) => clearBusinessDetails(draft));
@@ -253,7 +265,8 @@ function LegiitSection() {
     setNote(null);
     if (!client) return;
     if (!id) {
-      await update((draft) => clearBusinessDetails(draft));
+      // Only the business is unselected: the user stays connected, and stays known.
+      await update((draft) => unselectBusiness(draft));
       return;
     }
     try {
@@ -351,13 +364,24 @@ function LegiitSection() {
             </Notice>
           )}
           {connection.tokenKept && !busy && (
-            // The token is still stored: nothing has to be pasted again to try once more.
-            <div className="row">
-              <Button small onClick={() => { setError(null); void retry(); }} data-testid="legiit-retry">
-                Try again
-              </Button>
-              <span className="small muted">Your token is still stored on this device.</span>
-            </div>
+            // A token is still stored: nothing has to be pasted again to try once more. When another token was typed
+            // into the field, "Try again" tries that one, not the one stored before.
+            <>
+              <div className="row">
+                <Button small onClick={tryAgain} data-testid="legiit-retry">
+                  Try again
+                </Button>
+                <span className="small muted" data-testid="legiit-kept">
+                  {token.trim() ? 'The token stored before is still on this device.' : 'Your token is still stored on this device.'}
+                </span>
+              </div>
+              <div className="row">
+                <Button small variant="danger" onClick={() => void onDisconnect()} data-testid="legiit-forget">
+                  Remove the token
+                </Button>
+                <span className="small muted">Deletes the stored token and everything pre-filled from Command Center from this device.</span>
+              </div>
+            </>
           )}
         </>
       )}

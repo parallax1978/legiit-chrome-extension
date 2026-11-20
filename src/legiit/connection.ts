@@ -6,8 +6,8 @@ import { PRODUCT_NAME } from '@/config/constants';
 import { LEGIIT_API_BASE_URL } from '@/config/runtime';
 import { guardedFetch } from '@/net/guarded-fetch';
 import { hasLegiitAccess } from '@/net/permissions';
-import { getLegiitToken, setLegiitToken } from '@/storage/settings';
-import { TokenAuthProvider } from './auth';
+import { getLegiitToken } from '@/storage/settings';
+import { StaticAuthProvider, TokenAuthProvider, type AuthProvider } from './auth';
 import { isUnavailable, LegiitError, METHOD_CAPABILITY, type LegiitClient, type LegiitMethod } from './client';
 import { HttpLegiitClient } from './http-client';
 import type { Capability, LegiitSession } from './types';
@@ -29,17 +29,17 @@ const auth = new TokenAuthProvider();
 /** Capabilities that answered "not available" during this session, on top of what the session reported. */
 const unavailable = new Set<Capability>();
 
-export function createClient(): LegiitClient {
+export function createClient(authProvider: AuthProvider = auth): LegiitClient {
   return new HttpLegiitClient({
     baseUrl: LEGIIT_API_BASE_URL,
-    auth,
+    auth: authProvider,
     fetch: (url, init) => guardedFetch(url, 'legiit', init),
     clientVersion: typeof chrome !== 'undefined' ? chrome.runtime?.getManifest?.().version : undefined,
   });
 }
 
 /** Restores the connection from a stored token. Makes no request when there is no token. */
-export async function loadConnection(client: LegiitClient = createClient()): Promise<Connection> {
+export async function loadConnection(client: LegiitClient = createClient(), attempt = 0): Promise<Connection> {
   const token = await getLegiitToken();
   if (token === null) return DISCONNECTED;
   try {
@@ -52,8 +52,13 @@ export async function loadConnection(client: LegiitClient = createClient()): Pro
         // an outage). Deleting the token for it would log every user out at once, so the token stays.
         return { ...DISCONNECTED, tokenKept: true, error: 'Legiit answered 401 without saying why, so your token was kept. Try again, or paste a new token.' };
       }
-      // Delete the token that was refused, not a newer one that another page stored in the meantime.
-      if ((await getLegiitToken()) === token) await auth.clear();
+      const stored = await getLegiitToken();
+      if (stored !== null && stored !== token && attempt < 2) {
+        // The refusal was for a token that another page has replaced meanwhile. It says nothing about the token
+        // that is stored now: that one is checked instead.
+        return loadConnection(client, attempt + 1);
+      }
+      if (stored === token) await auth.clear();
       return { ...DISCONNECTED, error: 'Your Legiit token was not accepted. Paste a new one to reconnect.' };
     }
     return { ...DISCONNECTED, tokenKept: true, error: await describeFailure(error) };
@@ -73,23 +78,33 @@ async function describeFailure(error: unknown): Promise<string> {
 /** A token travels in an HTTP header: printable ASCII without spaces, and not absurdly long. */
 const TOKEN_SHAPE = /^[\x21-\x7E]{1,4096}$/;
 
-/** Stores the token and verifies it. The token is removed again if Legiit does not accept it. */
-export async function connect(token: string, client: LegiitClient = createClient()): Promise<Connection> {
+/**
+ * Checks a pasted token and stores it only when Legiit accepts it. Nothing is stored before that: a failed attempt
+ * changes nothing on the device, a token that was stored before stays, and other extension pages never see a token
+ * that was not confirmed. One exception: when Legiit itself refuses the very token that is stored, that token is
+ * deleted, as it would be at any other session check.
+ *
+ * @param client Used for the check and for the connection (tests). By default the check is made with the pasted
+ *   token and the connection reads the stored one.
+ */
+export async function connect(token: string, client?: LegiitClient): Promise<Connection> {
   const trimmed = token.trim();
   if (!trimmed) throw new LegiitError('unauthorised', 'Paste your Legiit API token first');
   if (!TOKEN_SHAPE.test(trimmed)) {
     throw new LegiitError('unauthorised', 'That does not look like a Legiit token: a token has no spaces, line breaks or unusual characters. Copy it again from Command Center.');
   }
-  // A token that was already stored (and may still be good) comes back if the new one cannot be confirmed.
-  const previous = await getLegiitToken();
-  await auth.store(trimmed);
-  unavailable.clear();
   try {
-    const session = await client.getSession();
-    return { status: 'connected', session, client, error: null, tokenKept: true };
+    const session = await (client ?? createClient(new StaticAuthProvider(trimmed))).getSession();
+    await auth.store(trimmed);
+    unavailable.clear();
+    return { status: 'connected', session, client: client ?? createClient(), error: null, tokenKept: true };
   } catch (error) {
-    await setLegiitToken(previous === trimmed ? null : previous);
+    if (error instanceof LegiitError && error.code === 'unauthorised' && error.definite && (await getLegiitToken()) === trimmed) await auth.clear();
     if (isUnavailable(error)) throw new LegiitError('unavailable', 'The Legiit API is not available yet. Nothing was saved.', 404);
+    if (error instanceof LegiitError && error.code === 'network' && !(await hasLegiitAccess())) {
+      // The user declined when Chrome asked for the Legiit host. Say what is in the way, not just "failed to fetch".
+      throw new LegiitError('network', `Chrome is not letting ${PRODUCT_NAME} reach ${new URL(LEGIIT_API_BASE_URL).host}. Click Connect again and allow it.`);
+    }
     throw error;
   }
 }

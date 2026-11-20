@@ -1,5 +1,6 @@
 /** Small presentational components. Everything renders text through React, so page-derived strings are always escaped. */
-import { useEffect, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { safeHttpUrl } from '@/lib/sanitize';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger' | 'link'; small?: boolean };
@@ -105,7 +106,15 @@ export function Lines({ lines }: { lines: readonly string[] }) {
   );
 }
 
+/** How many dialogs are open. While one is, the page behind it cannot be used: not by mouse, not by keyboard. */
+let openDialogs = 0;
+
+/**
+ * A modal dialog. It is drawn outside the page (in a portal) and the page itself is made inert while it is open,
+ * so that Tab cannot reach a button behind it. Focus moves into the dialog and returns to where it was.
+ */
 export function Dialog({ title, children, footer, onClose, testId }: { title: string; children: ReactNode; footer: ReactNode; onClose: () => void; testId?: string }) {
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -113,16 +122,29 @@ export function Dialog({ title, children, footer, onClose, testId }: { title: st
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-  return (
+  useEffect(() => {
+    const page = document.getElementById('root');
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    openDialogs += 1;
+    page?.setAttribute('inert', '');
+    box.current?.focus();
+    return () => {
+      openDialogs -= 1;
+      if (openDialogs === 0) page?.removeAttribute('inert');
+      if (before?.isConnected) before.focus();
+    };
+  }, []);
+  return createPortal(
     <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={title} data-testid={testId}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={title} data-testid={testId} tabIndex={-1} ref={box}>
         <header>
           <h2>{title}</h2>
         </header>
         <div className="body">{children}</div>
         <footer>{footer}</footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
