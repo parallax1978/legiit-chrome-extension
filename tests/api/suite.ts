@@ -290,7 +290,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       `  Capabilities off:      ${off.join(', ') || 'none'}${off.length ? '  (their checks were skipped, so this run does not prove them)' : ''}`,
       `  Business used:         ${businessId ?? 'none'}`,
       `  Requests sent:         ${timings.length}, the slowest took ${timings.length ? Math.max(...timings.map((t) => t.ms)) : 0} ms`,
-      `  Created in this run:   ${created.length ? created.join(', ') : 'nothing'}`,
+      `  Created in this run:   ${created.length ? [...new Set(created)].join(', ') : 'nothing'}`,
       ...(created.length ? [`                         (competitors and workspaces are named "${TEST_DATA_PREFIX}: …")`] : []),
       ...(warnings.length ? ['  Warnings (recommendations, not failures):', ...warnings.map((w) => `    - ${w}`)] : ['  Warnings:              none']),
       '',

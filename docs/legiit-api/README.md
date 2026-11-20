@@ -317,7 +317,7 @@ What is promised to users, and to Google for the Chrome Web Store listing, depen
 - **Look up `briefId` and `Idempotency-Key` per user**, never across users. Both are made on the user's device.
 - **The AI endpoint accepts a system prompt and a prompt from the client.** Anyone with a token can send their own. Limit use per user, enforce the length limits in the contract, cap the output tokens, and give the model no tools and no access to other data. The facts between `<facts>` tags were read from web pages and can contain text that tries to instruct the model.
 - **Do not log `Authorization` headers.** Avoid logging full request bodies; if you must, treat the logs like the data.
-- **Rate-limit per user, and keep `GET /v1/session` out of tight limits.** A starting point: 120 reads and 60 saves per minute, and an AI allowance per day. The check in section 9 sends about 45 requests in under a second, 3 of them AI calls: exempt the test account, or allow for it.
+- **Rate-limit per user, and keep `GET /v1/session` out of tight limits.** A starting point: 120 reads and 60 saves per minute, and an AI allowance per day. The check in section 9 sends about 40 requests in under a second, 3 of them AI calls: exempt the test account, or allow for it.
 
 ## 8. Notes for Laravel, Express and Django
 
@@ -373,7 +373,7 @@ npm run api:check -- https://your-staging-host your-test-token
 
 The same command works in bash, PowerShell and cmd.
 
-- It sends the example requests with the extension's own client code, and checks every reply against the contract and against what the extension accepts. 30 checks, a few seconds, about 45 requests.
+- It sends the example requests with the extension's own client code, and checks every reply against the contract and against what the extension accepts. 30 checks, a few seconds, about 40 requests.
 - **It creates data** in the account: snapshots, gap lists, content analyses, competitors and workspaces. Competitors and workspaces are named "Conformance Check: …"; the snapshots and gap lists are for the keyword "best dentist in austin". Use a test account with at least one business.
 - Add `--business=<id>` to choose the business. Without it the first business of the list is used.
 - Add `--read-only` for a run that creates nothing. It still calls the AI endpoint three times.
