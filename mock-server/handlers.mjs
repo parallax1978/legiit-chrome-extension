@@ -10,16 +10,19 @@
  *                                 and answered by these handlers)
  *   - the unit tests and the conformance self-test
  *
- * Reading guide for a backend developer. Each numbered rule of the guide has
- * one place here:
- *   1. 401 is for the token and nothing else              → "The token"
- *   2. a feature that is off answers 404, not "not_found"  → off()
- *   3. a missing business answers 404 "not_found"          → businessOf()
- *   4. a body the contract does not allow answers 422      → problemWith()
- *   5. a repeated Idempotency-Key gets the first reply     → save()
- *   6. a competitor is never stored twice                  → addCompetitor()
- *   7. a brief that is sent again updates its workspace    → createWorkspace()
- *   8. every reply carries the CORS headers                → CORS_HEADERS
+ * Reading guide for a backend developer: the main rules of the guide
+ * (docs/legiit-api/README.md), and where each one is implemented here.
+ *   401 is for the token and nothing else (section 3)             → "The token"
+ *   a feature that is off answers 404, not "not_found" (4, 5)      → off()
+ *   a missing business answers 404 "not_found" (5)                 → businessOf()
+ *   a body over 1 MB answers 413, one that is not JSON 400 (3, 5)  → "The body"
+ *   a body the contract does not allow answers 422 (3)             → problemWith()
+ *   a repeated Idempotency-Key gets the first reply (3)            → remembered(), save()
+ *   a competitor is never stored twice (reference, endpoint 6)     → addCompetitor()
+ *   a brief that is sent again replaces its workspace (endpoint 8) → createWorkspace()
+ *   every reply carries the CORS headers (3)                       → CORS_HEADERS
+ * The order of the checks is the one section 5 gives: token, body size, JSON syntax, endpoint and capability,
+ * business, remembered reply, fields.
  * Everything that is "per user" (capabilities, remembered replies, briefs) is looked up by the user the token
  * belongs to, never by the token: a user can have several tokens.
  */
@@ -158,6 +161,7 @@ function answer(state, request) {
   };
   const noSuchBusiness = () => error(404, 'not_found', 'No such business');
 
+  // --- The body.
   let body = null;
   if (method === 'POST') {
     // The extension never sends more than 1 MB; a server has to accept that much.
@@ -171,16 +175,16 @@ function answer(state, request) {
   }
 
   /**
-   * Stores one item and answers with its id and address.
-   *
    * A reply to a successful save is remembered under its Idempotency-Key (per user, method and path). The same
-   * key again gets that reply again and nothing is stored. Errors are never remembered: after an error the
-   * extension sends the same key with the same body once more, and that attempt must be handled afresh.
-   * A save without the header is valid (curl and the conformance check send some).
+   * key again gets that reply again: it takes the place of validating and storing the body, so it is looked up
+   * after the token, the capability and the business were checked and before the fields are. Errors are never
+   * remembered: after an error the extension sends the same key with the same body once more, and that attempt
+   * must be handled afresh. A save without the header is valid (curl and the conformance check send some).
    */
+  const replyKey = idempotencyKey ? `${userId} ${method} ${path} ${idempotencyKey}` : null;
+  const remembered = () => (replyKey ? (state.replies.get(replyKey) ?? null) : null);
+  /** Stores one item and answers with its id and address. */
   const save = (page, store) => {
-    const replyKey = idempotencyKey ? `${userId} ${method} ${path} ${idempotencyKey}` : null;
-    if (replyKey && state.replies.has(replyKey)) return state.replies.get(replyKey);
     const { id, created } = store();
     const reply = json(created ? 201 : 200, { id, url: `https://app.legiit.example/command-center/${page}/${id}` });
     if (replyKey) state.replies.set(replyKey, reply);
@@ -207,6 +211,8 @@ function answer(state, request) {
     if (blocked) return blocked;
     const business = businessOf(match[1]);
     if (!business) return noSuchBusiness();
+    const again = remembered();
+    if (again) return again;
     const problem = problemWith(kind.schema, body);
     if (problem) return error(422, 'invalid', problem);
     if (kind.bucket === 'competitors') return save(kind.page, () => addCompetitor(state, business, body));
@@ -221,6 +227,8 @@ function answer(state, request) {
   if (method === 'POST' && path === '/v1/workspaces/from-brief') {
     const blocked = off('workspaces');
     if (blocked) return blocked;
+    const again = remembered();
+    if (again) return again;
     const problem = problemWith('WorkspaceFromBrief', body);
     if (problem) return error(422, 'invalid', problem);
     return save('workspaces', () => createWorkspace(state, userId, body, newId));
@@ -244,7 +252,8 @@ function answer(state, request) {
 /**
  * Adds a competitor to a business, once. A competitor the business already has (the same name without regard to
  * case, or one of the same domains; a name match wins) keeps its name, gains the domains it did not have, and its
- * id is returned with 200. A new one is listed in Business Details at once.
+ * id is returned with 200. A domain that another competitor of the business already has stays with that one: no
+ * two competitors of a business share a domain. A new competitor is listed in Business Details at once.
  */
 function addCompetitor(state, business, body) {
   const list = business.details.competitors;
@@ -254,7 +263,8 @@ function addCompetitor(state, business, body) {
   if (index < 0) index = list.findIndex((c) => (c.domains ?? []).map(host).some((d) => domains.includes(d)));
   if (index >= 0) {
     const known = list[index];
-    known.domains = [...new Set([...(known.domains ?? []), ...domains])].slice(0, 30);
+    const taken = new Set(list.flatMap((c, i) => (i === index ? [] : (c.domains ?? []).map(host))));
+    known.domains = [...new Set([...(known.domains ?? []), ...domains.filter((d) => !taken.has(d))])].slice(0, 30);
     return { id: ids[index], created: false };
   }
   const id = `com_${state.nextId++}`;

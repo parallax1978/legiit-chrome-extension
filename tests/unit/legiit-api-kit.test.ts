@@ -257,9 +257,26 @@ describe('the mock server behaves as the guide asks of the real one', () => {
     expect(JSON.parse(known.body).id).toBe('com_seed_1');
     expect(read().competitors.filter((c) => c.name === 'Lakeside Smiles')).toHaveLength(1);
     // A name match wins over a domain match; a subdomain is another domain.
-    const both = post(state, competitors, { name: 'Capitol Dental Care', domains: ['lakesidesmiles.example'] });
+    const both = post(state, competitors, { name: 'Capitol Dental Care', domains: ['lakesidesmiles.example', 'capitol-second.example'] });
     expect(JSON.parse(both.body).id).toBe('com_seed_2');
+    // The competitor gains the domain nobody had; the one that belongs to another competitor stays where it is.
+    expect(read().competitors.find((c) => c.name === 'Capitol Dental Care')!.domains).toEqual(['capitoldentalcare.example', 'capitol-second.example']);
+    expect(read().competitors.filter((c) => (c.domains ?? []).includes('lakesidesmiles.example')).map((c) => c.name)).toEqual(['Lakeside Smiles']);
     expect(post(state, competitors, { name: 'Lakeside Blog', domains: ['blog.lakesidesmiles.example'] }).status).toBe(201);
+  });
+
+  it('gives a remembered reply before it looks at the fields, and after the business was checked', () => {
+    const state = createMockState();
+    const headers = { ...auth, 'idempotency-key': 'key-1' };
+    const send = (path: string, body: unknown) => handleMockRequest(state, { method: 'POST', path, headers, body: JSON.stringify(body) });
+    const first = send(competitors, { name: 'Northside Dental', domains: [] });
+    expect(first.status).toBe(201);
+    // The same key with a body that would be refused: the first reply again, nothing is validated or stored.
+    const again = send(competitors, { name: 'Only a name' });
+    expect([again.status, JSON.parse(again.body)]).toEqual([201, JSON.parse(first.body)]);
+    // The business is checked first: a remembered reply is never given for another path or a missing business.
+    expect(send('/v1/businesses/nope/competitors', { name: 'Northside Dental', domains: [] }).status).toBe(404);
+    expect(state.saved.competitors).toHaveLength(1);
   });
 
   it('looks up remembered replies per user, and gives the second token a user of its own', () => {
@@ -595,5 +612,40 @@ describe('contract hygiene', () => {
     execFileSync(process.execPath, ['scripts/build-api-reference.mjs', '--check'], { cwd: ROOT, stdio: 'pipe' });
     const reference = readFileSync(join(KIT_DIR, 'reference.md'), 'utf8');
     for (const op of operations) expect(reference).toContain(`${op.method} ${op.path}`);
+  });
+
+  it('the reference carries every "what the extension does" note of the contract', () => {
+    const reference = readFileSync(join(KIT_DIR, 'reference.md'), 'utf8').replace(/\s+/g, ' ');
+    const notes: string[] = [];
+    const collect = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'x-extension-reaction' && typeof value === 'string') notes.push(value.trim().replace(/\s+/g, ' '));
+        else collect(value);
+      }
+    };
+    collect(contract);
+    expect(notes.length).toBeGreaterThan(5);
+    for (const note of notes) expect(reference, note).toContain(note);
+  });
+
+  it('writes no placeholder in angle brackets where a Markdown renderer would swallow it', () => {
+    // "<token>" outside a code span is read as an HTML tag and vanishes on GitHub, in Swagger UI and in Postman.
+    const tag = /<\/?[A-Za-z][^<>]*>/;
+    const outsideCode = (text: string): string => text.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
+    const offending: string[] = [];
+    const walk = (node: unknown, path: string): void => {
+      if (typeof node === 'string') {
+        if ((path.endsWith('.description') || path.endsWith('.summary') || path.includes('x-')) && tag.test(outsideCode(node))) offending.push(`openapi.yaml ${path}: ${tag.exec(outsideCode(node))![0]}`);
+      } else if (node && typeof node === 'object') {
+        for (const [key, value] of Object.entries(node)) walk(value, `${path}.${key}`);
+      }
+    };
+    walk(contract, '');
+    for (const file of ['README.md', 'reference.md', 'captured-requests.md']) {
+      const text = outsideCode(readFileSync(join(KIT_DIR, file), 'utf8')).replace(/<!--[\s\S]*?-->/g, ' ');
+      for (const line of text.split('\n')) if (tag.test(line)) offending.push(`${file}: ${tag.exec(line)![0]} in "${line.trim().slice(0, 80)}"`);
+    }
+    expect(offending).toEqual([]);
   });
 });

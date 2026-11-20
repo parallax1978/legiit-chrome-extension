@@ -47,8 +47,8 @@ opens the side panel.
 For a valid token answer 200, and say what the user's plan includes through `capabilities`,
 never through 403. Answer 403 here only when the account may not use the API at all (it is
 suspended, for example): the extension then shows your message and "Legiit not connected", and
-keeps the token. Answer 401 only when the token itself is bad, and with the error body: that
-401 makes the extension delete the token.
+keeps a token that is already stored (at Connect nothing is stored). Answer 401 only when the
+token itself is bad, and with the error body: that 401 makes the extension delete the token.
 
 The extension shows a feature only when its capability is in `capabilities`. With an empty list
 the user is connected and sees no Legiit feature at all.
@@ -308,7 +308,7 @@ One measurement of one Google results page, exactly as the user's Chrome laid it
 | `organic[].fold` | string or null | yes |  | Fold position of the result, with the same three values as firstOrganicFold. null exactly when topPx is null. One of: `above`, `partly`, `below`. See [Fold](#fold). |
 | `tracked` | array of object | yes | 0 to 250 items | Every brand the user tracks in the extension, their own and competitors: brands found among the organic results first, in result order, then the brands that were not found. The names come from the extension's settings (typed by the user, or pre-filled from Business Details). They are labels, not ids, and need not match the competitors stored for the business. |
 | `tracked[].owner` | string | yes |  | mine is one of the user's own brands, competitor one of their competitors. One of: `mine`, `competitor`. |
-| `tracked[].name` | string | yes | 1 to 160 chars | The brand's display name, or its first domain when the user gave it no name. |
+| `tracked[].name` | string | yes | 1 to 160 chars | The brand's display name. When the user gave it no name, its first domain, or else its first other spelling. |
 | `tracked[].position` | integer or null | yes | 1 to 100 | organic[].position of the brand's first organic result on this page. null means the brand has no organic result on this page. A brand matches a result by domain, never by its name. |
 | `tracked[].topPx` | integer or null | yes | 0 to 10,000,000 | Top edge of that result. null when position is null or the result could not be measured. |
 | `tracked[].fold` | string or null | yes |  | Fold position of that result. null when topPx is null. One of: `above`, `partly`, `below`. See [Fold](#fold). |
@@ -435,10 +435,12 @@ File: `examples/saveVisibilitySnapshot.no-organic-results.request.json`.
 
 The item was stored (201), or it already existed and its id is returned (200). The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
+What the extension does: Closes the dialog and shows "Saved", with an "Open in Command Center" link when `url` is present.
+
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item, at the top level of the body. Not shown to the user. See [Id](#id). |
-| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent, or longer than 2,048 characters: "Saved" is shown without a link. |
+| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null, absent, longer than 2,048 characters or not an address that can be opened (a relative path, no scheme): "Saved" is shown without a link. |
 
 **Example response**
 
@@ -503,10 +505,10 @@ A "Why Not Me" gap list: the places on one source where tracked competitors appe
 | `source` | string | yes | 1 to 40 chars | Where the list was read from, as a label. An AI Overview shown on a results page belongs to "Google results". Store it as text and accept labels you do not know. For example: `Google results`, `Google AI Mode`, `ChatGPT`, `Gemini`, `Perplexity`, `Copilot`, `Pasted answer`. |
 | `subject` | string | yes | 0 to 4,000 chars | The Google query, or the question the user asked on the AI site. It can be an empty string: always for "Pasted answer", and whenever no question could be read. Do not require it and do not use it as a unique key. |
 | `capturedAt` | string | yes | date and time (ISO 8601) | When the page or answer was read, on the user's clock, as UTC with milliseconds. It is not the time of the save and it is not unique: saving the same reading before and after "Scan sources" sends the same value with different rows. |
-| `rows` | array of object | yes | 1 to 1,000 items | One row per gap, in the order shown to the user (highest priority first unless they re-sorted). Typically 1 to 40 rows. |
-| `rows[].surfaceId` | string | yes | at most 40 chars | Where the gap is, as a code. answer_text and citations belong to the answers of ChatGPT, Gemini, Perplexity, Copilot and to pasted text. ai_overview is Google's own AI answer: the AI Overview on a results page, and the whole answer of Google AI Mode. The others are blocks of a Google results page. scanned_page is a page found only by "Scan sources". Values in this version: `ai_overview`, `organic`, `local_pack`, `forum`, `video`, `ad`, `featured_snippet`, `top_stories`, `shopping`, `answer_text`, `citations`, `scanned_page`. |
-| `rows[].surface` | string | yes | 1 to 60 chars | The same place as a label for people. Use surfaceId and position in code, not this text. For example: `Organic #3`, `AI Overview citation`, `Answer text`, `Cited by ChatGPT`. |
-| `rows[].position` | integer or null | yes | 1 to 1,000 | 1-based position inside its own surface on the page the user had open: the organic position, the order of the citation, the order of the item in its block. null exactly when pageType is "surface". It is not an absolute Google rank. |
+| `rows` | array of object | yes | 1 to 1,000 items | One row per gap, in the order shown to the user (highest priority first unless they re-sorted). The two examples of this kit have 20 rows and 1 row. |
+| `rows[].surfaceId` | string | yes | at most 40 chars | Where the gap is, as a code. answer_text and citations belong to the answers of ChatGPT, Gemini, Perplexity, Copilot and to pasted text. ai_overview is Google's own AI answer: the AI Overview on a results page, and the whole answer of Google AI Mode. The others are blocks of a Google results page. scanned_page is a cited or list-style page that turned out to be a gap only when "Scan sources" read it; `surface` says where it was linked from. Values in this version: `ai_overview`, `organic`, `local_pack`, `forum`, `video`, `ad`, `featured_snippet`, `top_stories`, `shopping`, `answer_text`, `citations`, `scanned_page`. |
+| `rows[].surface` | string | yes | 1 to 60 chars | The same place as a label for people. Use surfaceId and position in code, not this text, except to tell where a "scanned_page" row was linked from. For example: `Organic #3`, `AI Overview citation`, `Answer text`, `Cited by ChatGPT`. |
+| `rows[].position` | integer or null | yes | 1 to 1,000 | 1-based position inside its own surface on the page the user had open: the organic position, the order of the citation, the order of the item in its block. For surfaceId "scanned_page" it is the position where the page was linked from. null exactly when pageType is "surface". It is not an absolute Google rank. |
 | `rows[].title` | string | yes | 0 to 1,000 chars | Title of the page or item. For pageType "surface" it is a sentence written by the extension. Can be empty for an ad without a readable headline. |
 | `rows[].url` | string or null | yes | at most 2,048 chars; starts with http:// or https:// | Address of the page the row is about, with tracking parameters removed. null for pageType "surface", and for some local-pack and ad rows that have no link. See [HttpUrl](#httpurl). |
 | `rows[].domain` | string or null | yes | 0 to 255 chars | Host of url, in lower case, without a leading "www.". null exactly when url is null. |
@@ -626,10 +628,12 @@ File: `examples/saveGapList.pasted-answer.request.json`.
 
 The item was stored (201), or it already existed and its id is returned (200). The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
+What the extension does: Closes the dialog and shows "Saved", with an "Open in Command Center" link when `url` is present.
+
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item, at the top level of the body. Not shown to the user. See [Id](#id). |
-| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent, or longer than 2,048 characters: "Saved" is shown without a link. |
+| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null, absent, longer than 2,048 characters or not an address that can be opened (a relative path, no scheme): "Saved" is shown without a link. |
 
 **Example response**
 
@@ -671,7 +675,8 @@ Recommended: never store the same competitor twice. Compare names without regard
 surrounding spaces. Compare domains as hosts: lower case, without scheme, "www." and path; a
 subdomain is a different domain. When the business already has a competitor with this name or
 one of these domains, answer 200 with the id of that competitor (a name match wins over a domain
-match), and add the domains it did not have yet. Do not answer 409.
+match), and add the domains it did not have yet, except a domain that another competitor of the
+business already has: that one stays where it is. Do not answer 409.
 
 After a save, GET /v1/businesses/{businessId} lists the competitor.
 
@@ -724,10 +729,12 @@ File: `examples/addCompetitor.name-only.request.json`.
 
 The item was stored (201), or it already existed and its id is returned (200). The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
+What the extension does: Closes the dialog and shows "Saved", with an "Open in Command Center" link when `url` is present.
+
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item, at the top level of the body. Not shown to the user. See [Id](#id). |
-| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent, or longer than 2,048 characters: "Saved" is shown without a link. |
+| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null, absent, longer than 2,048 characters or not an address that can be opened (a relative path, no scheme): "Saved" is shown without a link. |
 
 **Example response**
 
@@ -912,10 +919,12 @@ File: `examples/sendToContentEditor.pasted-text.request.json`.
 
 The item was stored (201), or it already existed and its id is returned (200). The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
+What the extension does: Closes the dialog and shows "Saved", with an "Open in Command Center" link when `url` is present.
+
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item, at the top level of the body. Not shown to the user. See [Id](#id). |
-| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent, or longer than 2,048 characters: "Saved" is shown without a link. |
+| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null, absent, longer than 2,048 characters or not an address that can be opened (a relative path, no scheme): "Saved" is shown without a link. |
 
 **Example response**
 
@@ -993,13 +1002,13 @@ A client brief the extension wrote from a business's public website (it reads up
 | `contact.addresses` | array of string | yes | 0 to 4 items; each: 1 to 240 chars | Postal addresses, each on one line. |
 | `serviceAreas` | array of string | yes | 0 to 16 items; each: 1 to 80 chars | Places the business says it serves, in the site's wording. |
 | `services` | array of string | yes | 0 to 20 items; each: 1 to 120 chars | Services or products named on the site, in the site's wording. |
-| `competitors` | array of object | yes | 0 to 200 items | The competitors the user ticked for this brief: ones they track in the extension, ones they typed, and sites picked from an open Google results page. Names are labels, not ids. No two entries share a name or a domain. |
+| `competitors` | array of object | yes | 0 to 200 items | The competitors the user ticked for this brief: ones they track in the extension, ones they typed, and sites picked from an open Google results page. Names are labels, not ids. No two entries share a name or a domain. Each entry carries at most one domain here: the competitor's first one, or the host of the result it was picked from, which is then also its name. |
 | `competitors[].name` | string | yes | 1 to 160 chars | Display name, as the user typed it. Compare names without regard to case. |
 | `competitors[].domains` | array of string | yes | 0 to 30 items; each: 1 to 255 chars | The competitor's sites as host names: lower case, no "www.", no path. Can be empty when the competitor is tracked by name only. A value is whatever the user typed that parses as a host: it can be a subdomain, and it is not checked against a list of public suffixes. |
 | `focusKeywords` | array of string | yes | 0 to 30 items; each: 1 to 200 chars | Search phrases suggested by the site's own page titles and headings, in lower case, roughly most widespread first. They are candidates: nobody researched or confirmed them. |
 | `avatars` | array of object | yes | exactly 3 items | Exactly three draft customer avatars, written from the site's content by a template or, when the user asked for it, by AI. The body does not say which. |
 | `avatars[].name` | string | yes | 1 to 160 chars | Short label of the avatar. |
-| `avatars[].description` | string | yes | 1 to 2,000 chars | One paragraph in a fixed form: "<who they are> Wants: <what they want> Worries about: <what they worry about>". |
+| `avatars[].description` | string | yes | 1 to 2,000 chars | One paragraph in a fixed form: who they are, then "Wants:" and what they want, then "Worries about:" and what they worry about. |
 | `avatars[].draft` | boolean | yes | must be `true` | Always true. Show the avatar as a draft for the user to review. |
 | `issues` | array of object | yes | 0 to 20 items | Basic on-page SEO findings for the pages that were read, most severe first. At most one entry per kind of finding. |
 | `issues[].code` | string | yes | 1 to 40 chars | The kind of finding. Use this, not the title, to recognise a finding. Values in this version: `not-https`, `noindex`, `missing-title`, `duplicate-title`, `short-title`, `long-title`, `missing-description`, `missing-h1`, `multiple-h1`, `canonical-elsewhere`, `missing-canonical`, `missing-viewport`, `missing-alt`, `no-structured-data`, `thin-content`. |
@@ -1008,13 +1017,13 @@ A client brief the extension wrote from a business's public website (it reads up
 | `issues[].detail` | string | yes | 0 to 2,000 chars | One English sentence that names the affected pages by path. For display. |
 | `issues[].pages` | array of string | yes | 1 to 8 items; each: at most 2,048 chars; starts with http:// or https:// | Addresses of the pages the finding applies to, as they were read (after redirects; the open page with its query string). See [HttpUrl](#httpurl). |
 | `nextSteps` | array of string | yes | 0 to 8 items; each: 1 to 600 chars | Recommended first actions, most important first: one or two English sentences each, written by a template or, when the user asked for it, by AI. They can quote a keyword the user searched for. |
-| `markdown` | string | yes | 1 to 200,000 chars | The whole brief as one Markdown document (CommonMark: headings, paragraphs, emphasis and bullet lists), the same text the user can export. It holds more than the fields above: the search findings, the site's tone of voice and testimonials, and "Prepared by <agency name>" when the user set one. Store it and show it as the brief; do not parse it. It quotes web pages: render it with raw HTML and unsafe links switched off. Typically 5 to 30 KB; a column for it must hold 600 KB (not a MySQL TEXT column, which ends at 64 KB). |
+| `markdown` | string | yes | 1 to 200,000 chars | The whole brief as one Markdown document (CommonMark: headings, paragraphs, emphasis and bullet lists), the same text the user can export. It holds more than the fields above: the search findings, the site's tone of voice and testimonials, and "Prepared by" with the agency's name when the user set one. Store it and show it as the brief; do not parse it. It quotes web pages: render it with raw HTML and unsafe links switched off. The two examples of this kit are 2.5 and 5.5 KB; real sites give more, and a column for it must hold 600 KB (not a MySQL TEXT column, which ends at 64 KB). It repeats the contact details and quotes the site's testimonials with the names of its customers. |
 
 **Example request**
 
 ```json
 {
-  "briefId": "brief-example",
+  "briefId": "brief_3f9c2a7d41b06e58aa",
   "businessName": "BrightPath Dental",
   "siteUrl": "https://www.brightpathdental.example/",
   "createdAt": "2026-11-20T12:00:00.000Z",
@@ -1125,7 +1134,7 @@ Shortened here (`issues`: 2 of 6 items shown; `markdown`: first 300 of 5,367 cha
 
 ```json
 {
-  "briefId": "brief-little-found",
+  "briefId": "brief_91d04be27c6a5f3310",
   "businessName": "plain-site.example",
   "siteUrl": "https://plain-site.example/",
   "createdAt": "2026-11-20T12:00:00.000Z",
@@ -1174,10 +1183,12 @@ Shortened here (`markdown`: first 300 of 2,535 characters shown). Complete file:
 
 The item was stored (201), or it already existed and its id is returned (200). The body is required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object (such as "data") is treated as a failed save, and the user is likely to send it again.
 
+What the extension does: Closes the dialog and shows "Saved", with an "Open in Command Center" link when `url` is present.
+
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `id` | string or integer | yes | as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991 | Id of the stored item, at the top level of the body. Not shown to the user. See [Id](#id). |
-| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent, or longer than 2,048 characters: "Saved" is shown without a link. |
+| `url` | string or null | no | at most 2,048 chars; starts with http:// or https:// | Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null, absent, longer than 2,048 characters or not an address that can be opened (a relative path, no scheme): "Saved" is shown without a link. |
 
 **Example response**
 
@@ -1215,7 +1226,8 @@ Returns dated search-industry events, such as Google algorithm updates.
 
 The Rewind tab shows how a page changed over time. It offers the dates of the first eight events
 as shortcuts: one click filters the page history to the days before that date (30 by default;
-the user can change the number). Only `date` and `title` are shown.
+the user can change the number). Only `date` and `title` are shown, and only once the user has
+looked up the history of a page.
 
 The data is the same for every user, so the reply can be cached on your side. Return the
 latest events only: 8 are shown, so 20 are plenty.
@@ -1229,7 +1241,7 @@ The events, newest first.
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
 | `updatedAt` | string or null | no | date and time (ISO 8601) | When the list was last edited, as an ISO 8601 text. Not shown. |
-| `events` | array of object | yes | first 8 items are used | The events, newest first. A JSON array, also when it is empty. The extension shows the first 8. |
+| `events` | array of object | yes | first 8 items are used | The events, newest first. A JSON array, also when it is empty. The extension shows the first 8 that have a valid date. |
 | `events[].date` | string | yes | date (YYYY-MM-DD) | The calendar day of the event as the text YYYY-MM-DD (zero-padded). For a rollout, the day it started. Not a timestamp and not a number. An event whose date is not a real day is skipped. |
 | `events[].title` | string | yes | at least 1 char; first 300 chars are used | What happened. Shown as the tooltip of the date. |
 | `events[].type` | string or null | no |  | Kind of event. Not used by the extension yet; any text is accepted. For example: `algorithm-update`, `serp-feature`, `news`. |
@@ -1309,8 +1321,8 @@ with the reason. After a 404, 405 or 501 it stops offering the button until the 
 reopened or the user connects again.
 
 Security: `system` and `prompt` come from the client, so anyone with a token can send their
-own: limit use per user and enforce the length limits below. The facts between <facts> and
-</facts> were read from web pages and can contain text that tries to instruct the model. Give
+own: limit use per user and enforce the length limits below. The facts between `<facts>` and
+`</facts>` were read from web pages and can contain text that tries to instruct the model. Give
 the model no tools and no access to other data.
 
 ### Request body
@@ -1319,7 +1331,7 @@ the model no tools and no access to other data.
 | --- | --- | --- | --- | --- |
 | `task` | string | yes | at most 40 chars | Which screen asked. For your metering and logs. What you must return depends on responseSchema, not on this. Values in this version: `click-potential`, `why-not-me`, `rewind`, `new-or-noise`, `brief`. |
 | `system` | string | yes | 1 to 2,000 chars | The system prompt. The same fixed English text for every request of one extension version. |
-| `prompt` | string | yes | 1 to 10,000 chars | The user message: a line "Task: …", a line that says which format to reply in, then the facts as "- " lines between <facts> and </facts>. The facts were read from web pages: all of this text is untrusted input for your model. Do not parse it. |
+| `prompt` | string | yes | 1 to 10,000 chars | The user message: a line "Task: …", a line that says which format to reply in, then the facts as "- " lines between `<facts>` and `</facts>`. The facts were read from web pages: all of this text is untrusted input for your model. Do not parse it. |
 | `responseSchema` | object | no |  | Left out (never null) for a summary. Present when a JSON document is wanted, which in this version is the "brief" task: a JSON Schema that uses only type, properties, required, items, minItems, maxItems and additionalProperties. `text` must then be one JSON document that matches it. |
 | `maxOutputTokens` | integer | yes | 1 to 4,000 | Room for the visible reply, in model tokens: 700 for a summary, 2,000 when responseSchema is present. Above your own maximum, use your maximum. |
 
@@ -1445,7 +1457,7 @@ Rules that are the same wherever one of these values appears. The field tables a
 
 ### Id
 
-string or integer (as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991). An identifier: a string of 1 to 120 characters, or a non-negative integer of at most 2^53 - 1, whichever your database uses. Send a larger integer as a string. The extension treats an id as opaque text and sends it back as it came (an integer as its digits; spaces around a string id are removed). Return the same business with the same id everywhere. An id is never cut: a business whose id cannot be read is skipped, and a user id or a save id that cannot be read makes the whole reply unusable. Do not use "." or ".." as an id.
+string or integer (as text: 1 to 120 chars; as a number: 0 to 9,007,199,254,740,991). An identifier: a string of 1 to 120 characters, or a non-negative integer of at most 2^53 - 1, whichever your database uses. Send a larger integer as a string. The extension treats an id as opaque text and sends it back as it came (an integer as its digits; spaces around a string id are removed). Return the same business with the same id everywhere. An id is never cut: a business whose id cannot be read is skipped, and a user id or a save id that cannot be read makes the whole reply unusable. A string id is valid Unicode with at least one character that is not white space. Do not use "." or ".." as an id.
 
 ### Capability
 
@@ -1483,7 +1495,7 @@ The JSON body of every 4xx reply, including the ones your framework produces by 
 | --- | --- | --- | --- | --- |
 | `error` | object | yes |  | The one top-level key of an error reply. |
 | `error.code` | string | yes |  | A short machine-readable reason. The extension reads exactly one value: "not_found" on a 404 of a path with a business id means "this business does not exist". That value is reserved for that case. Use your own values for everything else. For example: `unauthorised`, `forbidden`, `not_found`, `not_available`, `invalid`, `rate_limited`. |
-| `error.message` | string | yes | at least 1 char; first 200 chars are used | One plain sentence for the user, without HTML. Shown after the status code for a 404 "not_found" and for every other 4xx except 401; not shown for 401, for a 404, 405 or 501 that means "not built", or for a 5xx. |
+| `error.message` | string | yes | at least 1 char; first 200 chars are used | One plain sentence for the user, without HTML. Shown after the status code for a 404 "not_found" and for every other 4xx except 401; not shown for 401, for a 404, 405 or 501 that means "not built", or for a 5xx. A message over 200 characters is cut and ends with "…". |
 
 **Example: 401 bad token**
 

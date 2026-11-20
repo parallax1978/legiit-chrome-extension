@@ -276,6 +276,36 @@ describe('HTTP client against the mock API', () => {
     expect(isUnavailable(await answering(() => new Response('<h1>Not Found</h1>', { status: 404 })).client.addCompetitor('b', competitor).catch((e: unknown) => e))).toBe(true);
   });
 
+  it('shows a link only for an address that can be opened', async () => {
+    const saved = (url: unknown) => answering(() => Response.json({ id: 'x', url }, { status: 201 })).client.addCompetitor('b', { name: 'n', domains: [] });
+    expect(await saved('https://app.legiit.com/command-center/x/1')).toEqual({ id: 'x', url: 'https://app.legiit.com/command-center/x/1' });
+    expect((await saved('http://localhost:8000/x/1')).url).toBe('http://localhost:8000/x/1');
+    // The save counts, the link does not: a relative path, no scheme, another scheme, a broken host, too long.
+    for (const url of ['/command-center/x/1', 'app.legiit.com/x/1', 'javascript:alert(1)', 'ftp://legiit.com/x', 'https://a b.example/x', `https://app.legiit.com/${'x'.repeat(2048)}`, '', 7, {}, null, undefined]) {
+      expect(await saved(url), JSON.stringify(url)).toEqual({ id: 'x', url: null });
+    }
+  });
+
+  it('measures a reply without a Content-Length in bytes as well', async () => {
+    // 2 million three-byte characters are 6 MB: more than the limit, although fewer than 5 million characters.
+    const streamed = (text: string) => () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(text));
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      );
+    const big = JSON.stringify({ user: { id: 'u', name: '漢'.repeat(2_000_000) }, capabilities: [] });
+    expect(streamed(big)().headers.get('content-length')).toBeNull();
+    await expect(answering(streamed(big)).client.getSession()).rejects.toMatchObject({ code: 'invalid-response', message: 'Legiit sent a reply that is too large to read' });
+    // Just as many characters in one-byte text are 2 MB and are read.
+    const small = JSON.stringify({ user: { id: 'u', name: 'x'.repeat(2_000_000) }, capabilities: [] });
+    expect((await answering(streamed(small)).client.getSession()).user.id).toBe('u');
+  });
+
   it('never puts an id into a path that it could not be part of', async () => {
     const loneSurrogate = String.fromCharCode(0xd800);
     const { client, calls } = answering((url) => {

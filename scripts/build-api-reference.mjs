@@ -135,7 +135,8 @@ function limits(schema) {
   if (schema.pattern === '^https?://') out.push('starts with http:// or https://');
   else if (schema.pattern === '^https://') out.push('starts with https://');
   else if (schema.pattern === '^(https?://|mailto:)') out.push('starts with http://, https:// or mailto:');
-  else if (schema.pattern !== undefined) out.push(`matches ${code(schema.pattern)}`);
+  // "\\S" is the rule for an id (not only white space): the shared type says it in words, the limits stay short.
+  else if (schema.pattern !== undefined && schema.pattern !== '\\S') out.push(`matches ${code(schema.pattern)}`);
   const used = uses(schema);
   if (used) out.push(used);
   return out.join('; ');
@@ -290,6 +291,7 @@ for (const [path, methods] of Object.entries(contract.paths)) {
       const schema = response.content?.['application/json']?.schema;
       lines.push(`### Response ${successes.map(([status]) => status).join(' or ')}`, '');
       if (response.description) lines.push(flat(response.description), '');
+      if (response['x-extension-reaction']) lines.push(`What the extension does: ${flat(response['x-extension-reaction'])}`, '');
       if (schema) {
         const top = deref(schema).schema;
         if (top.description) lines.push(flat(top.description), '');

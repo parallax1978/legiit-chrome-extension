@@ -1,7 +1,7 @@
 /** LegiitClient over HTTPS. Base URL and auth come from config; every request goes through the guarded network layer. */
 import * as v from 'valibot';
 import { errorMessage, timeoutSignal } from '@/lib/async';
-import { cleanText, cutText } from '@/lib/sanitize';
+import { cleanText, cutText, safeHttpUrl } from '@/lib/sanitize';
 import type { AuthProvider } from './auth';
 import { LegiitError, type LegiitClient, type SaveOptions } from './client';
 import { MAX_REPLY_BYTES, MAX_REQUEST_BYTES, TIMEOUT_MS } from './limits';
@@ -134,8 +134,24 @@ const BusinessDetailsSchema = v.pipe(
     avatars: optionalList(v.object({ name: text(160), description: looseText(2000) }), 20),
   }),
 );
-/** A link that is too long to be whole is no link: it reads as absent rather than being cut. */
-const SaveResultSchema = v.object({ id: id(200), url: v.fallback(v.nullish(v.pipe(v.string(), v.maxLength(2048)), null), null) });
+/**
+ * A link that cannot be opened is no link: one that is too long to be whole, a relative path, a host without a
+ * scheme, another scheme. It reads as absent, so the user sees "Saved" and not a label that looks like a link.
+ */
+const SaveResultSchema = v.object({
+  id: id(200),
+  url: v.fallback(
+    v.nullish(
+      v.pipe(
+        v.string(),
+        v.maxLength(2048),
+        v.check((value) => safeHttpUrl(value) !== null),
+      ),
+      null,
+    ),
+    null,
+  ),
+});
 const PulseSchema = v.object({
   updatedAt: optionalText(40),
   events: list(
@@ -200,7 +216,8 @@ interface RequestOptions {
 async function readText(response: Response): Promise<string> {
   if (Number(response.headers.get('content-length') ?? '0') > MAX_REPLY_BYTES) throw new LegiitError('invalid-response', TOO_LARGE, response.status);
   const raw = await response.text();
-  if (raw.length > MAX_REPLY_BYTES) throw new LegiitError('invalid-response', TOO_LARGE, response.status);
+  // Without a Content-Length the size is only known now. One UTF-16 unit is at most 3 bytes, so short text needs no count.
+  if (raw.length * 3 > MAX_REPLY_BYTES && new TextEncoder().encode(raw).length > MAX_REPLY_BYTES) throw new LegiitError('invalid-response', TOO_LARGE, response.status);
   return raw;
 }
 

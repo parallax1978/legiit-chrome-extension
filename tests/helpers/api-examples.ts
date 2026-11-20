@@ -51,7 +51,7 @@ export function buildExampleBrief(): Brief {
   const serp = parseSerp(doc, getPack('google'), serpEnv(doc, scenario.urls.serpFull!));
   const snapshot = toSnapshot(serp, computeClickPotential(serp, matcher), summarisePresence(buildSerpPresence(serp, matcher)));
   return composeBrief({
-    id: 'brief-example',
+    id: 'brief_3f9c2a7d41b06e58aa',
     now: EXAMPLE_NOW,
     facts: extractBusinessFacts(site),
     issues: findIssues(site.map((p) => ({ ...p, facts: extractPageFacts(p.doc, p.url) }))),
@@ -100,7 +100,7 @@ export async function buildExampleRequests(): Promise<Record<string, unknown>> {
   // A site that gave the extension almost nothing: one page without contact details, services or structured data.
   const sparseDoc = new DOMParser().parseFromString('<!doctype html><html><head><title>Welcome</title></head><body><main><h1>Welcome</h1><p>Our new website is coming soon.</p></main></body></html>', 'text/html');
   const sparsePage: SitePage = { url: 'https://plain-site.example/', kind: 'home', doc: sparseDoc };
-  const sparse = composeBrief({ id: 'brief-little-found', now: EXAMPLE_NOW, facts: extractBusinessFacts([sparsePage]), issues: [], competitors: [] });
+  const sparse = composeBrief({ id: 'brief_91d04be27c6a5f3310', now: EXAMPLE_NOW, facts: extractBusinessFacts([sparsePage]), issues: [], competitors: [] });
 
   const noise = await buildExampleNoiseReport();
   // Text the user pasted, compared with a single page: several values are empty and all of them are valid.

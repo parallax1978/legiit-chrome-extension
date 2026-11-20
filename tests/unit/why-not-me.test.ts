@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { problemWith } from '@@/mock-server/contract.mjs';
 import { readAnswer } from '@/answers/read';
 import { BrandMatcher } from '@/brands/matcher';
 import { AI_SITES, type AiSiteId } from '@/config/sites';
@@ -9,6 +10,7 @@ import { answerSentences, matchPassages, passageCandidates } from '@/features/wh
 import { buildAnswerPresence, buildSerpPresence, explainPresence } from '@/features/why-not-me/presence';
 import { analysePage, pickAnswerTargets, pickSerpTargets } from '@/features/why-not-me/scan';
 import type { FetchedHtml } from '@/net/page-fetch';
+import { gapPayload } from '@/legiit/payloads';
 import { getPack } from '@/selectors';
 import { parseSerp } from '@/serp/parse';
 import { countWords } from '@/lib/text';
@@ -295,6 +297,36 @@ describe('gap list', () => {
     // Sorted by priority: the scanned AI Overview citations come before plain organic rows.
     expect(rows[0]!.surfaceId).toBe('ai_overview');
     expect(rows.indexOf(listPage)).toBeLessThan(rows.findIndex((r) => r.surface === 'Organic #8'));
+  });
+
+  it('never lists a competitor under an empty name, with or without a scan', async () => {
+    // One competitor tracked by its domain only, one by another spelling only: neither has a name.
+    const nameless = new BrandMatcher({
+      mine: scenarioBrands.mine,
+      competitors: [
+        { id: 'by-domain', name: '', domains: ['texaslocalpicks.example'], aliases: [] },
+        { id: 'by-alias', name: '', domains: [], aliases: ['Lakeside Smiles'] },
+      ],
+    });
+    expect(nameless.nameOf('by-domain')).toBe('texaslocalpicks.example');
+    expect(nameless.nameOf('by-alias')).toBe('Lakeside Smiles');
+    const seen = buildSerpPresence(full, nameless);
+    const targets = pickSerpTargets(full, { matcher: nameless });
+    const digests = await loadPages(targets.map((t) => t.url), { fetchPage: fetchFixture });
+    const scans = targets.map((t, i) => analysePage(t, digests[i]!, nameless));
+    for (const rows of [buildGapRows(seen), buildGapRows(seen, scans)]) {
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.competitors.length, row.surface).toBeGreaterThan(0);
+        expect(row.competitors.every((name) => name.trim() !== ''), `${row.surface}: ${JSON.stringify(row.competitors)}`).toBe(true);
+        expect(row.evidence).not.toMatch(/(^| )'s own page|Names ,|names  /);
+      }
+      // What would be sent to Legiit is valid by the contract: every name has at least one character.
+      expect(problemWith('GapList', gapPayload(seen, rows))).toBeNull();
+    }
+    // The scan of the competitor's own page counts its domain under that domain, not under "".
+    const own = scans.find((scan) => scan.ok && scan.target.domain === 'texaslocalpicks.example');
+    expect(own?.ok && own.competitors.map((c) => c.name)).toContain('texaslocalpicks.example');
   });
 
   it('builds gap rows for AI answers, and for cited pages once they are scanned', async () => {

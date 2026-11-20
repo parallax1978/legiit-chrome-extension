@@ -4,7 +4,7 @@
   "title": "Legiit Command Center API for Legiit Lens",
   "version": "1.0.0-draft.3",
   "summary": "The API the Legiit Lens Chrome extension calls. To be built by the Legiit backend team.",
-  "description": "Generated from openapi.yaml and examples/ by scripts/build-api-reference.mjs. Do not edit: change openapi.yaml.\n\nThe extension is finished and calls exactly this API. The API does not exist yet.\nRead README.md first: it tells you what to build, in which order, and how to test it.\n\nThis file is the source of truth for field names, types and limits. reference.md\nand the mock server are generated from it or checked against it.\n\nRules for every request (they are not repeated per endpoint)\n- Every request carries \"Authorization: Bearer <token>\", \"Accept: application/json\" and\n  \"X-Legiit-Client: legiit-lens/<version>\". A POST also carries \"Content-Type: application/json\".\n  No cookies are sent. X-Legiit-Client is for your logs: do not require it.\n- Only GET and POST are used. There are no query strings.\n- A request body is one JSON object in UTF-8 of at most 1,048,576 bytes. Accept that much.\n- Answer in JSON, on the address that was called. The extension never follows a redirect.\n- The extension waits 20 seconds for a reply, 60 seconds for POST /v1/ai/completions,\n  and never retries on its own.\n\nConventions used in this file\n- Request schemas describe exactly what the extension sends. Every required field is in\n  every request. A field with no value is sent as null, \"\" or [], as its row says; these\n  are valid values. One field can be absent: responseSchema of the AI request.\n- Response schemas describe what you must return. The extension ignores fields it\n  does not know, so you may add fields.\n- Ignore request fields you do not know: a later extension version may add fields.\n- enum is a closed list. x-values lists the values this version uses for a field that a\n  later version may extend: store such a value as text and accept one you do not know.\n- Sentences such as \"null exactly when…\" or \"always the number of…\" describe what the\n  extension sends. You can rely on them; do not reject a request because of them.\n- Text lengths are counted in UTF-16 code units (the \"length\" of a JavaScript\n  string). A text within its limit in that count is also within it counted in\n  characters, so a check that counts characters (not bytes) never refuses a valid request.\n- Every integer in a request fits a signed 32-bit column.\n- x-uses, in a response schema, is how much of a value the extension uses. More is\n  allowed and is cut by the extension.\n- x-capability: the capability the extension needs before it shows this feature.\n- x-called-when: what the user does that causes the call.\n- x-extension-reaction: what the extension does with that response.\n"
+  "description": "Generated from openapi.yaml and examples/ by scripts/build-api-reference.mjs. Do not edit: change openapi.yaml.\n\nThe extension is finished and calls exactly this API. The API does not exist yet.\nRead README.md first: it tells you what to build, in which order, and how to test it.\n\nThis file is the source of truth for field names, types and limits. reference.md\nand the mock server are generated from it or checked against it.\n\nRules for every request (they are not repeated per endpoint)\n- Every request carries `Authorization: Bearer <token>`, `Accept: application/json` and\n  `X-Legiit-Client: legiit-lens/<version>`. A POST also carries `Content-Type: application/json`.\n  No cookies are sent. X-Legiit-Client is for your logs: do not require it.\n- Only GET and POST are used. There are no query strings.\n- A request body is one JSON object in UTF-8 of at most 1,048,576 bytes. Accept that much.\n- Answer in JSON, on the address that was called. The extension never follows a redirect.\n- The extension waits 20 seconds for a reply, 60 seconds for POST /v1/ai/completions,\n  and never retries on its own.\n\nConventions used in this file\n- Request schemas describe exactly what the extension sends. Every required field is in\n  every request. A field with no value is sent as null, \"\" or [], as its row says; these\n  are valid values. One field can be absent: responseSchema of the AI request.\n- Response schemas describe what you must return. The extension ignores fields it\n  does not know, so you may add fields.\n- Ignore request fields you do not know: a later extension version may add fields.\n- enum is a closed list. x-values lists the values this version uses for a field that a\n  later version may extend: store such a value as text and accept one you do not know.\n- Sentences such as \"null exactly when…\" or \"always the number of…\" describe what the\n  extension sends. You can rely on them; do not reject a request because of them.\n- Text lengths are counted in UTF-16 code units (the \"length\" of a JavaScript\n  string). A text within its limit in that count is also within it counted in\n  characters, so a check that counts characters (not bytes) never refuses a valid request.\n- A value over its limit is shortened by the extension, not refused: text is cut and ends with \"…\",\n  a list keeps its first entries, an address is cut at 2,048 characters. So a value at exactly its\n  maximum can be a shortened copy.\n- Every integer in a request fits a signed 32-bit column.\n- x-uses, in a response schema, is how much of a value the extension uses. More is\n  allowed and is cut by the extension.\n- x-capability: the capability the extension needs before it shows this feature.\n- x-called-when: what the user does that causes the call.\n- x-extension-reaction: what the extension does with that response.\n"
  },
  "servers": [
   {
@@ -46,7 +46,7 @@
      "Account"
     ],
     "summary": "Checks the token. Returns who is connected and which features are switched on.",
-    "description": "This is the first call the extension makes and the one that decides whether it is connected.\nKeep it cheap and fast, and keep it out of tight rate limits: it runs every time the user\nopens the side panel.\n\nFor a valid token answer 200, and say what the user's plan includes through `capabilities`,\nnever through 403. Answer 403 here only when the account may not use the API at all (it is\nsuspended, for example): the extension then shows your message and \"Legiit not connected\", and\nkeeps the token. Answer 401 only when the token itself is bad, and with the error body: that\n401 makes the extension delete the token.\n\nThe extension shows a feature only when its capability is in `capabilities`. With an empty list\nthe user is connected and sees no Legiit feature at all.\n\nIf this call fails for another reason (a 5xx, a timeout), the extension keeps the token, shows\n\"Legiit not connected\" with the reason, and offers \"Try again\". Nothing else is called meanwhile.\n",
+    "description": "This is the first call the extension makes and the one that decides whether it is connected.\nKeep it cheap and fast, and keep it out of tight rate limits: it runs every time the user\nopens the side panel.\n\nFor a valid token answer 200, and say what the user's plan includes through `capabilities`,\nnever through 403. Answer 403 here only when the account may not use the API at all (it is\nsuspended, for example): the extension then shows your message and \"Legiit not connected\", and\nkeeps a token that is already stored (at Connect nothing is stored). Answer 401 only when the\ntoken itself is bad, and with the error body: that 401 makes the extension delete the token.\n\nThe extension shows a feature only when its capability is in `capabilities`. With an empty list\nthe user is connected and sees no Legiit feature at all.\n\nIf this call fails for another reason (a 5xx, a timeout), the extension keeps the token, shows\n\"Legiit not connected\" with the reason, and offers \"Try again\". Nothing else is called meanwhile.\n",
     "x-called-when": "The user clicks Connect or \"Try again\". After that, once each time the side panel or the settings page opens while a token is stored, and again in every open extension page when the stored token changes.",
     "responses": {
      "200": {
@@ -1135,7 +1135,7 @@
      "Saves"
     ],
     "summary": "Adds a competitor to a business.",
-    "description": "The user typed this competitor into the extension's settings and wants it in Command Center too.\n\nRecommended: never store the same competitor twice. Compare names without regard to case and\nsurrounding spaces. Compare domains as hosts: lower case, without scheme, \"www.\" and path; a\nsubdomain is a different domain. When the business already has a competitor with this name or\none of these domains, answer 200 with the id of that competitor (a name match wins over a domain\nmatch), and add the domains it did not have yet. Do not answer 409.\n\nAfter a save, GET /v1/businesses/{businessId} lists the competitor.\n",
+    "description": "The user typed this competitor into the extension's settings and wants it in Command Center too.\n\nRecommended: never store the same competitor twice. Compare names without regard to case and\nsurrounding spaces. Compare domains as hosts: lower case, without scheme, \"www.\" and path; a\nsubdomain is a different domain. When the business already has a competitor with this name or\none of these domains, answer 200 with the id of that competitor (a name match wins over a domain\nmatch), and add the domains it did not have yet, except a domain that another competitor of the\nbusiness already has: that one stays where it is. Do not answer 409.\n\nAfter a save, GET /v1/businesses/{businessId} lists the competitor.\n",
     "x-capability": "competitors",
     "x-called-when": "The user clicks \"Add to Command Center\" next to a competitor in Settings, reads the JSON and confirms.",
     "parameters": [
@@ -1436,7 +1436,7 @@
         "typical": {
          "summary": "typical",
          "value": {
-          "briefId": "brief-example",
+          "briefId": "brief_3f9c2a7d41b06e58aa",
           "businessName": "BrightPath Dental",
           "siteUrl": "https://www.brightpathdental.example/",
           "createdAt": "2026-11-20T12:00:00.000Z",
@@ -1582,7 +1582,7 @@
         "little-found": {
          "summary": "little found",
          "value": {
-          "briefId": "brief-little-found",
+          "briefId": "brief_91d04be27c6a5f3310",
           "businessName": "plain-site.example",
           "siteUrl": "https://plain-site.example/",
           "createdAt": "2026-11-20T12:00:00.000Z",
@@ -1693,7 +1693,7 @@
      "Insights"
     ],
     "summary": "Returns dated search-industry events, such as Google algorithm updates.",
-    "description": "The Rewind tab shows how a page changed over time. It offers the dates of the first eight events\nas shortcuts: one click filters the page history to the days before that date (30 by default;\nthe user can change the number). Only `date` and `title` are shown.\n\nThe data is the same for every user, so the reply can be cached on your side. Return the\nlatest events only: 8 are shown, so 20 are plenty.\n\nWhen this call fails, for whatever reason, the extension shows no shortcuts and no message.\n",
+    "description": "The Rewind tab shows how a page changed over time. It offers the dates of the first eight events\nas shortcuts: one click filters the page history to the days before that date (30 by default;\nthe user can change the number). Only `date` and `title` are shown, and only once the user has\nlooked up the history of a page.\n\nThe data is the same for every user, so the reply can be cached on your side. Return the\nlatest events only: 8 are shown, so 20 are plenty.\n\nWhen this call fails, for whatever reason, the extension shows no shortcuts and no message.\n",
     "x-capability": "industryPulse",
     "x-called-when": "Each time the Rewind tab is opened while connected.",
     "responses": {
@@ -1772,7 +1772,7 @@
      "AI"
     ],
     "summary": "Rewrites a summary with Legiit's language model.",
-    "description": "Four tabs of the extension show a summary built without AI, and the Instant Brief tab shows\ndraft customer avatars. With this capability the user can ask for them to be rewritten. The\nextension sends the complete instructions (`system`) and the facts (`prompt`); you pass them\nto a language model and return its text. Nothing has to be stored, and there is no\nIdempotency-Key.\n\nTwo kinds of request:\n\n1. A summary (no `responseSchema`; `task` is not \"brief\"). Return plain text: 3 to 6 short\n   lines, one point per line. Required: `text` is a non-empty string. The rest is what the\n   prompt asks of the model: the extension shows the first 8 lines as bullet points, removes a\n   leading \"- \" or \"1.\" and Markdown emphasis marks, drops an introduction line that ends\n   with \":\", and cuts a line at 600 characters.\n2. A brief (`task` is \"brief\", with `responseSchema`). Return in `text` one JSON document that\n   matches that JSON Schema, as a string, with nothing before or after it (see\n   examples/completeAI.brief.response.json). Pass the schema to your model's structured-output\n   option if it has one. The extension uses the reply when it has three avatars with a name,\n   \"who\", \"wants\" and \"worries\", and at least one next step. It keeps up to 80 characters of a\n   name, 400 of every other text, 6 searches of 120 characters and 8 next steps; longer text is\n   cut, so ask the model for short entries. Check that the model's output parses as JSON\n   before you return it (you need not check it against the schema); if it does not, ask the\n   model once more, then answer 502.\n\nIf the model returns no text at all, also ask once more, then answer 502.\n\n`maxOutputTokens` is the room for the visible reply. The extension sends 700 for a summary and\n2,000 for a brief. If your model spends tokens on reasoning, give it more than this. If the\nnumber is above your own maximum, use your maximum; do not refuse the request for it.\n\nThe reply is not streamed: answer with one JSON body within 60 seconds. If the model provider\nis slow or down, answer 504 or 503 before that. If the account has used up its AI allowance,\nanswer 429 with a message that says when it resets.\n\nWhen this call fails, for whatever reason, the extension keeps its own text and shows one line\nwith the reason. After a 404, 405 or 501 it stops offering the button until the page is\nreopened or the user connects again.\n\nSecurity: `system` and `prompt` come from the client, so anyone with a token can send their\nown: limit use per user and enforce the length limits below. The facts between <facts> and\n</facts> were read from web pages and can contain text that tries to instruct the model. Give\nthe model no tools and no access to other data.\n",
+    "description": "Four tabs of the extension show a summary built without AI, and the Instant Brief tab shows\ndraft customer avatars. With this capability the user can ask for them to be rewritten. The\nextension sends the complete instructions (`system`) and the facts (`prompt`); you pass them\nto a language model and return its text. Nothing has to be stored, and there is no\nIdempotency-Key.\n\nTwo kinds of request:\n\n1. A summary (no `responseSchema`; `task` is not \"brief\"). Return plain text: 3 to 6 short\n   lines, one point per line. Required: `text` is a non-empty string. The rest is what the\n   prompt asks of the model: the extension shows the first 8 lines as bullet points, removes a\n   leading \"- \" or \"1.\" and Markdown emphasis marks, drops an introduction line that ends\n   with \":\", and cuts a line at 600 characters.\n2. A brief (`task` is \"brief\", with `responseSchema`). Return in `text` one JSON document that\n   matches that JSON Schema, as a string, with nothing before or after it (see\n   examples/completeAI.brief.response.json). Pass the schema to your model's structured-output\n   option if it has one. The extension uses the reply when it has three avatars with a name,\n   \"who\", \"wants\" and \"worries\", and at least one next step. It keeps up to 80 characters of a\n   name, 400 of every other text, 6 searches of 120 characters and 8 next steps; longer text is\n   cut, so ask the model for short entries. Check that the model's output parses as JSON\n   before you return it (you need not check it against the schema); if it does not, ask the\n   model once more, then answer 502.\n\nIf the model returns no text at all, also ask once more, then answer 502.\n\n`maxOutputTokens` is the room for the visible reply. The extension sends 700 for a summary and\n2,000 for a brief. If your model spends tokens on reasoning, give it more than this. If the\nnumber is above your own maximum, use your maximum; do not refuse the request for it.\n\nThe reply is not streamed: answer with one JSON body within 60 seconds. If the model provider\nis slow or down, answer 504 or 503 before that. If the account has used up its AI allowance,\nanswer 429 with a message that says when it resets.\n\nWhen this call fails, for whatever reason, the extension keeps its own text and shows one line\nwith the reason. After a 404, 405 or 501 it stops offering the button until the page is\nreopened or the user connects again.\n\nSecurity: `system` and `prompt` come from the client, so anyone with a token can send their\nown: limit use per user and enforce the length limits below. The facts between `<facts>` and\n`</facts>` were read from web pages and can contain text that tries to instruct the model. Give\nthe model no tools and no access to other data.\n",
     "x-capability": "ai",
     "x-called-when": "The user clicks \"Rewrite with Legiit AI\" on the Click Potential, Why Not Me, Rewind or New or Noise tab, or \"Improve drafts with Legiit AI\" on the Instant Brief tab (task \"brief\"), reads the JSON and confirms.",
     "requestBody": {
@@ -2111,7 +2111,7 @@
        "message": {
         "type": "string",
         "minLength": 1,
-        "description": "One plain sentence for the user, without HTML. Shown after the status code for a 404 \"not_found\" and for every other 4xx except 401; not shown for 401, for a 404, 405 or 501 that means \"not built\", or for a 5xx.",
+        "description": "One plain sentence for the user, without HTML. Shown after the status code for a 404 \"not_found\" and for every other 4xx except 401; not shown for 401, for a 404, 405 or 501 that means \"not built\", or for a 5xx. A message over 200 characters is cut and ends with \"…\".",
         "x-uses": {
          "chars": 200
         }
@@ -2127,9 +2127,10 @@
     ],
     "minLength": 1,
     "maxLength": 120,
+    "pattern": "\\S",
     "minimum": 0,
     "maximum": 9007199254740991,
-    "description": "An identifier: a string of 1 to 120 characters, or a non-negative integer of at most 2^53 - 1, whichever your database uses. Send a larger integer as a string. The extension treats an id as opaque text and sends it back as it came (an integer as its digits; spaces around a string id are removed). Return the same business with the same id everywhere. An id is never cut: a business whose id cannot be read is skipped, and a user id or a save id that cannot be read makes the whole reply unusable. Do not use \".\" or \"..\" as an id."
+    "description": "An identifier: a string of 1 to 120 characters, or a non-negative integer of at most 2^53 - 1, whichever your database uses. Send a larger integer as a string. The extension treats an id as opaque text and sends it back as it came (an integer as its digits; spaces around a string id are removed). Return the same business with the same id everywhere. An id is never cut: a business whose id cannot be read is skipped, and a user id or a save id that cannot be read makes the whole reply unusable. A string id is valid Unicode with at least one character that is not white space. Do not use \".\" or \"..\" as an id."
    },
    "Capability": {
     "type": "string",
@@ -2418,7 +2419,7 @@
       ],
       "maxLength": 2048,
       "pattern": "^https?://",
-      "description": "Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an \"Open in Command Center\" link next to \"Saved\"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null or absent, or longer than 2,048 characters: \"Saved\" is shown without a link."
+      "description": "Absolute address, without spaces, of a page in Command Center that shows the stored item: https in production (http is accepted for a local test system). Never a relative path. The extension shows it as an \"Open in Command Center\" link next to \"Saved\"; a click opens it in a new tab without the token, so the page must work with the user's normal Command Center login. null, absent, longer than 2,048 characters or not an address that can be opened (a relative path, no scheme): \"Saved\" is shown without a link."
      }
     }
    },
@@ -2695,7 +2696,7 @@
          "type": "string",
          "minLength": 1,
          "maxLength": 160,
-         "description": "The brand's display name, or its first domain when the user gave it no name."
+         "description": "The brand's display name. When the user gave it no name, its first domain, or else its first other spelling."
         },
         "position": {
          "type": [
@@ -2763,7 +2764,7 @@
       "type": "array",
       "minItems": 1,
       "maxItems": 1000,
-      "description": "One row per gap, in the order shown to the user (highest priority first unless they re-sorted). Typically 1 to 40 rows.",
+      "description": "One row per gap, in the order shown to the user (highest priority first unless they re-sorted). The two examples of this kit have 20 rows and 1 row.",
       "items": {
        "type": "object",
        "required": [
@@ -2798,13 +2799,13 @@
           "citations",
           "scanned_page"
          ],
-         "description": "Where the gap is, as a code. answer_text and citations belong to the answers of ChatGPT, Gemini, Perplexity, Copilot and to pasted text. ai_overview is Google's own AI answer: the AI Overview on a results page, and the whole answer of Google AI Mode. The others are blocks of a Google results page. scanned_page is a page found only by \"Scan sources\"."
+         "description": "Where the gap is, as a code. answer_text and citations belong to the answers of ChatGPT, Gemini, Perplexity, Copilot and to pasted text. ai_overview is Google's own AI answer: the AI Overview on a results page, and the whole answer of Google AI Mode. The others are blocks of a Google results page. scanned_page is a cited or list-style page that turned out to be a gap only when \"Scan sources\" read it; `surface` says where it was linked from."
         },
         "surface": {
          "type": "string",
          "minLength": 1,
          "maxLength": 60,
-         "description": "The same place as a label for people. Use surfaceId and position in code, not this text.",
+         "description": "The same place as a label for people. Use surfaceId and position in code, not this text, except to tell where a \"scanned_page\" row was linked from.",
          "x-examples": [
           "Organic #3",
           "AI Overview citation",
@@ -2819,7 +2820,7 @@
          ],
          "minimum": 1,
          "maximum": 1000,
-         "description": "1-based position inside its own surface on the page the user had open: the organic position, the order of the citation, the order of the item in its block. null exactly when pageType is \"surface\". It is not an absolute Google rank."
+         "description": "1-based position inside its own surface on the page the user had open: the organic position, the order of the citation, the order of the item in its block. For surfaceId \"scanned_page\" it is the position where the page was linked from. null exactly when pageType is \"surface\". It is not an absolute Google rank."
         },
         "title": {
          "type": "string",
@@ -3228,7 +3229,7 @@
      "competitors": {
       "type": "array",
       "maxItems": 200,
-      "description": "The competitors the user ticked for this brief: ones they track in the extension, ones they typed, and sites picked from an open Google results page. Names are labels, not ids. No two entries share a name or a domain.",
+      "description": "The competitors the user ticked for this brief: ones they track in the extension, ones they typed, and sites picked from an open Google results page. Names are labels, not ids. No two entries share a name or a domain. Each entry carries at most one domain here: the competitor's first one, or the host of the result it was picked from, which is then also its name.",
       "items": {
        "$ref": "#/components/schemas/Competitor"
       }
@@ -3266,7 +3267,7 @@
          "type": "string",
          "minLength": 1,
          "maxLength": 2000,
-         "description": "One paragraph in a fixed form: \"<who they are> Wants: <what they want> Worries about: <what they worry about>\"."
+         "description": "One paragraph in a fixed form: who they are, then \"Wants:\" and what they want, then \"Worries about:\" and what they worry about."
         },
         "draft": {
          "type": "boolean",
@@ -3359,7 +3360,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200000,
-      "description": "The whole brief as one Markdown document (CommonMark: headings, paragraphs, emphasis and bullet lists), the same text the user can export. It holds more than the fields above: the search findings, the site's tone of voice and testimonials, and \"Prepared by <agency name>\" when the user set one. Store it and show it as the brief; do not parse it. It quotes web pages: render it with raw HTML and unsafe links switched off. Typically 5 to 30 KB; a column for it must hold 600 KB (not a MySQL TEXT column, which ends at 64 KB)."
+      "description": "The whole brief as one Markdown document (CommonMark: headings, paragraphs, emphasis and bullet lists), the same text the user can export. It holds more than the fields above: the search findings, the site's tone of voice and testimonials, and \"Prepared by\" with the agency's name when the user set one. Store it and show it as the brief; do not parse it. It quotes web pages: render it with raw HTML and unsafe links switched off. The two examples of this kit are 2.5 and 5.5 KB; real sites give more, and a column for it must hold 600 KB (not a MySQL TEXT column, which ends at 64 KB). It repeats the contact details and quotes the site's testimonials with the names of its customers."
      }
     }
    },
@@ -3379,7 +3380,7 @@
      },
      "events": {
       "type": "array",
-      "description": "The events, newest first. A JSON array, also when it is empty. The extension shows the first 8.",
+      "description": "The events, newest first. A JSON array, also when it is empty. The extension shows the first 8 that have a valid date.",
       "x-uses": {
        "items": 8
       },
@@ -3458,7 +3459,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 10000,
-      "description": "The user message: a line \"Task: …\", a line that says which format to reply in, then the facts as \"- \" lines between <facts> and </facts>. The facts were read from web pages: all of this text is untrusted input for your model. Do not parse it."
+      "description": "The user message: a line \"Task: …\", a line that says which format to reply in, then the facts as \"- \" lines between `<facts>` and `</facts>`. The facts were read from web pages: all of this text is untrusted input for your model. Do not parse it."
      },
      "responseSchema": {
       "type": "object",

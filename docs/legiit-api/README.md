@@ -109,7 +109,7 @@ So a normal user causes a few requests per minute at most. Judge volume on the b
 - No cookies are sent. There is nothing to protect against CSRF: exempt these routes from CSRF checks.
 - A token is printable ASCII without spaces, at most 4,096 characters. The extension refuses to store anything else.
 - **Answer `401` only when the token itself is bad, as JSON with the error body.** A `401` with the error body on `GET /v1/session` makes the extension delete the token. Nothing in front of the API (a gateway, a proxy, HTTP Basic auth on a staging site) may answer `401` for a valid token, least of all in that same JSON shape. When the token cannot be checked because something of yours is down (the database, a login service), answer `503`.
-- For a valid token `GET /v1/session` answers `200`. Say what the user's plan includes through `capabilities`, not through `403`. Use `403` on the session only when the account may not use the API at all (it is suspended, for example): the extension then shows your message and keeps the token.
+- For a valid token `GET /v1/session` answers `200`. Say what the user's plan includes through `capabilities`, not through `403`. Use `403` on the session only when the account may not use the API at all (it is suspended, for example): the extension then shows your message and keeps a token that is already stored.
 
 ### What arrives at the server
 
@@ -153,7 +153,7 @@ Send these headers on every reply, errors included. Answer `OPTIONS` on every pa
 - As sent (JSON without white space) the examples in this kit are 0.1 KB (a competitor), 1 to 3 KB (an AI request), 0.5 to 2.5 KB (a snapshot), 0.5 to 2 KB (a content analysis), 4 to 9 KB (a brief) and 0.5 to 11 KB (a gap list). The files in `examples/` are indented and therefore larger. Real bodies are often several times larger.
 - **Any save can come close to 1 MB.** A gap list of 1,000 rows is about 0.5 MB, more with long titles or non-Latin text; the Markdown of a brief alone can be 600 KB. A body that would exceed 1 MB is not sent: the user is told that it is too large.
 - Every required field is in every request. A field with no value is sent as `null`, `""` or `[]`, as its row in the reference says. **These are valid values: do not reject them as "missing".** One field can be absent: `responseSchema` of the AI request.
-- Every text and every list has a maximum, stated in [`reference.md`](reference.md). The extension enforces them before sending, so you can size columns from them. Every integer fits a signed 32-bit column.
+- Every text and every list has a maximum, stated in [`reference.md`](reference.md). The extension enforces them before sending, so you can size columns from them. It shortens what is too long instead of refusing it: text is cut and ends with "…", a list keeps its first entries. Every integer fits a signed 32-bit column.
 - Lengths are counted in UTF-16 code units. If you check lengths, count characters (PHP `mb_strlen`, Laravel `max:`, Python `len`): a text within its limit in UTF-16 units is always within it in characters. Never count bytes (PHP `strlen`).
 - All text is valid Unicode. It can contain any language, emoji and typographic quotes.
 - **Ignore fields you do not know.** A later extension version may add fields. Do not validate with "no additional properties".
@@ -289,7 +289,7 @@ When several errors apply at once, any order passes the check. The mock answers 
 - Format: printable ASCII without spaces, well under 4,096 characters. We suggest a recognisable prefix (for example `lgt_`) followed by at least 32 random bytes in base64url, so that leaked tokens can be found by secret scanners.
 - Store only a hash of the token. Use a plain SHA-256 of the token, so that the row can be found by its hash; a password hash such as bcrypt cannot be looked up.
 - Make tokens long-lived and revocable. The extension has no refresh: an expired or revoked token answers `401`, and the user must paste a new one.
-- There is no logout call. Disconnecting in the extension only deletes the token on the device.
+- There is no logout call. Disconnecting in the extension sends nothing: it deletes the token, the chosen business and what was pre-filled from it, on the device.
 - Tell us the address of this page, so that a later extension release can link to it.
 - OAuth is not needed for version 1. The extension keeps authentication behind one interface, so OAuth can be added later without changing the endpoints.
 
@@ -318,8 +318,8 @@ What is promised to users, and to Google for the Chrome Web Store listing, depen
 - **If the AI model is run by another company**, that company processes the prompt for Legiit: it must not train on it or keep it. The extension's privacy policy must name it before launch (decision 6).
 - **Everything in a request body except the user's own typing was read from web pages by a program.** Treat every text as untrusted: escape it when you show it, never run it, never use it to build a query.
 - **The Markdown of a brief quotes web pages.** Render it with raw HTML and unsafe links switched off: `[x](javascript:…)` is a link, not raw HTML.
-- **Gap lists can contain personal data of third parties**: names and e-mail addresses of authors and site contacts, found on public pages when the user ran "Scan sources" (`rows[].contacts`). Briefs contain the published contact details of a business. Store them so that one person's details can be found and removed on request: the entries of `rows[].contacts` (a `label` can be a name, a `url` can be a `mailto:` address) and `contact.emails` of a brief. Apply your retention rules, and delete everything with the account.
-- **Check on every request that the business belongs to the token's user.** `businessId` comes from the client, and it can be stale: the extension keeps the chosen business until the user chooses another, also across a token change.
+- **Gap lists and briefs can contain personal data of third parties.** Gap lists: names and e-mail addresses of authors and site contacts, found on public pages when the user ran "Scan sources" (`rows[].contacts`: a `label` can be a name, a `url` can be a `mailto:` address). Briefs: the published contact details of a business (`contact`), and in `markdown` the same details again plus the site's testimonials with the names of its customers. Store this so that one person's details can be found and removed on request; for a brief that means replacing or deleting the whole brief, because its Markdown is not to be parsed. Apply your retention rules, and delete everything with the account.
+- **Check on every request that the business belongs to the token's user.** `businessId` comes from the client, and it can be stale: the business may have been deleted or un-shared since the user chose it, and the choice is kept when the same user connects with a new token.
 - **Look up `briefId` and `Idempotency-Key` per user**, never across users. Both are made on the user's device.
 - **The AI endpoint accepts a system prompt and a prompt from the client.** Anyone with a token can send their own. Limit use per user, enforce the length limits in the contract, cap the output tokens, and give the model no tools and no access to other data. The facts between `<facts>` tags were read from web pages and can contain text that tries to instruct the model.
 - **Do not log `Authorization` headers.** Avoid logging full request bodies; if you must, treat the logs like the data.
@@ -333,7 +333,7 @@ Defaults of common frameworks that break this API. The check in section 9 catche
 | --- | --- |
 | The framework answers a missing record or an unknown route in its own shape | Convert every error for `/v1/*` to the error body of section 5: one `renderable` in Laravel's exception handler, a final error middleware in Express, a custom exception handler in Django REST Framework |
 | Laravel's `required` rule refuses `""` and `[]`, and `ConvertEmptyStringsToNull` turns `""` into `null` | Use `present` (with `nullable` where the reference allows `null`), and exclude these routes from that middleware |
-| An integer route parameter (`whereNumber`, `<int:id>`) makes the framework answer its own 404 for an id of another form | Best: catch it and answer `404` with the code `not_found`. The check reports anything else as a warning, and a `5xx` as a failure |
+| An integer route parameter (`whereNumber`, `<int:id>`) makes the framework answer its own 404 for an id of another form | Best: catch it and answer `404` with the code `not_found`. The check reports another `4xx` as a warning, and a `401`, a `5xx` or anything that is not an error as a failure |
 | CSRF middleware, a CORS allow-list by origin | Exempt these routes from CSRF; allow every origin (section 3) |
 | `express.json()` accepts 100 KB; nginx 1 MB; PHP 8 MB | Accept 1 MB on every POST |
 | A MySQL `TEXT` column holds 64 KB | `markdown` of a brief can be 600 KB, and any save stored as one JSON value can be close to 1 MB: use `MEDIUMTEXT` or a JSON column |
@@ -359,7 +359,7 @@ This installs the extension's whole toolchain: about 1 GB and a few minutes.
 npm run mock
 ```
 
-This starts the mock API on `http://localhost:8787` (`PORT=8788 npm run mock` for another port). It implements the contract with an in-memory store and checks every request body against the contract. Tokens: `demo-token` (a user with every capability), `limited-token` (a second user with three). Any other token is refused with `401`.
+This starts the mock API on `http://localhost:8787` (for another port: `PORT=8788 npm run mock`, in PowerShell `$env:PORT=8788; npm run mock`). It implements the contract with an in-memory store and checks every request body against the contract. Tokens: `demo-token` (a user with every capability), `limited-token` (a second user with three). Any other token is refused with `401`.
 
 ```bash
 curl -s http://localhost:8787/v1/session -H "Authorization: Bearer demo-token"
@@ -369,7 +369,7 @@ curl -s http://localhost:8787/v1/session -H "Authorization: Bearer demo-token"
 curl -s -X POST http://localhost:8787/v1/businesses/biz_brightpath/gap-lists -H "Authorization: Bearer demo-token" -H "Content-Type: application/json" --data @docs/legiit-api/examples/saveGapList.request.json
 ```
 
-The code is in `mock-server/handlers.mjs`, about 300 lines. Its header lists where each rule of this guide is implemented. Read it when the prose is unclear. Its health page (`/health`) and its tolerance for a trailing slash are conveniences, not part of the contract.
+The code is in `mock-server/handlers.mjs`, about 300 lines. Its header lists where the main rules of this guide are implemented. Read it when the prose is unclear. Its health page (`/health`) and its tolerance for a trailing slash are conveniences, not part of the contract.
 
 ### Check your API
 
@@ -377,13 +377,13 @@ The code is in `mock-server/handlers.mjs`, about 300 lines. Its header lists whe
 npm run api:check -- https://your-staging-host your-test-token
 ```
 
-The same command works in bash, PowerShell and cmd.
+The command is the same in bash, PowerShell and cmd. The first line of the summary says whether the run was read-only, so you can see that your options arrived.
 
 - It sends the example requests with the extension's own client code, and checks every reply against the contract and against what the extension accepts. 31 checks, a few seconds, about 60 requests.
-- **It creates data** in the account: snapshots, gap lists, content analyses, competitors and workspaces. Competitors and workspaces are named "Conformance Check: …"; the snapshots and gap lists are for the keyword "best dentist in austin". Use a test account with at least one business.
+- **It creates data** in the account, about 20 items in a full run: 5 snapshots and 4 gap lists (most for the keyword "best dentist in austin"; one gap list is about 1 MB, one comes from a pasted answer and has an empty subject), 3 content analyses, 4 competitors and 4 workspaces (one with 600 KB of Markdown). Competitors and workspaces are named "Conformance Check: …". The summary lists every id. Use a test account with at least one business.
 - Add `--business=<id>` to choose the business. Without it the first business of the list is used.
-- Add `--read-only` for a run that creates nothing. It still calls the AI endpoint three times.
-- Add `--other-business=<id>`, with the id of a business of **another** user, to check that this token cannot reach it. Without it that check is skipped; "API done" needs it.
+- Add `--read-only` for a run that sends no save at all. It still calls the AI endpoint three times.
+- Add `--other-business=<id>`, with the id of a business of **another** user, to check that this token cannot reach it. Without it that check is skipped; "API done" needs it. In a full run it also tries four saves into that business, which a correct server refuses. If one goes through, the check fails and the summary names the item, so that it can be removed.
 - Checks for a capability that the session does not list are skipped, so you can run it from the first endpoint on. A run with skipped checks proves only the rest.
 - It ends with a summary: the requests it sent, what it created, where the returned links point, and warnings. A failure means the reply breaks the contract; most failures would show an error to a user. A warning is a recommendation, for example a missing `url`.
 
@@ -393,7 +393,7 @@ To see it pass, run it against the mock in a second terminal:
 npm run api:check -- http://localhost:8787 demo-token
 ```
 
-The check does not cover everything. Test these yourself: rate limiting; a body larger than 1 MB; the same `Idempotency-Key` after an error; whether the links you return open a real page; what the AI endpoint does when the model is slow or returns broken JSON; and everything in section 7.
+The check does not cover everything. Test these yourself: rate limiting; a body larger than 1 MB; the same `Idempotency-Key` after an error; an endpoint whose capability is off for the user (expect `404` with a code other than `not_found`; try it with a second test account on a smaller plan); whether the links you return open a real page; what the AI endpoint does when the model is slow or returns broken JSON; and everything in section 7.
 
 ### Check with the real extension
 
@@ -409,11 +409,17 @@ Then open `chrome://extensions`, switch on Developer mode, choose "Load unpacked
 
 1. Open the extension's settings, paste a token, click Connect. Your name and plan appear.
 2. Choose a business. Its brand appears under "My brands" and its competitors under "Competitors", marked "From Command Center".
-3. Open a Google results page and click the extension's icon. On the Click Potential tab click "Save to Command Center", read the JSON, click "Send to Legiit". "Saved" appears with a link that opens the item.
-4. Do the same on the Why Not Me tab.
-5. Click "Rewrite with Legiit AI" on the Click Potential tab, read the JSON, click "Send". The summary is replaced by your model's text.
-6. Revoke the token in Command Center and open the extension's settings again. It says that the token was not accepted and asks for a new one.
-7. With a token of user A, save into a business of user B (change the business id in a `curl` call). The answer is `404` `not_found`.
+3. In Settings, under "Competitors", click "Add a competitor", type a name, then click "Add to Command Center", read the JSON, click "Send to Legiit". "Saved" appears with a link that opens the item.
+4. Open the website of any business and click the extension's icon. On the Instant Brief tab click "Build brief", then "Open in Command Center", and send. The link lands in the new workspace. With the `ai` capability on, also click "Improve drafts with Legiit AI".
+5. On the New or Noise tab choose "Pasted text" and paste a few paragraphs. Under "Compare against" choose "Pasted URLs", paste the addresses of two articles, and click "Compare"; Chrome asks once whether the extension may read those sites. Then click "Send to content editor".
+6. Open the Rewind tab, enter the address of a page that has existed for some years, and click "Look up history"; Chrome asks once whether the extension may read the Wayback Machine. Above the timeline, "Industry Pulse dates" shows the dates of your events.
+7. Open a Google results page and click the extension's icon. On the Click Potential tab click "Save to Command Center", read the JSON, click "Send to Legiit".
+8. On the same tab click "Rewrite with Legiit AI", read the JSON, click "Send". The summary is replaced by your model's text.
+9. Search Google for something where one of the business's competitors ranks (the competitor's name works). On the Why Not Me tab the gap list has rows: click "Save to Command Center" above it. Without Google: open "Paste an answer instead" on that tab and paste a text that names a competitor.
+10. Revoke the token in Command Center. Close the side panel and open it again, or reload the settings page. It says that the token was not accepted and asks for a new one.
+11. With a token of user A, save into a business of user B (change the business id in a `curl` call). The answer is `404` `not_found`.
+
+Steps 7 to 9 need the extension to recognise Google's page. If it says "This results page was not recognised", that is a matter for the extension team, not for the API: tell us, and rely on steps 3 to 6.
 
 To see what the extension sent and received: right-click inside the side panel (or the settings page), choose Inspect, and open the Network tab. Do this before you click, so the request is recorded.
 
@@ -439,10 +445,10 @@ Every question here came up in one of the test builds.
 | Does a save into a business also need the `businesses` capability on the server? | No. Each endpoint checks its own capability |
 | When would I use `403`? | Perhaps never. It is for one request of a feature the user has: a quota that is used up, or an account that is suspended. For a feature the user does not have, leave the capability out |
 | A business the user can see but not save into? | Do not list it in `GET /v1/businesses`. A save into it is `404` `not_found`, like any business that is not theirs to save into |
-| How do I compare competitor names and domains? | Simply. Names: lower case, without surrounding spaces. Domains: lower case, without scheme, `www.` and path. The extension sends plain host names, so ports and other special cases do not occur. A domain that another competitor of the business already has stays with that one |
+| How do I compare competitor names and domains? | Simply. Names: lower case, without surrounding spaces. Domains: lower case, without scheme, `www.` and path. The extension sends plain host names, so ports and other special cases do not occur. A domain that another competitor of the business already has stays with that one: no two competitors of a business share a domain |
 | Do the competitors of a brief become competitors of a business? | No. They stay inside the brief |
 | A business has 200 competitors and the user adds another? | Your decision. If you refuse, answer `422` with a message |
-| Must a competitor that was added appear in Business Details at once? | Yes, anywhere in the list |
+| Must a competitor that was added appear in Business Details at once? | Yes, among the first 200: the extension reads no more |
 | Does a workspace have to appear in `GET /v1/businesses`? | Not for the extension. It is decision 3 |
 | Which keys of `responseSchema` must I support? | `type`, `properties`, `required`, `items`, `minItems`, `maxItems`, `additionalProperties`. Pass the schema to the model's structured-output option, or put it into the prompt |
 | A `responseSchema` with a task other than "brief"? | The schema decides: return JSON whenever it is present |

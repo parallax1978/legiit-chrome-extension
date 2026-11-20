@@ -84,7 +84,11 @@ export function gapPayload(presence: Presence, rows: readonly GapRow[]): GapList
       title: clip(r.title, LIMITS.gapList.title),
       url: r.url === null ? null : clipUrl(r.url),
       domain: r.domain === null ? null : clipDomain(r.domain),
-      competitors: r.competitors.slice(0, LIMITS.gapList.competitors).map((name) => clip(name, LIMITS.brandName)),
+      // A name is never empty (a brand without one is called by its domain); the filter keeps it that way whatever comes in.
+      competitors: r.competitors
+        .map((name) => clip(name, LIMITS.brandName))
+        .filter((name) => name !== '')
+        .slice(0, LIMITS.gapList.competitors),
       evidence: clip(r.evidence, LIMITS.gapList.evidence),
       pageType: r.pageType,
       actionable: r.actionable,

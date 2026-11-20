@@ -325,6 +325,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     const lines = [
       '',
       'Legiit API conformance summary',
+      `  Mode:                  ${options.writes ? 'full run: test data was created in the account' : 'read-only: no save was sent'}`,
       `  API under test:        ${options.baseUrl()}`,
       `  Account:               ${session ? `${session.user.name || session.user.email || `user ${session.user.id}`} (plan: ${session.plan ?? 'none'})` : 'NOT CONNECTED: the session check failed'}`,
       `  Capabilities on:       ${session?.capabilities.join(', ') || 'none'}`,
@@ -505,8 +506,12 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       const read = await raw('GET', `/v1/businesses/${encodeURIComponent(other!)}`);
       expectStatus(read, [404], "GET of another user's business");
       expect(errorCode(read)).toBe('not_found');
+      // A read-only run sends no save, not even one that a correct server refuses.
+      if (!options.writes) return;
       for (const save of saves.filter((s) => s.suffix !== null && has(s.capability))) {
         const reply = await raw('POST', pathOf(save, other!), { body: testBody(save, requestExamples(save.operationId)[0]!), idempotencyKey: randomUUID() });
+        // The save went through: say so in the summary, so that the item can be removed from the other account.
+        if (reply.status >= 200 && reply.status < 300) created.push(`${save.name} ${String((reply.json as { id?: unknown } | undefined)?.id)} IN THE OTHER USER'S BUSINESS ${other!}`);
         expectStatus(reply, [404], `POST ${pathOf(save, other!)} into another user's business`);
         expect(errorCode(reply)).toBe('not_found');
       }
@@ -586,7 +591,12 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       created.push(`competitor ${String((reply.json as { id: unknown }).id)}`);
       if (has('businesses')) {
         const listed = (await client().getBusinessDetails(businessId!)).competitors.map((c) => c.name);
-        if (!listed.includes(name)) warnings.push(`C10: the competitor "${name}" was saved but GET /v1/businesses/{id} does not list it under that exact name (it lists: ${listed.slice(-3).join(' | ') || 'none'}). Check that text is stored as UTF-8 and that added competitors show up in Business Details.`);
+        if (!listed.includes(name)) {
+          const details = await raw('GET', `/v1/businesses/${encodeURIComponent(businessId!)}`);
+          const all = ((details.json as { competitors?: { name?: unknown }[] } | undefined)?.competitors ?? []).map((c) => c.name);
+          if (all.includes(name)) warnings.push(`C10: the business has ${all.length} competitors and the new one is not among the first 200, which is all the extension reads. Use a test business with fewer competitors, or list new ones first.`);
+          else warnings.push(`C10: the competitor "${name}" was saved but GET /v1/businesses/{id} does not list it under that exact name (it lists: ${listed.slice(-3).join(' | ') || 'none'}). Check that text is stored as UTF-8 and that added competitors show up in Business Details.`);
+        }
       }
     });
 
@@ -613,10 +623,11 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       needsBusiness(test);
       const body = { name: `${TEST_DATA_PREFIX}: Twice`, domains: ['conformance-twice.example'] };
       const first = await raw('POST', businessPath('competitors'), { body, idempotencyKey: randomUUID() });
-      const second = await raw('POST', businessPath('competitors'), { body: { ...body, name: `  ${body.name.toUpperCase()} ` }, idempotencyKey: randomUUID() });
+      // The same name in another letter case, with spaces around it. The prefix stays as it is, so that the item can be found.
+      const second = await raw('POST', businessPath('competitors'), { body: { ...body, name: `  ${TEST_DATA_PREFIX}: TWICE ` }, idempotencyKey: randomUUID() });
       expectStatus(first, [200, 201], 'POST of a competitor');
       expectStatus(second, [200, 201], 'POST of the same competitor again (answer 200 or 201 with the existing id, not 409)');
-      created.push(`competitor ${String((first.json as { id: unknown }).id)}`);
+      created.push(`competitor ${String((first.json as { id: unknown }).id)}`, `competitor ${String((second.json as { id: unknown }).id)}`);
       if (String((first.json as { id: unknown }).id) !== String((second.json as { id: unknown }).id)) {
         warnings.push('C12: adding the same competitor twice (the name in another letter case) returned two different ids. Recommended: return the id of the existing competitor instead of creating a second one.');
       }
@@ -631,6 +642,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       expectStatus(first, [200, 201], 'POST with an Idempotency-Key');
       expectStatus(second, [200, 201], 'the same POST again with the same Idempotency-Key');
       note(save, first);
+      note(save, second);
       if (String((first.json as { id: unknown }).id) !== String((second.json as { id: unknown }).id)) {
         warnings.push('C13: the same save sent twice with the same Idempotency-Key returned two different ids, so a retry after a timeout creates a duplicate. Recommended: return the first reply again.');
       }
@@ -678,6 +690,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       expectStatus(first, [200, 201], 'POST of a brief');
       expectStatus(second, [200, 201], 'POST of the same brief again');
       note(saves[4]!, first);
+      note(saves[4]!, second);
       if (String((first.json as { id: unknown }).id) !== String((second.json as { id: unknown }).id)) {
         warnings.push('C15: the same briefId sent twice created two workspaces. Recommended: update the first one and return its id (unless Legiit decided otherwise).');
       }

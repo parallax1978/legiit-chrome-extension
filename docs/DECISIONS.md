@@ -254,6 +254,18 @@ Its second token used to be the same user with fewer capabilities, and remembere
 **D-66 · The evidence for the header table is part of the kit.**
 `docs/legiit-api/captured-requests.md` holds the raw requests recorded from a production build in Chrome: a read and a save in the normal case, and the preflights with site access withheld. The statements of the guide about `Origin`, `Cache-Control` and CORS could not be verified from the repository before.
 
+**D-67 · Every brand that can match has a name.**
+D-58 named a brand without a name after its first domain, but two paths still produced an empty name in a gap list: the page scan took the raw name, and a brand with only "Also known as" filled had no display name at all. A server that validates as the guide asks refused such a list with 422. The display name is now the name, else the first domain, else the first other spelling; the scan uses it; and the payload drops an empty name whatever comes in. Found by building 7,144 request bodies from random settings and validating each against the contract.
+
+**D-68 · A link that cannot be opened is no link.**
+A save reply whose `url` is a relative path, has no scheme or another scheme was kept and shown as the words "Open in Command Center" without a link: a label that looks clickable and does nothing. Such a value is now read as absent, so the user sees "Saved" alone, exactly as for `null`.
+
+**D-69 · The conformance check never writes in a read-only run, and its summary accounts for everything it stored.**
+`--read-only` together with `--other-business` still sent four saves into the other user's business; on a server that forgot the ownership check, which is the bug that option looks for, the "read-only" run stored test data in another account and reported "nothing". A read-only run now sends no save at all, and a save into the other business that goes through is named in the summary. The summary also lists the second item when a server lacks one of the recommended behaviours (the same competitor, key or brief stored twice), says in its first line which kind of run it was, and the check for a competitor that is "saved but not listed" tells a full list (more than 200) from a text-encoding problem.
+
+**D-70 · In the mock, a remembered reply comes before validation, and a domain stays with the competitor that has it.**
+The contract said both; the mock did the opposite in both cases (it validated the body first, and it gave a named competitor a domain that another competitor already had). The extension skips a competitor that shares a domain with one it already tracks, so the second point silently dropped a competitor at pre-fill. Contract, guide and mock now agree, with a unit test for each case.
+
 ---
 
 ## 3. Assumptions that a person must confirm

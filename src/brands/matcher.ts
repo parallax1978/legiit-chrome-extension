@@ -36,9 +36,13 @@ interface Compiled {
   pattern: RegExp | null;
 }
 
-/** What a brand is called on screen and in saved results: its name, or its first domain when it has no name. */
-export function displayName(entry: Pick<BrandEntry, 'name' | 'domains'>): string {
-  return entry.name.trim() || entry.domains[0] || '';
+/**
+ * What a brand is called on screen and in saved results: its name, or its first domain when it has no name, or its
+ * first other spelling when it has neither. Every brand that can match anything has such a name.
+ */
+export function displayName(entry: Pick<BrandEntry, 'name' | 'domains'> & { aliases?: readonly string[] }): string {
+  const first = (values: readonly string[] | undefined): string => values?.map((value) => value.trim()).find(Boolean) ?? '';
+  return entry.name.trim() || first(entry.domains) || first(entry.aliases);
 }
 
 function normaliseQuotes(text: string): string {
@@ -134,8 +138,10 @@ export class BrandMatcher {
     return [...byBrand.values()];
   }
 
+  /** The display name of a brand: never empty for a brand that matched something. */
   nameOf(brandId: string): string {
-    return this.compiled.find((c) => c.entry.id === brandId)?.entry.name ?? brandId;
+    const found = this.compiled.find((c) => c.entry.id === brandId);
+    return found ? displayName(found.entry) : brandId;
   }
 
   ownerOf(brandId: string): Owner | null {
