@@ -1216,7 +1216,7 @@ components:
     WorkspaceFromBrief:
       type: object
       description: >-
-        A client brief the extension wrote from a business's public website (it reads up to 9 pages of the
+        A client brief the extension wrote from a business's public website (it reads up to 8 pages of the
         site). Nothing in it was typed or confirmed by the user except the list of competitors. Every list
         except avatars can be empty: the extension sends what it found.
       required: [briefId, businessName, siteUrl, createdAt, contact, serviceAreas, services, competitors, focusKeywords, avatars, issues, nextSteps, markdown]

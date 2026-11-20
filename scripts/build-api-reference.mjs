@@ -105,12 +105,14 @@ function limits(schema) {
   if (all.includes('string')) {
     // A text with a fixed set of values, or one that must follow a pattern, cannot be empty: "at most" says it better than "0 to".
     const shaped = schema.pattern !== undefined || schema['x-values'] !== undefined;
-    if (schema.minLength !== undefined && schema.maxLength !== undefined) out.push(`${count(schema.minLength)} to ${count(schema.maxLength)} chars`);
+    if (schema.minLength !== undefined && schema.minLength === schema.maxLength) out.push(`exactly ${count(schema.minLength)} char${schema.minLength === 1 ? '' : 's'}`);
+    else if (schema.minLength !== undefined && schema.maxLength !== undefined) out.push(`${count(schema.minLength)} to ${count(schema.maxLength)} chars`);
     else if (schema.minLength !== undefined) out.push(`at least ${count(schema.minLength)} char${schema.minLength === 1 ? '' : 's'}`);
     else if (schema.maxLength !== undefined) out.push(shaped ? `at most ${count(schema.maxLength)} chars` : `0 to ${count(schema.maxLength)} chars`);
   }
   if (all.includes('array')) {
-    if (schema.minItems !== undefined && schema.maxItems !== undefined) out.push(`${count(schema.minItems)} to ${count(schema.maxItems)} items`);
+    if (schema.minItems !== undefined && schema.minItems === schema.maxItems) out.push(`exactly ${count(schema.minItems)} item${schema.minItems === 1 ? '' : 's'}`);
+    else if (schema.minItems !== undefined && schema.maxItems !== undefined) out.push(`${count(schema.minItems)} to ${count(schema.maxItems)} items`);
     else if (schema.minItems !== undefined) out.push(`at least ${count(schema.minItems)} item${schema.minItems === 1 ? '' : 's'}`);
     else if (schema.maxItems !== undefined) out.push(`0 to ${count(schema.maxItems)} items`);
     // Limits of the items, when they are plain values.
@@ -208,12 +210,24 @@ function exampleBlock(file, title) {
   const full = JSON.parse(readFileSync(join(examplesDir, file), 'utf8'));
   const notes = [];
   const shown = shorten(full, notes);
-  const cut = notes.length > 0 ? `\n\nShortened here (${[...new Set(notes)].join('; ')}). Complete file: ${code(`examples/${file}`)}.` : `\n\nFile: ${code(`examples/${file}`)}.`;
+  // A list inside a list is cut once per parent ("rows[].contacts: 2 of 6", "…: 2 of 4"): say it once.
+  const byPath = new Map();
+  for (const note of notes) {
+    const path = note.slice(0, note.indexOf(': '));
+    byPath.set(path, byPath.has(path) && byPath.get(path) !== note ? `${path}: ${note.match(/: (first )?(\d+)/)[2]} ${note.includes('characters') ? 'characters' : 'items'} of each shown` : note);
+  }
+  const cut = notes.length > 0 ? `\n\nShortened here (${[...byPath.values()].join('; ')}). Complete file: ${code(`examples/${file}`)}.` : `\n\nFile: ${code(`examples/${file}`)}.`;
   return `**${title}**\n\n\`\`\`json\n${JSON.stringify(shown, null, 2)}\n\`\`\`${cut}\n`;
 }
 
 const exampleFiles = existsSync(examplesDir) ? readdirSync(examplesDir).filter((f) => f.endsWith('.json')).sort() : [];
-const examplesFor = (operationId, kind) => exampleFiles.filter((f) => f === `${operationId}.${kind}.json` || (f.startsWith(`${operationId}.`) && f.endsWith(`.${kind}.json`)));
+/** The example files of one operation: the typical one first, then its variants by name. */
+const examplesFor = (operationId, kind) => {
+  const typical = `${operationId}.${kind}.json`;
+  return exampleFiles
+    .filter((f) => f === typical || (f.startsWith(`${operationId}.`) && f.endsWith(`.${kind}.json`)))
+    .sort((a, b) => Number(b === typical) - Number(a === typical) || a.localeCompare(b));
+};
 const variantOf = (file, operationId, kind) => file.slice(operationId.length + 1, -(kind.length + 6)).replace(/-/g, ' ');
 
 const responses = contract.components.responses;
