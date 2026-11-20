@@ -369,6 +369,8 @@ curl -s http://localhost:8787/v1/session -H "Authorization: Bearer demo-token"
 curl -s -X POST http://localhost:8787/v1/businesses/biz_brightpath/gap-lists -H "Authorization: Bearer demo-token" -H "Content-Type: application/json" --data @docs/legiit-api/examples/saveGapList.request.json
 ```
 
+In PowerShell write `curl.exe` instead of `curl`, and put the `@…` argument in quotes.
+
 The code is in `mock-server/handlers.mjs`, about 300 lines. Its header lists where the main rules of this guide are implemented. Read it when the prose is unclear. Its health page (`/health`) and its tolerance for a trailing slash are conveniences, not part of the contract.
 
 ### Check your API
