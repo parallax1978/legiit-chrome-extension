@@ -1,6 +1,6 @@
 {
   "site": "google",
-  "version": "2026.11.20-1",
+  "version": "2026.11.20-2",
   "updated": "2026-11-20",
   "description": "Google Search results pages (desktop). Each slot lists candidates in priority order; the first that matches wins. Stable ids and attributes come first, then class names (which Google renames often), then heading-text fallbacks (English plus common locales). Verify on live pages with the selector health check and docs/QA.md.",
   "slots": {
@@ -8,64 +8,136 @@
       "description": "Container of the main results column.",
       "required": true,
       "candidates": [
-        { "css": "#rso" },
-        { "css": "#search" },
-        { "css": "#center_col" },
-        { "css": "[role='main']" },
-        { "css": "main" }
+        {
+          "css": "#rso"
+        },
+        {
+          "css": "#search"
+        },
+        {
+          "css": "#center_col"
+        },
+        {
+          "css": "[role='main']"
+        },
+        {
+          "css": "main"
+        }
       ]
     },
-    "stripParent": {
-      "description": "Element that receives the Legiit Lens strip as its first child (above the results).",
+    "stripBefore": {
+      "description": "The Legiit Lens strip is inserted immediately before this element (as its previous sibling), above the results. It must be a block-level container, not a flex item.",
       "required": true,
       "candidates": [
-        { "css": "#center_col" },
-        { "css": "#rcnt" },
-        { "css": "[role='main']" },
-        { "css": "main" }
+        {
+          "css": "#rcnt"
+        },
+        {
+          "css": "#search"
+        },
+        {
+          "css": "#rso"
+        },
+        {
+          "css": "[role='main']"
+        },
+        {
+          "css": "main"
+        }
+      ]
+    },
+    "stripAlign": {
+      "description": "The strip's left edge lines up with this element.",
+      "candidates": [
+        {
+          "css": "#center_col"
+        },
+        {
+          "css": "#rso"
+        },
+        {
+          "css": "#search"
+        }
       ]
     },
     "searchInput": {
       "description": "The search box, used to read the keyword when the URL has no q parameter.",
       "candidates": [
-        { "css": "textarea[name='q']" },
-        { "css": "input[name='q']" }
+        {
+          "css": "textarea[name='q']"
+        },
+        {
+          "css": "input[name='q']"
+        }
       ]
     },
     "organicTitleLink": {
       "description": "The title link of an organic result: an anchor that wraps an h3.",
       "required": true,
       "candidates": [
-        { "css": "a[href] h3", "closest": "a[href]" },
-        { "css": "h3 a[href]", "note": "Older layout: the h3 wraps the link." }
+        {
+          "css": "a[href] h3",
+          "closest": "a[href]"
+        },
+        {
+          "css": "h3 a[href]",
+          "note": "Older layout: the h3 wraps the link."
+        }
       ]
     },
     "organicContainer": {
       "description": "The box of one organic result, found by walking up from its title link. When none match, the parser grows the box structurally.",
       "candidates": [
-        { "css": ".g" },
-        { "css": "[data-snc]" },
-        { "css": ".tF2Cxc" },
-        { "css": ".MjjYud" },
-        { "css": "[data-hveid][data-ved]" }
+        {
+          "css": ".g"
+        },
+        {
+          "css": "[data-snc]"
+        },
+        {
+          "css": ".tF2Cxc"
+        },
+        {
+          "css": ".MjjYud"
+        },
+        {
+          "css": "[data-hveid][data-ved]"
+        }
       ]
     },
     "organicSnippet": {
       "description": "Snippet text inside an organic result.",
       "candidates": [
-        { "css": ".VwiC3b" },
-        { "css": "[data-sncf='1']" },
-        { "css": "[data-snf]" },
-        { "css": ".IsZvec" },
-        { "css": "span.st" },
-        { "css": "[style*='-webkit-line-clamp']" }
+        {
+          "css": ".VwiC3b"
+        },
+        {
+          "css": "[data-sncf='1']"
+        },
+        {
+          "css": "[data-snf]"
+        },
+        {
+          "css": ".IsZvec"
+        },
+        {
+          "css": "span.st"
+        },
+        {
+          "css": "[style*='-webkit-line-clamp']"
+        }
       ]
     },
     "aiOverview": {
       "description": "The AI Overview block.",
       "candidates": [
-        { "css": "[data-attrid='AIOverview'], #m-x-content, .YzCcne" },
-        { "css": ".LT6XE", "closest": "#rso > *, #taw > *, #topstuff > *, #center_col > *" },
+        {
+          "css": "[data-attrid='AIOverview'], #m-x-content, .YzCcne"
+        },
+        {
+          "css": ".LT6XE",
+          "closest": "#rso > *, #taw > *, #topstuff > *, #center_col > *"
+        },
         {
           "css": "h1, h2, h3, [role='heading'], strong, [aria-label]",
           "text": "^(AI Overview|AI overviews?|Übersicht mit KI|KI-Übersicht|Aperçu IA|Aperçu généré par IA|Visión general creada por IA|Resumen de IA|Visão geral criada por IA|Panoramica (generata dall')?IA|AI-overzicht|AI による概要|AI 개요)$",
@@ -76,8 +148,13 @@
     "ads": {
       "description": "Text-ad containers (top and bottom of the page).",
       "candidates": [
-        { "css": "#tads, #tadsb, #bottomads, #tvcap" },
-        { "css": "[data-text-ad]", "closest": "#taw > *, #rso > *, #botstuff > *, #center_col > *" },
+        {
+          "css": "#tads, #tadsb, #bottomads, #tvcap"
+        },
+        {
+          "css": "[data-text-ad]",
+          "closest": "#taw > *, #rso > *, #botstuff > *, #center_col > *"
+        },
         {
           "css": "h1, h2, [role='heading'], span",
           "text": "^(Sponsored( results?)?|Ads?|Anzeigen?|Gesponsert|Annonces?|Sponsorisé|Patrocinado|Anuncios?|Anúncios?|Sponsorizzato|Gesponsord)$",
@@ -88,16 +165,27 @@
     "adUnit": {
       "description": "One ad inside an ad container.",
       "candidates": [
-        { "css": "[data-text-ad]" },
-        { "css": ".uEierd" },
-        { "css": "[data-pla]" }
+        {
+          "css": "[data-text-ad]"
+        },
+        {
+          "css": ".uEierd"
+        },
+        {
+          "css": "[data-pla]"
+        }
       ]
     },
     "shopping": {
       "description": "Product-listing (shopping) units.",
       "candidates": [
-        { "css": ".commercial-unit-desktop-top, .commercial-unit-desktop-rhs, .cu-container, .pla-unit-container" },
-        { "css": "[data-pla], .pla-unit", "closest": "#taw > *, #rso > *, #rhs > *, #center_col > *" },
+        {
+          "css": ".commercial-unit-desktop-top, .commercial-unit-desktop-rhs, .cu-container, .pla-unit-container"
+        },
+        {
+          "css": "[data-pla], .pla-unit",
+          "closest": "#taw > *, #rso > *, #rhs > *, #center_col > *"
+        },
         {
           "css": "h2, h3, [role='heading']",
           "text": "^(Popular products|Sponsored products|Shop |Products$|Beliebte Produkte|Produits populaires|Productos populares|Produtos populares)",
@@ -108,8 +196,13 @@
     "localPack": {
       "description": "The local pack (map plus places).",
       "candidates": [
-        { "css": "#Odp5De, [data-attrid='LocalResults']" },
-        { "css": ".rllt__details, .VkpGBb, a[data-cid]", "closest": "#rso > *, #center_col > *" },
+        {
+          "css": "#Odp5De, [data-attrid='LocalResults']"
+        },
+        {
+          "css": ".rllt__details, .VkpGBb, a[data-cid]",
+          "closest": "#rso > *, #center_col > *"
+        },
         {
           "css": "h2, h3, [role='heading']",
           "text": "^(Places|Businesses|Local results|Orte|Unternehmen|Lieux|Établissements|Sitios|Lugares|Empresas|Locais|Luoghi|Attività|Plaatsen)$",
@@ -120,26 +213,47 @@
     "localPlace": {
       "description": "One business inside the local pack.",
       "candidates": [
-        { "css": ".VkpGBb" },
-        { "css": ".rllt__details" },
-        { "css": "a[data-cid]" },
-        { "css": "[role='listitem'], li" }
+        {
+          "css": ".VkpGBb"
+        },
+        {
+          "css": ".rllt__details"
+        },
+        {
+          "css": "a[data-cid]"
+        },
+        {
+          "css": "[role='listitem'], li"
+        }
       ]
     },
     "localPlaceName": {
       "description": "Business name inside a local-pack place.",
       "candidates": [
-        { "css": ".OSrXXb" },
-        { "css": ".dbg0pd" },
-        { "css": "[role='heading']" },
-        { "css": "strong, b" }
+        {
+          "css": ".OSrXXb"
+        },
+        {
+          "css": ".dbg0pd"
+        },
+        {
+          "css": "[role='heading']"
+        },
+        {
+          "css": "strong, b"
+        }
       ]
     },
     "featuredSnippet": {
       "description": "The featured snippet (answer box).",
       "candidates": [
-        { "css": "block-component, .ifM9O" },
-        { "css": "[data-attrid='wa:/description'], .xpdopen, .IZ6rdc, .hgKElc", "closest": "#rso > *, #center_col > *" },
+        {
+          "css": "block-component, .ifM9O"
+        },
+        {
+          "css": "[data-attrid='wa:/description'], .xpdopen, .IZ6rdc, .hgKElc",
+          "closest": "#rso > *, #center_col > *"
+        },
         {
           "css": "h2, [role='heading']",
           "text": "^(Featured snippet( from the web)?|Hervorgehobenes Snippet( aus dem Web)?|Extrait optimisé( sur le Web)?|Fragmento destacado( de la Web)?|Trecho em destaque( da Web)?|Snippet in primo piano)$",
@@ -150,8 +264,13 @@
     "peopleAlsoAsk": {
       "description": "People also ask.",
       "candidates": [
-        { "css": "[data-initq]" },
-        { "css": ".related-question-pair", "closest": "#rso > *, #botstuff > *, #center_col > *" },
+        {
+          "css": "[data-initq]"
+        },
+        {
+          "css": ".related-question-pair",
+          "closest": "#rso > *, #botstuff > *, #center_col > *"
+        },
         {
           "css": "h2, h3, [role='heading'], span",
           "text": "^(People also ask|Others want to know|Ähnliche Fragen|Weitere Fragen|Autres questions( posées)?|Más preguntas|Otras preguntas de los usuarios|As pessoas também perguntam|Le persone hanno chiesto anche|Mensen vragen ook)$",
@@ -162,7 +281,10 @@
     "video": {
       "description": "Video results block.",
       "candidates": [
-        { "css": "video-voyager, [data-vid], [data-surl][data-curl]", "closest": "#rso > *, #center_col > *" },
+        {
+          "css": "video-voyager, [data-vid], [data-surl][data-curl]",
+          "closest": "#rso > *, #center_col > *"
+        },
         {
           "css": "h2, h3, [role='heading']",
           "text": "^(Videos?|Short videos|Vidéos|Vídeos|Video|Kurze Videos)$",
@@ -173,7 +295,10 @@
     "image": {
       "description": "Image results block.",
       "candidates": [
-        { "css": "#iur, #imagebox_bigimages, [data-attrid='images universal']", "closest": "#rso > *, #center_col > *" },
+        {
+          "css": "#iur, #imagebox_bigimages, [data-attrid='images universal']",
+          "closest": "#rso > *, #center_col > *"
+        },
         {
           "css": "h2, h3, [role='heading']",
           "text": "^(Images|Bilder|Imágenes|Imagens|Immagini|Afbeeldingen)( for .+)?$",
@@ -184,7 +309,10 @@
     "forum": {
       "description": "Discussions and forums block.",
       "candidates": [
-        { "css": "[data-attrid='discussions'], [data-attrid*='forum' i]", "closest": "#rso > *, #center_col > *" },
+        {
+          "css": "[data-attrid='discussions'], [data-attrid*='forum' i]",
+          "closest": "#rso > *, #center_col > *"
+        },
         {
           "css": "h2, h3, [role='heading']",
           "text": "^(Discussions and forums|What people are saying|Diskussionen und Foren|Discussions et forums|Debates y foros|Discussões e fóruns|Discussioni e forum)$",
@@ -195,7 +323,10 @@
     "topStories": {
       "description": "Top stories / news block.",
       "candidates": [
-        { "css": "[data-attrid='top stories'], g-section-with-header[data-news]", "closest": "#rso > *, #center_col > *" },
+        {
+          "css": "[data-attrid='top stories'], g-section-with-header[data-news]",
+          "closest": "#rso > *, #center_col > *"
+        },
         {
           "css": "h2, h3, [role='heading']",
           "text": "^(Top stories|Latest news|News|Schlagzeilen|À la une|Noticias destacadas|Principais notícias|Notizie principali)$",
@@ -206,45 +337,85 @@
     "knowledgePanel": {
       "description": "Knowledge panel (usually the right-hand column).",
       "candidates": [
-        { "css": ".kp-wholepage, .knowledge-panel" },
-        { "css": "#rhs [data-attrid='title']", "closest": "#rhs > *" },
-        { "css": "#rhs > *", "note": "Anything rendered in the right-hand column. The column itself is empty on most pages and is never matched." }
+        {
+          "css": ".kp-wholepage, .knowledge-panel"
+        },
+        {
+          "css": "#rhs [data-attrid='title']",
+          "closest": "#rhs > *"
+        },
+        {
+          "css": "#rhs > *",
+          "note": "Anything rendered in the right-hand column. The column itself is empty on most pages and is never matched."
+        }
       ]
     },
     "location": {
       "description": "Location Google used for the results (page footer).",
       "candidates": [
-        { "css": "#Wprf1b" },
-        { "css": ".fbar .Q8LRLc" },
-        { "css": "#swml-loc" },
-        { "css": ".unknown_loc" },
-        { "css": "[data-loc-text]" }
+        {
+          "css": "#Wprf1b"
+        },
+        {
+          "css": ".fbar .Q8LRLc"
+        },
+        {
+          "css": "#swml-loc"
+        },
+        {
+          "css": ".unknown_loc"
+        },
+        {
+          "css": "[data-loc-text]"
+        }
       ]
     },
     "aiModeRoot": {
       "description": "AI Mode (udm=50) conversation container.",
       "candidates": [
-        { "css": "[data-subtree='aimc']" },
-        { "css": "[data-aimode-root], #aim-root" },
-        { "css": "[role='main']" },
-        { "css": "main" },
-        { "css": "#center_col" },
-        { "css": "#rcnt" }
+        {
+          "css": "[data-subtree='aimc']"
+        },
+        {
+          "css": "[data-aimode-root], #aim-root"
+        },
+        {
+          "css": "[role='main']"
+        },
+        {
+          "css": "main"
+        },
+        {
+          "css": "#center_col"
+        },
+        {
+          "css": "#rcnt"
+        }
       ]
     },
     "aiModeAnswer": {
       "description": "One AI Mode answer turn. The last match is the latest answer.",
       "candidates": [
-        { "css": "[data-subtree='aimfl']" },
-        { "css": "[data-aimode-answer], .aimode-answer" },
-        { "css": "[data-turn='model'], [data-message-role='model']" }
+        {
+          "css": "[data-subtree='aimfl']"
+        },
+        {
+          "css": "[data-aimode-answer], .aimode-answer"
+        },
+        {
+          "css": "[data-turn='model'], [data-message-role='model']"
+        }
       ]
     },
     "aiModeQuestion": {
       "description": "One AI Mode user turn. The last match is the latest question.",
       "candidates": [
-        { "css": "[data-aimode-query], .aimode-query" },
-        { "css": "[data-turn='user'], [data-message-role='user']" }
+        {
+          "css": "[data-aimode-query], .aimode-query"
+        },
+        {
+          "css": "[data-turn='user'], [data-message-role='user']"
+        }
       ]
     }
   }

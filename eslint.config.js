@@ -81,4 +81,9 @@ export default tseslint.config(
     files: ['scripts/**', 'mock-server/**', 'e2e/**', 'tests/**', '*.config.{js,ts}'],
     rules: { 'no-console': 'off' },
   },
+  {
+    // Playwright fixtures call a function named "use"; it is not a React hook.
+    files: ['e2e/**'],
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
+  },
 );

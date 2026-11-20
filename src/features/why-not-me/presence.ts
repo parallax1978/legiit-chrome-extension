@@ -190,6 +190,18 @@ export function buildAnswerPresence(answer: AnswerData, matcher: BrandMatcher): 
   };
 }
 
+/** A compact summary stored with a Click Potential snapshot, so Instant Brief can reuse it later. */
+export function summarisePresence(presence: Presence): {
+  surfaces: { id: string; label: string; status: string; competitors: string[] }[];
+  gapSurfaces: string[];
+} {
+  const present = presence.surfaces.filter((s) => s.present);
+  return {
+    surfaces: present.map((s) => ({ id: s.id, label: s.label, status: s.status, competitors: s.competitorNames })),
+    gapSurfaces: present.filter((s) => s.status === 'only-competitors').map((s) => s.label),
+  };
+}
+
 /** Deterministic plain-language summary (the no-AI provider). */
 export function explainPresence(presence: Presence, matcher: BrandMatcher): string[] {
   if (matcher.isEmpty) return ['Add your brand and at least one competitor in Settings to see where each appears.'];

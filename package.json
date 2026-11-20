@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "wxt",
-    "build": "wxt build && node scripts/package-release.mjs",
+    "build": "npm run model:verify && wxt zip && node scripts/package-release.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -22,7 +22,8 @@
     "model:verify": "node scripts/fetch-model.mjs --verify-only",
     "icons": "node scripts/make-icons.mjs",
     "check": "npm run typecheck && npm run lint && npm test",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "fixtures": "node scripts/build-fixtures.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.2",

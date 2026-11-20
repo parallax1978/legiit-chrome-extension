@@ -141,6 +141,6 @@ describe('selector health check', () => {
   it('flags required slots that find nothing on an unrecognised page', () => {
     const report = selectorHealth(fixtureDoc('google/serp-unrecognised.html'), BUNDLED_PACKS.google);
     const failing = report.filter((r) => r.required && r.matched === 0).map((r) => r.slot);
-    expect(failing).toEqual(expect.arrayContaining(['resultsRoot', 'organicTitleLink', 'stripParent']));
+    expect(failing).toEqual(expect.arrayContaining(['resultsRoot', 'organicTitleLink', 'stripBefore']));
   });
 });
