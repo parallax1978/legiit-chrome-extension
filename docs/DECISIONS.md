@@ -49,11 +49,8 @@ This is what makes one click do both things the brief needs: grant activeTab and
 **D-03 · No fake "Analyze" button in the panel.**
 A button that cannot grant access would look broken. The panel's "Analyze this page" card (`AccessCard` in `src/ui/shared.tsx`) explains the three one-action ways and re-checks access. Once the user has invoked the extension the panel can see the address, and offers "Always allow on example.com", which asks Chrome for that one site so the panel keeps working there without invoking again (`KeepAccess`). Considered and rejected: `permissions.addHostAccessRequest()` (the user still has to click in the toolbar, and its prompt depends on a Chrome UI that is not on for everyone); asking for all sites from the panel (against rule 2).
 
-**D-39 · After an invocation the panel retries for about two seconds.**
-Found by running the suite repeatedly: right after the user invokes the extension, Chrome can still refuse the panel's first attempt to read the page, because the grant reaches the page a moment after the click reaches the extension. On a busy machine that left the panel on "No access" although the user had just clicked the icon. A refusal that directly follows an invocation is therefore not treated as final: the probe is repeated after 100, 250, 500 and 1200 ms (`INVOKED_RETRY_DELAYS_MS` in `src/ui/hooks.tsx`). Without an invocation a refusal is final at once. Tested in `e2e/access.spec.ts`.
-
 **D-04 · `contextMenus` is requested.**
-The brief allows it "only if needed". It is: a context-menu item is one of only three gestures that grant activeTab, it works when the icon is not pinned, and "Check the selected text with New or Noise" needs the selection. Two items, created in `createMenus()`.
+The brief allows it "only if needed". It is: a context-menu item is one of the few gestures that grant activeTab (the extension offers three: icon, shortcut, context menu), it works when the icon is not pinned, and "Check the selected text with New or Noise" needs the selection. Two items, created in `createMenus()`.
 
 **D-05 · No `tabs` permission.**
 `tabs.query` and `tabs.sendMessage` work without it; only the URL and title are withheld. The panel learns about a page from the agent running in it (`src/panel/tabs.ts`). This keeps "Read your browsing history" out of the install prompt.
@@ -66,6 +63,9 @@ The service worker opens the panel, hands configuration to content scripts and s
 
 **D-08 · AI sites are read only when the panel asks.**
 On load the AI content script only registers a message listener (and asks the service worker whether a newer selector pack was saved). It reads the latest answer when the panel sends a request, so opening ChatGPT without using Lens reads nothing. The Google script measures on load because the strip has to show something.
+
+**D-39 · After an invocation the panel retries for about two seconds.**
+Found by running the suite repeatedly: right after the extension is invoked, Chrome can still refuse the panel's first attempt to read the page. This was seen about once in a hundred invocations, on a loaded machine, in Chromium 153, with the action triggered through the DevTools protocol; the likely cause is that the grant reaches the page's process slightly after the click event reaches the extension. Whether a real toolbar click can hit the same gap is not known, and the cost of being wrong is a user left on "No access" right after clicking the icon. A refusal that directly follows an invocation is therefore not treated as final: the probe is repeated after 100, 250, 500 and 1200 ms (`INVOKED_RETRY_DELAYS_MS` in `src/ui/hooks.tsx`). Without an invocation a refusal is final at once. Tested in `e2e/access.spec.ts`.
 
 ### Network and data
 
@@ -163,11 +163,11 @@ The pre-granted copy hides one thing, and it did hide a real bug during developm
 **D-36 · Web archive tests run on fixtures only.**
 web.archive.org is not reachable from the build environment. CDX parsing, sampling, back-off and diffing are tested against recorded-format fixtures; one manual check against the live archive is in `docs/QA.md`.
 
-**D-38 · The development build is not the release build.**
-`npm run dev` produces `.output/chrome-mv3-dev`. For hot reloading WXT adds things to that manifest that the release does not have: the `tabs` permission, `http://localhost/*`, a reload shortcut, localhost in the CSP, and content scripts registered at run time instead of in the manifest. The dev build also carries the fixture-saver shortcut. Permissions, the install prompt and the activeTab behaviour must therefore be judged on `dist/` only; every check in `scripts/package-release.mjs` and `e2e/` runs against `dist/`.
-
 **D-37 · TypeScript 6, strict.**
 `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`. Explicit imports only (WXT auto-imports are off) so every dependency of a file is visible in it.
+
+**D-38 · The development build is not the release build.**
+`npm run dev` produces `.output/chrome-mv3-dev`. For hot reloading WXT adds things to that manifest that the release does not have: the `tabs` permission, `http://localhost/*`, a reload shortcut, localhost in the CSP, and content scripts registered at run time instead of in the manifest. The dev build also carries the fixture-saver shortcut. Permissions, the install prompt and the activeTab behaviour must therefore be judged on `dist/` only; every check in `scripts/package-release.mjs` and `e2e/` runs against `dist/`.
 
 ---
 

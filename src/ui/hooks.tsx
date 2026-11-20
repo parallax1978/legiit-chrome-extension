@@ -195,11 +195,11 @@ export function TargetProvider({ children }: { children: ReactNode }) {
    * Finds out what the panel can see in the target tab.
    *
    * `justInvoked` means Chrome has just told the service worker that the user
-   * invoked the extension on this tab, which grants access to it. That grant
-   * reaches the page a moment later than the event reaches us: on a busy
-   * machine the first attempt to read the page can still be refused. So after
-   * an invocation a refusal is not final; the probe is repeated for about two
-   * seconds before the panel concludes it has no access.
+   * invoked the extension on this tab, which grants access to it. On a busy
+   * machine the first attempt to read the page can still be refused (seen in
+   * tests; the grant seems to reach the page slightly after the event reaches
+   * us). So after an invocation a refusal is not final; the probe is repeated
+   * for about two seconds before the panel concludes it has no access.
    */
   const resolve = useCallback(async (forcedTabId?: number, justInvoked = false) => {
     const request = ++requestRef.current;
