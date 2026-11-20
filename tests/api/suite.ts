@@ -44,6 +44,8 @@ export interface ConformanceOptions {
   otherBusinessId?: () => string | undefined;
   /** false = read-only run: nothing is created in the account. */
   writes: boolean;
+  /** Called once at the end with what the summary reports (used by the self-test of the suite). */
+  onFinish?: (result: { warnings: string[]; requests: string[]; summary: string }) => void;
 }
 
 interface RawReply {
@@ -57,6 +59,12 @@ interface RawReply {
 
 /** A reply slower than this is reported as a warning: the user is looking at a spinner. */
 const SLOW_MS = 5_000;
+
+/**
+ * Chrome adds this header to every POST of the extension (the 32 letters are the extension's id, which differs
+ * per installation channel). The check sends it too, so that a server which filters by Origin is found out.
+ */
+export const EXTENSION_ORIGIN = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
 
 /** Every test item the suite creates carries this text where the body has a name, so it can be found and removed. */
 export const TEST_DATA_PREFIX = 'Conformance Check';
@@ -140,10 +148,28 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
   const warnings: string[] = [];
   const created: string[] = [];
   const timings: { what: string; ms: number }[] = [];
+  /** Every link a save returned (null when it returned none). */
+  const links: (string | null)[] = [];
   let session: LegiitSession | null = null;
   let businessId: string | null = null;
 
   const url = (path: string) => `${options.baseUrl().replace(/\/+$/, '')}${path}`;
+
+  /**
+   * The one place a request leaves the check, so that every request is counted and timed: the ones the check
+   * writes itself and the ones the extension's client makes. A POST carries the Origin header, as from Chrome.
+   */
+  async function send(target: string, init: RequestInit = {}): Promise<Response> {
+    const method = (init.method ?? 'GET').toUpperCase();
+    const headers = new Headers(init.headers);
+    if (method === 'POST' && !headers.has('origin')) headers.set('Origin', EXTENSION_ORIGIN);
+    const started = Date.now();
+    try {
+      return await fetch(target, { ...init, headers });
+    } finally {
+      timings.push({ what: `${method} ${new URL(target).pathname}`, ms: Date.now() - started });
+    }
+  }
 
   /** A request exactly as the extension sends it (headers included), without the client's interpretation of the reply. */
   async function raw(
@@ -154,7 +180,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     const token = init.token === undefined ? options.token() : init.token;
     const body = init.rawBody ?? (init.body !== undefined ? JSON.stringify(init.body) : undefined);
     const started = Date.now();
-    const response = await fetch(url(path), {
+    const response = await send(url(path), {
       method,
       redirect: 'manual',
       cache: 'no-store',
@@ -170,7 +196,6 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     });
     const text = await response.text();
     const ms = Date.now() - started;
-    timings.push({ what: `${method} ${path}`, ms });
     let json: unknown = undefined;
     try {
       json = text ? JSON.parse(text) : undefined;
@@ -184,7 +209,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     new HttpLegiitClient({
       baseUrl: options.baseUrl(),
       auth: new StaticAuthProvider(options.token()),
-      fetch: (target, init) => fetch(target, init),
+      fetch: (target, init) => send(target, init),
       clientVersion: 'conformance',
     });
 
@@ -215,6 +240,9 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
   };
   const needsWrites = (test: { skip: (note?: string) => void }) => {
     if (!options.writes) test.skip('read-only run: nothing is created');
+  };
+  const needsBusiness = (test: { skip: (note?: string) => void }) => {
+    if (businessId === null) test.skip('no business to work with: list the "businesses" capability with at least one business, or pass --business=<id>');
   };
 
   const businessPath = (suffix: string, id: string | null = businessId) => `/v1/businesses/${encodeURIComponent(id ?? '')}/${suffix}`;
@@ -263,10 +291,11 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     } catch {
       session = null;
     }
-    if (session?.capabilities.includes('businesses')) {
+    const chosen = options.businessId?.();
+    if (chosen) businessId = chosen;
+    else if (session?.capabilities.includes('businesses')) {
       try {
-        const chosen = options.businessId?.();
-        businessId = chosen ?? (await client().listBusinesses())[0]?.id ?? null;
+        businessId = (await client().listBusinesses())[0]?.id ?? null;
       } catch {
         businessId = null;
       }
@@ -281,6 +310,14 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       warnings.push(`${t.what} took ${(t.ms / 1000).toFixed(1)} s. The extension gives up after ${limit / 1000} s.`);
     }
     const off = ALL_CAPABILITIES.filter((c) => !has(c));
+    const count = (method: string, part = '') => timings.filter((t) => t.what.startsWith(`${method} `) && t.what.includes(part)).length;
+    /** The check cannot open a link: it says where the links point, so that a person can. */
+    const linkSummary = (): string => {
+      const given = links.filter((link): link is string => link !== null);
+      if (given.length === 0) return `none in ${links.length} saves`;
+      const hosts = [...new Set(given.map((link) => link.replace(/^(https?:\/\/[^/]+).*$/, '$1')))];
+      return `${given.length} of ${links.length} saves, on ${hosts.join(', ')}. The check does not open them: make sure each one leads to a real page, and return null until it does.`;
+    };
     const lines = [
       '',
       'Legiit API conformance summary',
@@ -289,16 +326,18 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       `  Capabilities on:       ${session?.capabilities.join(', ') || 'none'}`,
       `  Capabilities off:      ${off.join(', ') || 'none'}${off.length ? '  (their checks were skipped, so this run does not prove them)' : ''}`,
       `  Business used:         ${businessId ?? 'none'}`,
-      `  Requests sent:         ${timings.length}, the slowest took ${timings.length ? Math.max(...timings.map((t) => t.ms)) : 0} ms`,
+      `  Requests sent:         ${timings.length} (${count('GET')} reads, ${count('POST') - count('POST', '/v1/ai/')} saves, ${count('POST', '/v1/ai/')} to the AI endpoint, ${count('OPTIONS')} preflight), the slowest took ${timings.length ? Math.max(...timings.map((t) => t.ms)) : 0} ms`,
       `  Created in this run:   ${created.length ? [...new Set(created)].join(', ') : 'nothing'}`,
       ...(created.length ? [`                         (competitors and workspaces are named "${TEST_DATA_PREFIX}: …")`] : []),
+      ...(links.length ? [`  Links returned:        ${linkSummary()}`] : []),
       ...(warnings.length ? ['  Warnings (recommendations, not failures):', ...warnings.map((w) => `    - ${w}`)] : ['  Warnings:              none']),
       '',
     ];
     // The runner (scripts/api-check.mjs) prints the summary after the test results, so it is the last thing on
     // screen. Without the runner it goes to the console, wherever the test reporter puts it.
     const file = process.env['LEGIIT_API_SUMMARY_FILE'];
-    if (file) writeFileSync(file, lines.join('\n'));
+    if (options.onFinish) options.onFinish({ warnings: [...warnings], requests: timings.map((t) => t.what), summary: lines.join('\n') });
+    else if (file) writeFileSync(file, lines.join('\n'));
     else console.log(lines.join('\n'));
   });
 
@@ -354,8 +393,47 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     });
 
     it('A7  the word "Bearer" is matched without regard to case', async () => {
-      const response = await fetch(url('/v1/session'), { headers: { authorization: `bearer ${options.token()}`, accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS.default) });
+      const response = await send(url('/v1/session'), { headers: { authorization: `bearer ${options.token()}`, accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS.default) });
       if (response.status !== 200) warnings.push(`A7: "authorization: bearer <token>" in lower case was answered with ${response.status}. Chrome sends "Bearer", so the extension works, but HTTP says the scheme is case-insensitive.`);
+    });
+
+    it('A8  a preflight (OPTIONS) is answered with the CORS headers (recommended)', async () => {
+      // What Chrome sends first, for every request, when the user has switched off the extension's access to the API
+      // host: no token, and the names of the headers the real request will carry. Normally there is no preflight.
+      const missing: string[] = [];
+      for (const [method, path, asked] of [
+        ['GET', '/v1/session', 'authorization,x-legiit-client'],
+        ['POST', '/v1/ai/completions', 'authorization,content-type,idempotency-key,x-legiit-client'],
+      ] as const) {
+        const response = await send(url(path), {
+          method: 'OPTIONS',
+          redirect: 'manual',
+          signal: AbortSignal.timeout(TIMEOUT_MS.default),
+          headers: { Origin: EXTENSION_ORIGIN, 'Access-Control-Request-Method': method, 'Access-Control-Request-Headers': asked },
+        });
+        await response.text();
+        const allowOrigin = response.headers.get('access-control-allow-origin') ?? '';
+        const allowHeaders = (response.headers.get('access-control-allow-headers') ?? '').toLowerCase().split(/\s*,\s*/);
+        // By the Fetch standard "*" stands for every header except Authorization, which must be named. GET and POST
+        // need no Access-Control-Allow-Methods.
+        const covered = (name: string): boolean => allowHeaders.includes(name) || (name !== 'authorization' && allowHeaders.includes('*'));
+        const uncovered = asked.split(',').filter((name) => !covered(name));
+        const problems = [
+          ...(response.status >= 200 && response.status < 300 ? [] : [`status ${response.status} instead of 204`]),
+          ...(allowOrigin === '*' || allowOrigin === EXTENSION_ORIGIN ? [] : ['no Access-Control-Allow-Origin for the extension']),
+          ...(uncovered.length === 0 ? [] : [`Access-Control-Allow-Headers does not name ${uncovered.join(', ')}`]),
+        ];
+        if (problems.length > 0) missing.push(`OPTIONS ${path} (before a ${method}): ${problems.join('; ')}`);
+      }
+      // The real reply needs the header as well, or Chrome withholds it from the extension.
+      const reply = await send(url('/v1/session'), { headers: { Authorization: `Bearer ${options.token()}`, Accept: 'application/json', Origin: EXTENSION_ORIGIN }, redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS.default) });
+      await reply.text();
+      const allowed = reply.headers.get('access-control-allow-origin') ?? '';
+      if (allowed !== '*' && allowed !== EXTENSION_ORIGIN) missing.push('GET /v1/session with an Origin header: the reply has no Access-Control-Allow-Origin for the extension');
+      expect(reply.status, 'GET /v1/session with an Origin header must be answered like any other: do not allow or block by Origin').toBe(200);
+      if (missing.length > 0) {
+        warnings.push(`A8: the CORS safety net is not in place. The extension works without it, except for a user who has switched off its access to this host in Chrome: for them nothing works. ${missing.join('. ')}. See the guide, section 3, "CORS".`);
+      }
     });
   });
 
@@ -376,7 +454,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
 
     it('B2  GET /v1/businesses/{id} returns Business Details the extension can pre-fill from', async (test) => {
       needs('businesses', test);
-      expect(businessId, 'no business to read').not.toBeNull();
+      expect(businessId, 'no business to read: the test account needs at least one').not.toBeNull();
       const reply = await raw('GET', `/v1/businesses/${encodeURIComponent(businessId!)}`);
       expectStatus(reply, [200], 'GET /v1/businesses/{id}');
       expectContract('BusinessDetails', reply.json, 'GET /v1/businesses/{id}');
@@ -436,7 +514,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       it(`${save.id}  POST saves a ${save.name} and returns its id`, async (test) => {
         needs(save.capability, test);
         needsWrites(test);
-        if (save.suffix !== null) expect(businessId, 'no business to save into').not.toBeNull();
+        if (save.suffix !== null) needsBusiness(test);
         // Every example of this request, including the ones whose values look empty (null, "", []): those are valid.
         for (const file of requestExamples(save.operationId)) {
           const what = `POST ${pathOf(save)} with examples/${file}`;
@@ -446,6 +524,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
           expectContract('SaveResult', reply.json, what);
           note(save, reply);
           const address = (reply.json as { url?: string | null }).url;
+          links.push(address || null);
           if (!address) warnings.push(`${save.id}: no "url" in the reply to ${file}, so the extension shows "Saved" without an "Open in Command Center" link.`);
           else {
             expect(address, 'url must be an absolute address without spaces that the user can open').toMatch(/^https?:\/\/\S+$/);
@@ -496,6 +575,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     it('C10 text outside ASCII is stored as sent (UTF-8)', async (test) => {
       needs('competitors', test);
       needsWrites(test);
+      needsBusiness(test);
       const name = `${TEST_DATA_PREFIX}: Zahnärzte München – “Lächeln” 東京 😀`;
       const reply = await raw('POST', businessPath('competitors'), { body: { name, domains: ['zahnaerzte-muenchen.example'] }, idempotencyKey: randomUUID() });
       expectStatus(reply, [200, 201], 'POST with non-ASCII text');
@@ -526,6 +606,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     it('C12 the same competitor added twice is one competitor (recommended)', async (test) => {
       needs('competitors', test);
       needsWrites(test);
+      needsBusiness(test);
       const body = { name: `${TEST_DATA_PREFIX}: Twice`, domains: ['conformance-twice.example'] };
       const first = await raw('POST', businessPath('competitors'), { body, idempotencyKey: randomUUID() });
       const second = await raw('POST', businessPath('competitors'), { body: { ...body, name: `  ${body.name.toUpperCase()} ` }, idempotencyKey: randomUUID() });
@@ -551,17 +632,36 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
       }
     });
 
-    it('C14 a brief of 600 KB is not refused for its size', async (test) => {
-      needs('workspaces', test);
+    it('C14 large bodies are accepted: a brief of 600 KB and a gap list just under 1 MB', async (test) => {
       needsWrites(test);
-      const brief = testBody(saves[4]!, 'createWorkspaceFromBrief.request.json');
-      // Markdown at its 200,000-character limit, in 3-byte characters: about 600 KB of UTF-8, inside the 1 MB the extension allows itself.
-      const body = { ...brief, briefId: 'conformance-check-large-body', businessName: `${TEST_DATA_PREFIX}: Large Body`, markdown: '漢'.repeat(200_000) };
-      expect(new TextEncoder().encode(JSON.stringify(body)).length).toBeLessThan(MAX_REQUEST_BYTES);
-      const reply = await raw('POST', '/v1/workspaces/from-brief', { body, idempotencyKey: randomUUID() });
-      expect(reply.status, 'a 600 KB body was refused as too large (413). Accept request bodies of up to 1 MB: raise the limit of your framework or proxy').not.toBe(413);
-      expectStatus(reply, [200, 201], 'POST of a 600 KB workspace brief (check the size of the column that stores "markdown")');
-      note(saves[4]!, reply);
+      const bytes = (body: unknown): number => new TextEncoder().encode(JSON.stringify(body)).length;
+      const kb = (body: unknown): string => `${Math.round(bytes(body) / 1024).toLocaleString('en-US')} KB`;
+      const large: { save: Save; path: string; body: Record<string, unknown>; hint: string }[] = [];
+      if (has('workspaces')) {
+        // Markdown at its 200,000-character limit, in 3-byte characters: about 600 KB of UTF-8.
+        const brief = testBody(saves[4]!, 'createWorkspaceFromBrief.request.json');
+        large.push({
+          save: saves[4]!,
+          path: '/v1/workspaces/from-brief',
+          body: { ...brief, briefId: 'conformance-check-large-body', businessName: `${TEST_DATA_PREFIX}: Large Body`, markdown: '漢'.repeat(200_000) },
+          hint: 'check the size of the column that stores "markdown": a MySQL TEXT column ends at 64 KB',
+        });
+      }
+      if (has('gapLists') && businessId !== null) {
+        // As many rows with long non-Latin text as fit into the 1,048,576 bytes the extension allows itself.
+        const list = example<{ rows: Record<string, unknown>[] }>('saveGapList.request.json');
+        const row = { ...list.rows[0]!, title: '漢'.repeat(1000), evidence: '漢'.repeat(2000) };
+        const rows = Math.floor((MAX_REQUEST_BYTES - bytes({ ...list, rows: [] })) / (bytes(row) + 1));
+        large.push({ save: saves[1]!, path: pathOf(saves[1]!), body: { ...list, rows: Array.from({ length: rows }, () => row) }, hint: 'check the columns that store the rows' });
+      }
+      if (large.length === 0) test.skip('neither "workspaces" nor "gapLists" (with a business) is enabled for this account');
+      for (const { save, path, body, hint } of large) {
+        expect(bytes(body)).toBeLessThanOrEqual(MAX_REQUEST_BYTES);
+        const reply = await raw('POST', path, { body, idempotencyKey: randomUUID() });
+        expect(reply.status, `a ${save.name} of ${kb(body)} was refused as too large (413). Accept request bodies of up to 1 MB (1,048,576 bytes): raise the limit of your framework or proxy`).not.toBe(413);
+        expectStatus(reply, [200, 201], `POST of a ${save.name} of ${kb(body)} (${hint})`);
+        note(save, reply);
+      }
     });
 
     it('C15 the same brief sent again is the same workspace (recommended)', async (test) => {
@@ -580,7 +680,7 @@ export function defineConformanceSuite(options: ConformanceOptions): void {
     });
   });
 
-  describe('D. AI rewrite (calls your model three times)', () => {
+  describe('D. AI rewrite (three calls to the AI endpoint; two of them reach your model)', () => {
     it('D1  POST /v1/ai/completions returns text the extension can show as bullet points', async (test) => {
       needs('ai', test);
       const reply = await raw('POST', '/v1/ai/completions', { body: example('completeAI.request.json'), timeoutMs: TIMEOUT_MS.ai });

@@ -43,6 +43,16 @@ if (!env.LEGIIT_API_BASE_URL || !env.LEGIIT_API_TOKEN) {
   process.exit(2);
 }
 
+// The TypeScript settings the check needs are generated at "npm install". An install with scripts switched off
+// (a common company setting) leaves them out; they are generated here instead.
+if (!existsSync(join(root, '.wxt', 'tsconfig.json'))) {
+  const prepared = spawnSync(process.execPath, [join(root, 'node_modules', 'wxt', 'bin', 'wxt.mjs'), 'prepare'], { cwd: root, stdio: 'inherit' });
+  if (prepared.status !== 0) {
+    console.error('\nCould not prepare the project. Run "npm install" in the repository first, then try again.');
+    process.exit(2);
+  }
+}
+
 // The suite writes its summary to a file, so that it can be shown after the test results and not in the middle of them.
 const summary = join(mkdtempSync(join(tmpdir(), 'legiit-api-check-')), 'summary.txt');
 env.LEGIIT_API_SUMMARY_FILE = summary;

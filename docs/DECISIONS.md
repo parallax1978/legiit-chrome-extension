@@ -206,8 +206,8 @@ The content-editor body carries `source` (page, selection or pasted text) and `c
 **D-50 · 20 seconds for a reply, 60 for AI, never from cache.**
 The time limit covers the whole reply, not only its headers. Requests are sent with `cache: 'no-store'`, so a session or a business is always read fresh. Nothing is retried automatically.
 
-**D-51 · The mock server is the reference implementation, and the kit was tested by a blind build.**
-The mock validates every request body against the contract and implements the recommended behaviours (idempotency keys, one competitor per name or domain, one workspace per brief, the two kinds of 404). The conformance check is run against it in the unit tests, so the check itself is known to pass against a correct server. To test the documents rather than the code, two agents were given only `docs/legiit-api/` and asked to build the API, one in Node and one in Python, without reading the mock, the tests or the source. Both passed the check on their first run; the 108 points where they had to guess became the "Questions developers ask" section, the validation and save-twice tables and the framework notes of the guide.
+**D-51 · The mock server is the reference implementation, and the kit was tested by blind builds.**
+The mock validates every request body against the contract and implements the recommended behaviours (idempotency keys, one competitor per name or domain, one workspace per brief, the two kinds of 404, the CORS headers). The conformance check is run against it in the unit tests, which also assert that the check has nothing to warn about and that its summary counts every request the server received. To test the documents rather than the code, automated agents were given only `docs/legiit-api/` and asked to build the API without reading the mock, the tests or the source: first one in Node and one in Python, later one in PHP from the rewritten guide. Each passed the check on its first run. The points where they had to guess (108 in the first round, 47 in the second) became the "Questions developers ask" section, the validation and save-twice tables and the framework notes of the guide.
 
 **D-52 · A Legiit request is never redirected.**
 `guardedFetch` uses `redirect: 'manual'` for the Legiit host and fails with a clear message. Following redirects looked harmless, but Chrome repeats a redirected POST as a GET without its body, and the reply to that GET was then taken for the answer to the save (a 405 there even hid the save button).
@@ -241,6 +241,18 @@ While a send is under way the dialog cannot be closed (Cancel and Escape wait fo
 
 **D-62 · Settings does not guess about the business list.**
 A list that could not be read is "not known", not "empty": the chosen business stays on screen as chosen, with the reason next to it. A list that was read and lacks the chosen business says so, also when the list is empty. The chosen business is never cleared automatically, because a wrong or partial list would then wipe the brands pre-filled from it.
+
+**D-63 · The conformance check sends what Chrome sends, and counts what it sends.**
+Every POST of the check carries an `Origin: chrome-extension://…` header, so a server that filters by origin fails the check instead of failing users. A new check asks for a preflight the way Chrome does when the user has withheld site access; a missing CORS answer is a warning, because the extension works without it in the normal case. The large-body check now also sends a gap list just under 1,048,576 bytes: the earlier 600 KB brief did not test the limit the guide asks for. The summary counts every request, including the ones the extension's own client makes, and says where the returned links point, because the check cannot open them. "API done" is defined as all 31 checks with `--other-business`, none skipped.
+
+**D-64 · A hidden feature gets another chance whenever the session is read afresh.**
+A feature whose endpoint answered "not built" used to stay hidden in a page until that page was reopened, even when the user connected again on the settings page. It now comes back when the token changes on any page and on "Try again": the backend may have been fixed in the meantime, and a developer who tests a fix reconnects rather than reopens.
+
+**D-65 · The mock keeps per-user things per user.**
+Its second token used to be the same user with fewer capabilities, and remembered replies and briefs were keyed by token. The guide says "per user" for capabilities, idempotency keys and brief ids, and tells readers to consult the mock, so the mock now has two users and keys everything by user id. Its CORS headers moved from the server wrapper into the handlers, so that every consumer of the handlers answers a preflight the same way.
+
+**D-66 · The evidence for the header table is part of the kit.**
+`docs/legiit-api/captured-requests.md` holds the raw requests recorded from a production build in Chrome: a read and a save in the normal case, and the preflights with site access withheld. The statements of the guide about `Origin`, `Cache-Control` and CORS could not be verified from the repository before.
 
 ---
 

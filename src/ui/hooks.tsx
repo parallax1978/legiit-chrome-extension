@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { pickProvider, type AiProvider } from '@/ai/provider';
 import { BrandMatcher } from '@/brands/matcher';
 import { errorMessage, isAbortError } from '@/lib/async';
-import { can, connect as connectLegiit, disconnect as disconnectLegiit, DISCONNECTED, loadConnection, type Connection } from '@/legiit/connection';
+import { can, connect as connectLegiit, disconnect as disconnectLegiit, DISCONNECTED, loadConnection, resetUnavailable, type Connection } from '@/legiit/connection';
 import type { LegiitMethod } from '@/legiit/client';
 import type { InvokeIntent, PanelEvent } from '@/model/messages';
 import { requestLegiitAccess } from '@/net/permissions';
@@ -119,9 +119,12 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void reload();
-    // Another extension page (options, panel) connected or disconnected.
+    // Another extension page (options, panel) connected or disconnected. What was found missing belonged to the
+    // session before: with a new token every feature gets its chance again.
     return onLegiitTokenChanged(() => {
-      if (!changingRef.current) void reload();
+      if (changingRef.current) return;
+      resetUnavailable();
+      void reload();
     });
   }, [reload]);
 
@@ -135,6 +138,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       retry: async () => {
         // First thing in the click: if the user withheld the Legiit host in Chrome, this is where Chrome asks.
         await requestLegiitAccess();
+        resetUnavailable();
         setLoading(true);
         setConnection(await loadConnection());
         setLoading(false);

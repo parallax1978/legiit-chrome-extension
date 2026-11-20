@@ -64,9 +64,11 @@ paths:
         Keep it cheap and fast, and keep it out of tight rate limits: it runs every time the user
         opens the side panel.
 
-        For a valid token always answer 200. Say what the user may use through `capabilities`,
-        never through 403 on this endpoint. Answer 401 only when the token itself is bad, and
-        with the error body: that 401 makes the extension delete the token.
+        For a valid token answer 200, and say what the user's plan includes through `capabilities`,
+        never through 403. Answer 403 here only when the account may not use the API at all (it is
+        suspended, for example): the extension then shows your message and "Legiit not connected", and
+        keeps the token. Answer 401 only when the token itself is bad, and with the error body: that
+        401 makes the extension delete the token.
 
         The extension shows a feature only when its capability is in `capabilities`. With an empty list
         the user is connected and sees no Legiit feature at all.
@@ -95,8 +97,11 @@ paths:
       summary: Lists the businesses the user can save into.
       description: |
         Return the businesses this user may save into (their own and those shared with them) in one
-        reply. There is no paging: the extension shows the first 500, in the order you return them, in
-        a drop-down under Settings. With more than 500, return the most recently used first.
+        reply. A business the user can see but not save into does not belong in this list. There is
+        no paging: the extension shows the first 500, in the order you return them, in a drop-down
+        under Settings. Any stable order is fine; by name is a good default. With more than 500,
+        return only the 500 the user worked with most recently, by your own measure (last opened or
+        last saved into). Keep the reply under 5 MB: the extension does not read a larger one.
       x-capability: businesses
       x-called-when: Each time the settings screen is shown while connected (the settings page, or the Settings tab of the side panel).
       responses:
@@ -295,8 +300,8 @@ paths:
 
         Recommended: one workspace per brief. `briefId` identifies the brief; look it up per user, never
         across users. The first request with a briefId creates the workspace (201). A later one is the
-        same brief sent again, perhaps with other competitors: update the workspace and answer 200 with
-        the same id and url.
+        same brief sent again, perhaps with other competitors: replace the stored brief with the new
+        body and answer 200 with the same id and url.
 
         Return a `url`: the button that starts this save is labelled "Open in Command Center", so the
         user expects a link into the new workspace.
@@ -333,7 +338,8 @@ paths:
         as shortcuts: one click filters the page history to the days before that date (30 by default;
         the user can change the number). Only `date` and `title` are shown.
 
-        The data is the same for every user, so the reply can be cached on your side.
+        The data is the same for every user, so the reply can be cached on your side. Return the
+        latest events only: 8 are shown, so 20 are plenty.
 
         When this call fails, for whatever reason, the extension shows no shortcuts and no message.
       x-capability: industryPulse
@@ -375,18 +381,22 @@ paths:
            "who", "wants" and "worries", and at least one next step. It keeps up to 80 characters of a
            name, 400 of every other text, 6 searches of 120 characters and 8 next steps; longer text is
            cut, so ask the model for short entries. Check that the model's output parses as JSON
-           before you return it; if it does not, ask the model once more, then answer 502.
+           before you return it (you need not check it against the schema); if it does not, ask the
+           model once more, then answer 502.
 
-        `maxOutputTokens` is the room for the visible reply: 700 for a summary, 2,000 for a brief. If
-        your model spends tokens on reasoning, give it more than this. If the number is above your own
-        maximum, use your maximum; do not refuse the request.
+        If the model returns no text at all, also ask once more, then answer 502.
+
+        `maxOutputTokens` is the room for the visible reply. The extension sends 700 for a summary and
+        2,000 for a brief. If your model spends tokens on reasoning, give it more than this. If the
+        number is above your own maximum, use your maximum; do not refuse the request for it.
 
         The reply is not streamed: answer with one JSON body within 60 seconds. If the model provider
         is slow or down, answer 504 or 503 before that. If the account has used up its AI allowance,
         answer 429 with a message that says when it resets.
 
         When this call fails, for whatever reason, the extension keeps its own text and shows one line
-        with the reason. After a 404, 405 or 501 it stops offering the button until the page is reopened.
+        with the reason. After a 404, 405 or 501 it stops offering the button until the page is
+        reopened or the user connects again.
 
         Security: `system` and `prompt` come from the client, so anyone with a token can send their
         own: limit use per user and enforce the length limits below. The facts between <facts> and
@@ -447,11 +457,13 @@ components:
         save, and repeats it when the user sends the same save again from the same dialog, which happens
         after a timeout and also after an error. Recommended: remember the reply of a successful save
         under (user, method, path, key) for 24 hours, and answer the same key with that reply again
-        (same status, same body) without storing anything. Never remember an error. Do not compare
-        bodies. If the first request with a key is still running, wait for it or answer 409. Do not
-        require the header and do not check its format: curl and the conformance check send saves
-        without it.
-      schema: { type: string, maxLength: 255 }
+        (same status, same body) without storing anything. Check the token, the capability and the
+        business first; a remembered reply is given instead of validating and storing the body. Never
+        remember an error. Do not compare bodies. If the first request with a key is still running,
+        wait for it or answer 409 (the extension shows a 409 like any other 4xx). Do not require the
+        header and do not check its format: curl and the conformance check send saves without it. An
+        empty value means "no key".
+      schema: { type: string, minLength: 1, maxLength: 255 }
   responses:
     Saved:
       description: >-
@@ -626,7 +638,6 @@ components:
           x-examples: [agency]
         capabilities:
           type: array
-          uniqueItems: true
           description: >-
             The features this user may use, as a JSON array of names; every token of the user gets the
             same list. The extension shows a feature only when its capability is listed. Names are
@@ -675,7 +686,8 @@ components:
           type: [array, 'null']
           description: >-
             Other ways people write the business's name ("BrightPath", "Bright Path Dental"). Used to
-            find the brand in AI answers and page text. Absent or null means none.
+            find the brand in AI answers and page text. The name itself may be repeated here; that does
+            no harm. Absent or null means none.
           x-uses: { items: 30 }
           items: { type: string, x-uses: { chars: 160 } }
         domains:

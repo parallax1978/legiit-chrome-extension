@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
 import { problemWith } from '@@/mock-server/contract.mjs';
-import { createMockState, handleMockRequest, MOCK_TOKENS } from '@@/mock-server/handlers.mjs';
+import { CORS_HEADERS, createMockState, handleMockRequest, MOCK_TOKENS } from '@@/mock-server/handlers.mjs';
 import { METHOD_CAPABILITY, type LegiitMethod } from '@/legiit/client';
 import { LIMITS, MAX_REQUEST_BYTES } from '@/legiit/limits';
 import { ALL_CAPABILITIES } from '@/legiit/types';
@@ -260,6 +260,34 @@ describe('the mock server behaves as the guide asks of the real one', () => {
     const both = post(state, competitors, { name: 'Capitol Dental Care', domains: ['lakesidesmiles.example'] });
     expect(JSON.parse(both.body).id).toBe('com_seed_2');
     expect(post(state, competitors, { name: 'Lakeside Blog', domains: ['blog.lakesidesmiles.example'] }).status).toBe(201);
+  });
+
+  it('looks up remembered replies per user, and gives the second token a user of its own', () => {
+    const state = createMockState();
+    const path = '/v1/businesses/biz_brightpath/visibility-snapshots';
+    const body = JSON.stringify(read('saveVisibilitySnapshot.request.json'));
+    const send = (token: string) => handleMockRequest(state, { method: 'POST', path, headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'one-key' }, body });
+    const first = send(MOCK_TOKENS.valid);
+    // The same key from the same user: the first reply again. The same key from another user: another save.
+    expect(JSON.parse(send(MOCK_TOKENS.valid).body)).toEqual(JSON.parse(first.body));
+    expect(JSON.parse(send(MOCK_TOKENS.limited).body).id).not.toBe(JSON.parse(first.body).id);
+    expect(state.saved.visibilitySnapshots).toHaveLength(2);
+    const who = (token: string) => (JSON.parse(handleMockRequest(state, { method: 'GET', path: '/v1/session', headers: { authorization: `Bearer ${token}` } }).body) as { user: { id: string } }).user.id;
+    expect(who(MOCK_TOKENS.valid)).not.toBe(who(MOCK_TOKENS.limited));
+  });
+
+  it('answers a preflight on any path without a token, and sends the CORS headers with every reply', () => {
+    const state = createMockState();
+    const preflight = handleMockRequest(state, { method: 'OPTIONS', path: '/v1/anything', headers: {} });
+    expect(preflight.status).toBe(204);
+    for (const reply of [preflight, handleMockRequest(state, { method: 'GET', path: '/v1/session', headers: {} }), handleMockRequest(state, { method: 'GET', path: '/v1/session', headers: auth })]) {
+      expect(reply.headers).toMatchObject(CORS_HEADERS);
+    }
+    // The guide prints the same four headers.
+    const guide = readFileSync(resolve(KIT_DIR, 'README.md'), 'utf8');
+    expect(guide).toContain(`Access-Control-Allow-Headers: ${CORS_HEADERS['access-control-allow-headers']}`);
+    expect(guide).toContain(`Access-Control-Allow-Methods: ${CORS_HEADERS['access-control-allow-methods']}`);
+    expect(guide).toContain(`Access-Control-Max-Age: ${CORS_HEADERS['access-control-max-age']}`);
   });
 
   it('keeps one workspace per brief and per account', () => {

@@ -19,6 +19,9 @@
  *   5. a repeated Idempotency-Key gets the first reply     → save()
  *   6. a competitor is never stored twice                  → addCompetitor()
  *   7. a brief that is sent again updates its workspace    → createWorkspace()
+ *   8. every reply carries the CORS headers                → CORS_HEADERS
+ * Everything that is "per user" (capabilities, remembered replies, briefs) is looked up by the user the token
+ * belongs to, never by the token: a user can have several tokens.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -30,11 +33,25 @@ const load = (name) => JSON.parse(readFileSync(join(fixtures, name), 'utf8'));
 
 /** The two tokens the mock accepts. Any other token is answered with 401, like an unknown token on the real API. */
 export const MOCK_TOKENS = {
+  /** The first user: every feature switched on. */
   valid: 'demo-token',
   /** An example of a token that is refused. */
   invalid: 'invalid',
-  /** An account with only some features switched on (to exercise "hide unavailable UI"). */
+  /** A second user, on a plan with only some features (to exercise "hide unavailable UI"). */
   limited: 'limited-token',
+};
+
+/**
+ * Sent with every reply, errors and the answer to a preflight included (guide, section 3, "CORS"). The extension
+ * normally needs none of them, because the API host is one of its host permissions. They are a safety net: a user
+ * can switch that access off in Chrome, and then every request is preflighted like a web page's. Allowing any
+ * origin is safe, because no cookies are used: the token is the only credential.
+ */
+export const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET, POST, OPTIONS',
+  'access-control-allow-headers': 'authorization, content-type, accept, x-legiit-client, idempotency-key',
+  'access-control-max-age': '600',
 };
 
 export function createMockState() {
@@ -44,7 +61,10 @@ export function createMockState() {
   let seeded = 0;
   for (const [businessId, business] of Object.entries(details)) competitorIds[businessId] = business.competitors.map(() => `com_seed_${++seeded}`);
   return {
+    /** The user of "demo-token". */
     session: load('session.json'),
+    /** The user of "limited-token": a colleague in the same agency, so both can save into the same businesses. */
+    limitedSession: { user: { id: 'usr_demo_2', name: 'Sam Rivera', email: 'sam@northstarseo.example' }, plan: 'starter', capabilities: ['businesses', 'visibilitySnapshots', 'industryPulse'] },
     businesses: load('businesses.json'),
     details,
     competitorIds,
@@ -74,9 +94,11 @@ function tokenOf(headers) {
   return match ? match[1] : null;
 }
 
-function capabilitiesFor(state, token) {
-  if (token === MOCK_TOKENS.limited) return ['businesses', 'visibilitySnapshots', 'industryPulse'];
-  return state.session.capabilities;
+/** The session of the user a token belongs to, or null for a token that is not known. */
+function sessionFor(state, token) {
+  if (token === MOCK_TOKENS.valid) return state.session;
+  if (token === MOCK_TOKENS.limited) return state.limitedSession;
+  return null;
 }
 
 /** A domain as it is compared: lower case, without scheme, "www." and path. A subdomain is a different domain. */
@@ -98,21 +120,28 @@ const BUSINESS_SAVES = {
  * @returns {{ status: number, headers: Record<string, string>, body: string }}
  */
 export function handleMockRequest(state, request) {
+  const reply = answer(state, request);
+  return { ...reply, headers: { ...reply.headers, ...CORS_HEADERS } };
+}
+
+function answer(state, request) {
   const { method } = request;
   // The extension never sends a query string or a trailing slash; tolerating them is a convenience of the mock.
   const path = request.path.split('?')[0].replace(/\/+$/, '') || '/';
   const idempotencyKey = header(request.headers, 'idempotency-key');
   state.requests.push({ method, path, idempotencyKey: idempotencyKey || null });
 
-  // Not part of the contract: a preflight answer for browser tools, and a health page.
+  // A preflight is answered on every path, without asking for a token. The health page is not part of the contract.
   if (method === 'OPTIONS') return { status: 204, headers: {}, body: '' };
   if (path === '/' || path === '/health') return json(200, { ok: true, service: 'legiit-mock' });
 
   // --- The token. 401 is for the token and nothing else, and it always carries the error body.
   const token = tokenOf(request.headers);
   if (!token) return error(401, 'unauthorised', 'Missing bearer token');
-  if (token !== MOCK_TOKENS.valid && token !== MOCK_TOKENS.limited) return error(401, 'unauthorised', 'Token not recognised');
-  const capabilities = capabilitiesFor(state, token);
+  const session = sessionFor(state, token);
+  if (!session) return error(401, 'unauthorised', 'Token not recognised');
+  const { capabilities } = session;
+  const userId = session.user.id;
 
   /** A feature that is off answers like an endpoint that does not exist: 404, and never with the code "not_found". */
   const off = (capability) => (capabilities.includes(capability) ? null : error(404, 'not_available', `${capability} is not enabled for this account`));
@@ -144,13 +173,13 @@ export function handleMockRequest(state, request) {
   /**
    * Stores one item and answers with its id and address.
    *
-   * A reply to a successful save is remembered under its Idempotency-Key (per token, method and path). The same
+   * A reply to a successful save is remembered under its Idempotency-Key (per user, method and path). The same
    * key again gets that reply again and nothing is stored. Errors are never remembered: after an error the
    * extension sends the same key with the same body once more, and that attempt must be handled afresh.
    * A save without the header is valid (curl and the conformance check send some).
    */
   const save = (page, store) => {
-    const replyKey = idempotencyKey ? `${token} ${method} ${path} ${idempotencyKey}` : null;
+    const replyKey = idempotencyKey ? `${userId} ${method} ${path} ${idempotencyKey}` : null;
     if (replyKey && state.replies.has(replyKey)) return state.replies.get(replyKey);
     const { id, created } = store();
     const reply = json(created ? 201 : 200, { id, url: `https://app.legiit.example/command-center/${page}/${id}` });
@@ -159,7 +188,7 @@ export function handleMockRequest(state, request) {
   };
   const newId = (bucket) => `${bucket.slice(0, 3)}_${state.nextId++}`;
 
-  if (method === 'GET' && path === '/v1/session') return json(200, { ...state.session, capabilities });
+  if (method === 'GET' && path === '/v1/session') return json(200, session);
 
   if (method === 'GET' && path === '/v1/businesses') return off('businesses') ?? json(200, state.businesses);
 
@@ -194,7 +223,7 @@ export function handleMockRequest(state, request) {
     if (blocked) return blocked;
     const problem = problemWith('WorkspaceFromBrief', body);
     if (problem) return error(422, 'invalid', problem);
-    return save('workspaces', () => createWorkspace(state, token, body, newId));
+    return save('workspaces', () => createWorkspace(state, userId, body, newId));
   }
 
   if (method === 'GET' && path === '/v1/industry-pulse') return off('industryPulse') ?? json(200, state.pulse);
@@ -236,18 +265,19 @@ function addCompetitor(state, business, body) {
 }
 
 /**
- * Creates a workspace from a brief. The same briefId from the same account is the same brief sent again (after
- * the user changed its competitors, for example): the workspace is updated and its id is returned with 200.
- * A briefId is only unique on one user's device, so it is looked up per account, never globally.
+ * Creates a workspace from a brief. The same briefId from the same user is the same brief sent again (after the
+ * user changed its competitors, for example): the stored brief is replaced by the new one and the id of the
+ * workspace is returned with 200. A briefId is only unique on one user's device, so it is looked up per user,
+ * never globally.
  */
-function createWorkspace(state, token, body, newId) {
-  const existing = state.saved.workspaces.find((w) => w.account === token && w.payload.briefId === body.briefId);
+function createWorkspace(state, userId, body, newId) {
+  const existing = state.saved.workspaces.find((w) => w.userId === userId && w.payload.briefId === body.briefId);
   if (existing) {
     existing.payload = body;
     return { id: existing.id, created: false };
   }
   const id = newId('workspaces');
-  state.saved.workspaces.push({ id, account: token, payload: body });
+  state.saved.workspaces.push({ id, userId, payload: body });
   return { id, created: true };
 }
 

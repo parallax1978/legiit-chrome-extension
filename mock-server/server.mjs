@@ -6,7 +6,7 @@
  *   LEGIIT_API_BASE_URL=http://localhost:8787 npm run dev
  *
  * Then connect in the extension with the token "demo-token"
- * ("limited-token" simulates an account with fewer features; any other token is refused with 401).
+ * ("limited-token" is a second user with fewer features; any other token is refused with 401).
  * It implements docs/legiit-api/openapi.yaml with fixtures from fixtures/legiit.
  */
 import { createServer } from 'node:http';
@@ -35,16 +35,8 @@ const server = createServer((req, res) => {
       console.error(error);
       result = { status: 500, headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify({ error: { code: 'server_error', message: 'The mock failed on this request.' } }) };
     }
-    // CORS headers. The extension normally needs none, because the API host is one of its host permissions.
-    // They are a safety net: a user can switch that access off in Chrome, and then every request is preflighted
-    // like a web page's. Safe to allow any origin, because no cookies are used: the token is the only credential.
-    res.writeHead(result.status, {
-      ...result.headers,
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, POST, OPTIONS',
-      'access-control-allow-headers': 'authorization, content-type, accept, x-legiit-client, idempotency-key',
-      'access-control-max-age': '600',
-    });
+    // The CORS headers of the guide (section 3) are part of every reply the handlers give.
+    res.writeHead(result.status, result.headers);
     res.end(result.body);
     console.log(`${new Date().toISOString()}  ${req.method} ${req.url} → ${result.status}`);
   });
@@ -52,7 +44,7 @@ const server = createServer((req, res) => {
 
 server.listen(port, '127.0.0.1', () => {
   console.log(`Legiit mock API listening on http://localhost:${port}`);
-  console.log(`Tokens: "${MOCK_TOKENS.valid}" (full access), "${MOCK_TOKENS.limited}" (some features). Any other token is refused with 401.`);
+  console.log(`Tokens: "${MOCK_TOKENS.valid}" (a user with every feature), "${MOCK_TOKENS.limited}" (a second user with three features). Any other token is refused with 401.`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)));

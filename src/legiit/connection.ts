@@ -112,12 +112,13 @@ export function noteFailure(method: LegiitMethod, error: unknown): void {
   if (isUnavailable(error)) markUnavailable(method);
 }
 
-/** Hides the UI of a method whose endpoint turned out not to exist, until this page is reopened or the user reconnects. */
+/** Hides the UI of a method whose endpoint turned out not to exist, until this page is reopened or the user reconnects (on any page). */
 export function markUnavailable(method: LegiitMethod): void {
   const capability = METHOD_CAPABILITY[method];
   if (capability) unavailable.add(capability);
 }
 
+/** Gives every hidden feature its chance again: the session is being read afresh (a new token, or "Try again"). */
 export function resetUnavailable(): void {
   unavailable.clear();
 }

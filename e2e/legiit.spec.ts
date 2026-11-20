@@ -356,6 +356,30 @@ test.describe('an account with some endpoints switched off', () => {
     await expect(panel.getByTestId('cp-organic')).toBeVisible();
   });
 
+  test('a feature that was hidden comes back when the user connects again on another page', async ({ lens }) => {
+    const options = await connect(lens, 'demo-token');
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    const all = [...lens.legiit.session.capabilities];
+    // The endpoint is not there when the user tries it: the button goes away in the panel.
+    lens.legiit.session.capabilities = all.filter((c) => c !== 'visibilitySnapshots');
+    await panel.getByTestId('save-saveVisibilitySnapshot').click();
+    await panel.getByTestId('save-confirm').click();
+    await expect(panel.getByTestId('save-error')).toHaveText('Legiit cannot receive this yet. Nothing was saved.');
+    await panel.getByTestId('save-cancel').click();
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toHaveCount(0);
+    // The backend team fixes it, and the user connects again on the settings page. The open panel follows.
+    lens.legiit.session.capabilities = all;
+    await options.getByTestId('legiit-disconnect').click();
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toHaveCount(0);
+    await options.getByTestId('legiit-token').fill('demo-token');
+    await options.getByTestId('legiit-connect').click();
+    await expect(options.getByTestId('legiit-connected')).toBeVisible();
+    await options.getByTestId('legiit-business').selectOption('biz_brightpath');
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toBeVisible();
+    await reviewAndSend(lens, panel, 'saveVisibilitySnapshot');
+  });
+
   test('when an endpoint is missing, every button for it goes away, not only the one that was clicked', async ({ lens }) => {
     const options = await connect(lens, 'demo-token');
     for (const name of ['Riverbend Dental', 'Hilltop Smiles']) {
