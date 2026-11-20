@@ -4,7 +4,7 @@
  * They are the maxLength / maxItems values of the request schemas in the API
  * contract (docs/legiit-api). The payload builders in ./payloads.ts enforce
  * them, so the backend can size columns and validation from the contract and
- * never receive more. tests/unit/legiit-limits.test.ts keeps code and
+ * never receive more. tests/unit/legiit-api-kit.test.ts keeps code and
  * contract in step.
  *
  * Lengths are counted in UTF-16 code units (JavaScript string length). One
@@ -19,6 +19,9 @@ export const LIMITS = {
   brandName: 160,
   /** Domains of one brand or competitor. */
   brandDomains: 30,
+  /** Largest pixel position (from the top of the document) and largest viewport side that are sent. */
+  px: 10_000_000,
+  viewport: 100_000,
   snapshot: {
     keyword: 500,
     location: 160,
@@ -37,6 +40,8 @@ export const LIMITS = {
     competitors: 200,
     contacts: 18,
     contactLabel: 300,
+    /** Largest position inside a surface. */
+    position: 1000,
   },
   contentEditor: {
     keyword: 500,
@@ -76,7 +81,10 @@ export const LIMITS = {
   ai: {
     system: 2000,
     prompt: 10_000,
+    /** A summary of 3 to 6 short lines. */
     maxOutputTokens: 700,
+    /** A JSON document (the rewritten parts of a brief) needs more room: cut-off JSON cannot be used at all. */
+    maxOutputTokensJson: 2000,
   },
 } as const;
 
@@ -86,6 +94,9 @@ export const LIMITS = {
  * server needs no special configuration.
  */
 export const MAX_REQUEST_BYTES = 1_048_576;
+
+/** A reply larger than this is not read (bytes; a reply this size would be a mistake on the server). */
+export const MAX_REPLY_BYTES = 5_000_000;
 
 /** How long the extension waits for the complete reply before it gives up. */
 export const TIMEOUT_MS = { default: 20_000, ai: 60_000 } as const;

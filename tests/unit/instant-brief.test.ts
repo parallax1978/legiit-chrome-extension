@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseHtml } from '@/extract/html';
 import { extractPageFacts } from '@/extract/page-facts';
 import { categoryNoun, composeBrief, draftAvatars, draftNextSteps, withRewrites, type SearchEntry } from '@/features/instant-brief/compose';
-import { classifyPage, pickSitePages } from '@/features/instant-brief/crawl';
+import { assembleSitePages, classifyPage, linksToRead, pickSitePages, samePage } from '@/features/instant-brief/crawl';
 import { extractBusinessFacts, normaliseHex, type SitePage } from '@/features/instant-brief/extract';
 import { findIssues } from '@/features/instant-brief/issues';
 import { briefToMarkdown, escapeMarkdown } from '@/features/instant-brief/markdown';
@@ -70,6 +70,77 @@ describe('choosing site pages from the navigation', () => {
     expect(classifyPage('/plans-and-pricing', '')).toBe('pricing');
     expect(classifyPage('/service-areas', '')).toBe('locations');
     expect(classifyPage('/blog/post', 'Read more')).toBe('other');
+  });
+});
+
+describe('putting the pages of a brief together', () => {
+  const SITE = 'https://site.example';
+  const page = (title: string, extra = ''): string =>
+    `<html lang="en"><head><title>${title}</title><meta name="description" content="About ${title}"></head><body><nav><a href="/">Home</a><a href="/about">About us</a><a href="/services">Services</a></nav><h1>${title}</h1>${extra}</body></html>`;
+  const read = (path: string, title: string, finalPath = path) => ({ url: `${SITE}${path}`, ok: true, finalUrl: `${SITE}${finalPath}`, html: page(title) });
+  const duplicateTitles = (pages: readonly SitePage[]) => findIssues(pages.map((p) => ({ ...p, facts: extractPageFacts(p.doc, p.url) }))).filter((i) => i.code === 'duplicate-title');
+
+  it('treats an address with a query string or fragment as the same page', () => {
+    expect(samePage(`${SITE}/?gad_source=1`, `${SITE}/`)).toBe(true);
+    expect(samePage(`${SITE}/services/?_gl=1*abc#top`, `${SITE}/services`)).toBe(true);
+    expect(samePage(`${SITE}/services`, `${SITE}/about`)).toBe(false);
+    expect(samePage(`${SITE}/`, 'https://other.example/')).toBe(false);
+    expect(samePage('not a url', 'not a url')).toBe(false);
+  });
+
+  it('reads the home page once when it was opened from an ad or a campaign link', () => {
+    const open = { url: `${SITE}/?gad_source=1&gclid=EAIaIQ`, doc: parseHtml(page('Family dentist in Austin')) };
+    const links = pickSitePages(open.doc, open.url);
+    // The home page is already in hand: it is not fetched again.
+    expect(linksToRead(links, open.url).map((l) => l.url)).toEqual([`${SITE}/about`, `${SITE}/services`]);
+    const { pages, unread } = assembleSitePages(open, links, [read('/about', 'About us'), read('/services', 'Our services')], parseHtml);
+    expect(pages.map((p) => `${p.kind}:${p.url}`)).toEqual([`home:${open.url}`, `about:${SITE}/about`, `services:${SITE}/services`]);
+    expect(unread).toEqual([]);
+    expect(duplicateTitles(pages)).toEqual([]);
+  });
+
+  it('reads an inner page once as well, and keeps what its menu label says about it', () => {
+    const open = { url: `${SITE}/services?_gl=1*abc`, doc: parseHtml(page('Our services')) };
+    const links = pickSitePages(open.doc, open.url);
+    expect(linksToRead(links, open.url).map((l) => l.url)).toEqual([`${SITE}/`, `${SITE}/about`]);
+    const { pages } = assembleSitePages(open, links, [read('/', 'Family dentist in Austin'), read('/about', 'About us')], parseHtml);
+    expect(pages.map((p) => `${p.kind}:${p.url}`)).toEqual([`home:${SITE}/`, `services:${open.url}`, `about:${SITE}/about`]);
+    expect(duplicateTitles(pages)).toEqual([]);
+  });
+
+  it('never holds more pages than were picked', () => {
+    const menu = Array.from({ length: 30 }, (_, i) => `<a href="/page-${i}">Page ${i}</a>`).join('');
+    const open = { url: `${SITE}/deep/current?ref=newsletter`, doc: parseHtml(`<title>Current</title><nav>${menu}</nav>`) };
+    const links = pickSitePages(open.doc, open.url);
+    expect(links).toHaveLength(8);
+    const toRead = linksToRead(links, open.url);
+    expect(toRead).toHaveLength(7);
+    const { pages } = assembleSitePages(open, links, toRead.map((l, i) => ({ url: l.url, ok: true, finalUrl: l.url, html: page(`Page ${i}`) })), parseHtml);
+    expect(pages).toHaveLength(8);
+    expect(pages.filter((p) => samePage(p.url, open.url))).toHaveLength(1);
+  });
+
+  it('counts two links that end on one page once', () => {
+    const open = { url: `${SITE}/`, doc: parseHtml(page('Family dentist in Austin', '<a href="/home">Start</a>')) };
+    const links = [...pickSitePages(open.doc, open.url), { url: `${SITE}/home`, label: 'Start', kind: 'other' as const }, { url: `${SITE}/company`, label: 'Company', kind: 'about' as const }];
+    const { pages, unread } = assembleSitePages(
+      open,
+      links,
+      // "/home" redirects to the open page, "/company" to "/about".
+      [read('/about', 'About us'), read('/services', 'Our services'), read('/home', 'Family dentist in Austin', '/'), read('/company', 'About us', '/about')],
+      parseHtml,
+    );
+    expect(pages.map((p) => p.url)).toEqual([`${SITE}/`, `${SITE}/about`, `${SITE}/services`]);
+    expect(unread).toEqual([]);
+    expect(duplicateTitles(pages)).toEqual([]);
+  });
+
+  it('lists the pages that could not be read, and still includes the open page when no link names it', () => {
+    const open = { url: `${SITE}/landing?x=1`, doc: parseHtml(page('Landing')) };
+    const links = [{ url: `${SITE}/about`, label: 'About us', kind: 'about' as const }, { url: `${SITE}/services`, label: 'Services', kind: 'services' as const }];
+    const { pages, unread } = assembleSitePages(open, links, [{ url: `${SITE}/about`, ok: false, finalUrl: null, html: '' }], parseHtml);
+    expect(pages.map((p) => `${p.kind}:${p.url}`)).toEqual([`other:${open.url}`]);
+    expect(unread).toEqual([`${SITE}/about`, `${SITE}/services`]);
   });
 });
 

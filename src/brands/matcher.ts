@@ -36,6 +36,11 @@ interface Compiled {
   pattern: RegExp | null;
 }
 
+/** What a brand is called on screen and in saved results: its name, or its first domain when it has no name. */
+export function displayName(entry: Pick<BrandEntry, 'name' | 'domains'>): string {
+  return entry.name.trim() || entry.domains[0] || '';
+}
+
 function normaliseQuotes(text: string): string {
   return text.replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"');
 }
@@ -85,7 +90,7 @@ export class BrandMatcher {
     const hits: BrandHit[] = [];
     for (const c of this.compiled) {
       if (c.domains.some((d) => hostMatchesDomain(host, d))) {
-        hits.push({ owner: c.owner, brandId: c.entry.id, name: c.entry.name, via: 'domain' });
+        hits.push({ owner: c.owner, brandId: c.entry.id, name: displayName(c.entry), via: 'domain' });
       }
     }
     return hits;
@@ -100,7 +105,7 @@ export class BrandMatcher {
       if (!c.pattern) continue;
       c.pattern.lastIndex = 0;
       if (c.pattern.test(haystack)) {
-        hits.push({ owner: c.owner, brandId: c.entry.id, name: c.entry.name, via: 'name' });
+        hits.push({ owner: c.owner, brandId: c.entry.id, name: displayName(c.entry), via: 'name' });
       }
     }
     return hits;

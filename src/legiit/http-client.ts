@@ -4,7 +4,7 @@ import { errorMessage, timeoutSignal } from '@/lib/async';
 import { cleanText, cutText } from '@/lib/sanitize';
 import type { AuthProvider } from './auth';
 import { LegiitError, type LegiitClient, type SaveOptions } from './client';
-import { MAX_REQUEST_BYTES, TIMEOUT_MS } from './limits';
+import { MAX_REPLY_BYTES, MAX_REQUEST_BYTES, TIMEOUT_MS } from './limits';
 import { ALL_CAPABILITIES } from './types';
 import type {
   AiCompletionRequest,
@@ -45,18 +45,32 @@ const text = (max: number) =>
 const optionalText = (max: number) => v.fallback(v.nullish(text(max), null), null);
 /** The same, read as an empty string. */
 const looseText = (max: number) => v.fallback(v.nullish(text(max), ''), '');
-/** An id is never cut: one that is too long, empty or not a whole number is refused. */
+/**
+ * An id goes into the path of later requests. "." and ".." would change that path, and text that is not
+ * well-formed Unicode cannot be written into one at all.
+ */
+const pathSafe = (value: string): boolean => value !== '' && value !== '.' && value !== '..' && value.isWellFormed();
+/** An id is never cut: one that is too long, empty, not a whole number or unusable in a path is refused. */
 const id = (max: number) =>
   v.pipe(
     v.union([v.string(), v.pipe(v.number(), v.safeInteger())]),
     v.transform((value) => String(value).trim()),
     v.minLength(1),
     v.maxLength(max),
+    v.check(pathSafe),
   );
+/**
+ * The entries of a list. Some JSON encoders write a list whose keys are not 0, 1, 2… (a filtered PHP array) as
+ * an object; its values are read as the entries.
+ */
+const entries = v.pipe(
+  v.union([v.array(v.unknown()), v.record(v.string(), v.unknown())]),
+  v.transform((value): unknown[] => (Array.isArray(value) ? value : Object.values(value))),
+);
 /** A list in which an entry that cannot be read is skipped, so one bad row never costs the user the whole list. */
 const list = <TItem extends v.GenericSchema>(item: TItem, max: number) =>
   v.pipe(
-    v.array(v.unknown()),
+    entries,
     v.transform((entries) => {
       const kept: v.InferOutput<TItem>[] = [];
       for (const entry of entries) {
@@ -68,14 +82,21 @@ const list = <TItem extends v.GenericSchema>(item: TItem, max: number) =>
     }),
   );
 const optionalList = <TItem extends v.GenericSchema>(item: TItem, max: number) => v.fallback(v.nullish(list(item, max), []), []);
-/** A list of text. A single text is read as a list of one. */
+/** A list of text. A single text is read as a list of one; an entry that is not text is skipped. */
 const textList = (maxLength: number, maxItems: number) =>
   v.fallback(
     v.nullish(
       v.pipe(
-        v.union([v.array(v.unknown()), v.string()]),
-        v.transform((value) => (typeof value === 'string' ? [value] : value)),
-        list(text(maxLength), maxItems),
+        v.union([v.string(), v.array(v.unknown()), v.record(v.string(), v.unknown())]),
+        v.transform((value): string[] => {
+          const raw = typeof value === 'string' ? [value] : Array.isArray(value) ? value : Object.values(value);
+          const kept: string[] = [];
+          for (const entry of raw) {
+            if (kept.length >= maxItems) break;
+            if (typeof entry === 'string' || (typeof entry === 'number' && Number.isFinite(entry))) kept.push(cutText(String(entry), maxLength));
+          }
+          return kept;
+        }),
       ),
       [],
     ),
@@ -88,7 +109,7 @@ const SessionSchema = v.object({
   /** Names this version does not know are ignored, so new capabilities can be added on the server at any time. */
   capabilities: v.nullish(
     v.pipe(
-      v.array(v.unknown()),
+      entries,
       v.transform((names) => ALL_CAPABILITIES.filter((capability) => names.includes(capability))),
     ),
     [],
@@ -96,17 +117,25 @@ const SessionSchema = v.object({
 });
 const BusinessSchema = v.object({ id: id(120), name: looseText(200), domain: optionalText(255) });
 const BusinessListSchema = v.object({ businesses: list(BusinessSchema, 500) });
-const BusinessDetailsSchema = v.object({
-  /** The extension keeps the id it asked for; the one in the reply is not needed. */
-  id: v.fallback(id(120), ''),
-  name: looseText(200),
-  brandNames: textList(160, 30),
-  domains: textList(255, 30),
-  competitors: optionalList(v.object({ name: looseText(160), domains: textList(255, 30) }), 200),
-  focusKeywords: textList(200, 200),
-  avatars: optionalList(v.object({ name: text(160), description: looseText(2000) }), 20),
-});
-const SaveResultSchema = v.object({ id: id(200), url: optionalText(2048) });
+const DETAILS_KEYS = ['name', 'brandNames', 'domains', 'competitors'] as const;
+const BusinessDetailsSchema = v.pipe(
+  // Every field below can be missing, so a reply that is something else entirely (an empty object, a wrapper, an
+  // error sent with status 200) would read as "a business with nothing in it" and wipe the brands pre-filled
+  // before. It has to look like a business: at least one of its main keys must be there.
+  v.custom<Record<string, unknown>>((value) => typeof value === 'object' && value !== null && !Array.isArray(value) && DETAILS_KEYS.some((key) => key in value)),
+  v.object({
+    /** The extension keeps the id it asked for; the one in the reply is not needed. */
+    id: v.fallback(id(120), ''),
+    name: looseText(200),
+    brandNames: textList(160, 30),
+    domains: textList(255, 30),
+    competitors: optionalList(v.object({ name: looseText(160), domains: textList(255, 30) }), 200),
+    focusKeywords: textList(200, 200),
+    avatars: optionalList(v.object({ name: text(160), description: looseText(2000) }), 20),
+  }),
+);
+/** A link that is too long to be whole is no link: it reads as absent rather than being cut. */
+const SaveResultSchema = v.object({ id: id(200), url: v.fallback(v.nullish(v.pipe(v.string(), v.maxLength(2048)), null), null) });
 const PulseSchema = v.object({
   updatedAt: optionalText(40),
   events: list(
@@ -116,7 +145,11 @@ const PulseSchema = v.object({
         v.string(),
         v.regex(/^\d{4}-\d{2}-\d{2}/),
         v.transform((value) => value.slice(0, 10)),
-        v.check((day) => !Number.isNaN(Date.parse(`${day}T00:00:00Z`))),
+        // 2026-02-30 parses in some engines (as 2 March): the day must survive a round trip.
+        v.check((day) => {
+          const time = Date.parse(`${day}T00:00:00Z`);
+          return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === day;
+        }),
       ),
       title: text(300),
       type: v.fallback(v.nullish(text(40), 'news'), 'news'),
@@ -126,6 +159,20 @@ const PulseSchema = v.object({
   ),
 });
 const CompletionSchema = v.object({ text: text(20_000), model: optionalText(120) });
+/**
+ * When a JSON document was asked for, the text is that document as a string. A server that returns the document
+ * itself (the structured output of a model, not turned into a string) is understood all the same.
+ */
+const JsonCompletionSchema = v.object({
+  text: v.union([
+    text(20_000),
+    v.pipe(
+      v.record(v.string(), v.unknown()),
+      v.transform((value) => cutText(JSON.stringify(value), 20_000)),
+    ),
+  ]),
+  model: optionalText(120),
+});
 
 export interface HttpClientOptions {
   baseUrl: string;
@@ -139,24 +186,52 @@ export interface HttpClientOptions {
 
 const TIMED_OUT = 'Legiit did not answer in time';
 
+const TOO_LARGE = 'Legiit sent a reply that is too large to read';
+
 interface RequestOptions {
   body?: unknown;
   timeoutMs?: number;
   idempotencyKey?: string;
+  /** The path names a business: only there does a 404 with the code "not_found" mean "this business is gone". */
+  businessScoped?: boolean;
 }
 
-/** The "error" object of a failed reply, when the server sent one in the agreed shape. */
-async function readError(response: Response): Promise<{ code: string; message: string }> {
+/** The body of a reply as text. A reply beyond the size limit is not read. */
+async function readText(response: Response): Promise<string> {
+  if (Number(response.headers.get('content-length') ?? '0') > MAX_REPLY_BYTES) throw new LegiitError('invalid-response', TOO_LARGE, response.status);
+  const raw = await response.text();
+  if (raw.length > MAX_REPLY_BYTES) throw new LegiitError('invalid-response', TOO_LARGE, response.status);
+  return raw;
+}
+
+const NOT_AGREED = { agreed: false, code: '', message: '' } as const;
+
+/**
+ * The "error" object of a failed reply. `agreed` says whether the body had the agreed shape at all.
+ * A body that stops half-way (the time limit, a dropped connection) is no verdict of the server: that is
+ * thrown as a network failure, so a 404 cut short is never taken for "this endpoint does not exist".
+ */
+async function readError(response: Response, signal: AbortSignal): Promise<{ agreed: boolean; code: string; message: string }> {
+  let raw: string;
   try {
-    const parsed = (await response.json()) as { error?: { code?: unknown; message?: unknown } } | null;
+    raw = await readText(response);
+  } catch (error) {
+    if (signal.aborted) throw new LegiitError('network', TIMED_OUT);
+    // Too large to be the agreed error body, but a complete reply.
+    if (error instanceof LegiitError) return NOT_AGREED;
+    throw new LegiitError('network', `Could not reach Legiit: ${errorMessage(error)}`);
+  }
+  try {
+    const parsed = JSON.parse(raw) as { error?: { code?: unknown; message?: unknown } } | null;
     const error = parsed?.error;
     return {
+      agreed: typeof error === 'object' && error !== null,
       code: typeof error?.code === 'string' ? error.code : '',
       // Shown to the user as plain text: one line, no control characters.
       message: typeof error?.message === 'string' ? cleanText(error.message, 200) : '',
     };
   } catch {
-    return { code: '', message: '' };
+    return NOT_AGREED;
   }
 }
 
@@ -207,25 +282,32 @@ export class HttpLegiitClient implements LegiitClient {
       }
 
       const { status } = response;
-      if (status === 401) throw new LegiitError('unauthorised', 'Legiit did not accept the token', status);
+      if (status === 401) {
+        // Only a 401 that carries the agreed error body is taken as the API's own verdict on the token.
+        const error = await readError(response, timer.signal);
+        throw new LegiitError('unauthorised', 'Legiit did not accept the token', status, error.agreed);
+      }
       if (status === 404) {
-        // "The thing you named does not exist" (a deleted business) is told apart from "this endpoint does not exist".
-        const error = await readError(response);
-        if (error.code === 'not_found') throw new LegiitError('rejected', `Legiit could not find it (404)${error.message ? `: ${error.message}` : ''}`, status);
+        // "The business you named does not exist" is told apart from "this endpoint does not exist".
+        const error = await readError(response, timer.signal);
+        if (options.businessScoped && error.code === 'not_found') {
+          throw new LegiitError('rejected', `Legiit could not find it (404)${error.message ? `: ${error.message}` : ''}`, status);
+        }
         throw new LegiitError('unavailable', 'This Legiit feature is not available', status);
       }
       if (status === 405 || status === 501) throw new LegiitError('unavailable', 'This Legiit feature is not available', status);
       if (status >= 500) throw new LegiitError('server', `Legiit had a problem (${status})`, status);
       if (!response.ok) {
-        const error = await readError(response);
+        const error = await readError(response, timer.signal);
         throw new LegiitError('rejected', `Legiit rejected the request (${status})${error.message ? `: ${error.message}` : ''}`, status);
       }
 
       let json: unknown;
       try {
-        json = await response.json();
-      } catch {
+        json = JSON.parse(await readText(response));
+      } catch (error) {
         if (timer.signal.aborted) throw new LegiitError('network', TIMED_OUT);
+        if (error instanceof LegiitError) throw error;
         throw new LegiitError('invalid-response', 'Legiit sent a reply that could not be read', status);
       }
       const parsed = v.safeParse(schema, json);
@@ -236,8 +318,8 @@ export class HttpLegiitClient implements LegiitClient {
     }
   }
 
-  private save(path: string, payload: unknown, options?: SaveOptions): Promise<SaveResult> {
-    return this.request('POST', path, SaveResultSchema, { body: payload, idempotencyKey: options?.idempotencyKey });
+  private save(path: string, payload: unknown, options: SaveOptions | undefined, businessScoped: boolean): Promise<SaveResult> {
+    return this.request('POST', path, SaveResultSchema, { body: payload, idempotencyKey: options?.idempotencyKey, businessScoped });
   }
 
   getSession(): Promise<LegiitSession> {
@@ -248,28 +330,37 @@ export class HttpLegiitClient implements LegiitClient {
     return (await this.request('GET', '/v1/businesses', BusinessListSchema)).businesses;
   }
 
-  getBusinessDetails(businessId: string): Promise<LegiitBusinessDetails> {
-    return this.request('GET', `/v1/businesses/${encodeURIComponent(businessId)}`, BusinessDetailsSchema);
+  /**
+   * The path of a business, or of something under it. An id that cannot be written into a path names no
+   * business: nothing is sent. The callers are async, so this is a rejected promise like every other failure.
+   */
+  private business(businessId: string, rest = ''): string {
+    if (!pathSafe(businessId)) throw new LegiitError('rejected', 'Choose a business under Settings → Legiit account first. Nothing was sent.');
+    return `/v1/businesses/${encodeURIComponent(businessId)}${rest}`;
   }
 
-  saveVisibilitySnapshot(businessId: string, payload: VisibilitySnapshotPayload, options?: SaveOptions): Promise<SaveResult> {
-    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/visibility-snapshots`, payload, options);
+  async getBusinessDetails(businessId: string): Promise<LegiitBusinessDetails> {
+    return this.request('GET', this.business(businessId), BusinessDetailsSchema, { businessScoped: true });
   }
 
-  saveGapList(businessId: string, payload: GapListPayload, options?: SaveOptions): Promise<SaveResult> {
-    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/gap-lists`, payload, options);
+  async saveVisibilitySnapshot(businessId: string, payload: VisibilitySnapshotPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(this.business(businessId, '/visibility-snapshots'), payload, options, true);
   }
 
-  addCompetitor(businessId: string, payload: CompetitorPayload, options?: SaveOptions): Promise<SaveResult> {
-    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/competitors`, payload, options);
+  async saveGapList(businessId: string, payload: GapListPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(this.business(businessId, '/gap-lists'), payload, options, true);
   }
 
-  sendToContentEditor(businessId: string, payload: ContentEditorPayload, options?: SaveOptions): Promise<SaveResult> {
-    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/content-editor/documents`, payload, options);
+  async addCompetitor(businessId: string, payload: CompetitorPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(this.business(businessId, '/competitors'), payload, options, true);
+  }
+
+  async sendToContentEditor(businessId: string, payload: ContentEditorPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(this.business(businessId, '/content-editor/documents'), payload, options, true);
   }
 
   createWorkspaceFromBrief(payload: WorkspaceFromBriefPayload, options?: SaveOptions): Promise<SaveResult> {
-    return this.save('/v1/workspaces/from-brief', payload, options);
+    return this.save('/v1/workspaces/from-brief', payload, options, false);
   }
 
   getIndustryPulse(): Promise<IndustryPulse> {
@@ -277,6 +368,6 @@ export class HttpLegiitClient implements LegiitClient {
   }
 
   completeAI(request: AiCompletionRequest): Promise<AiCompletionResponse> {
-    return this.request('POST', '/v1/ai/completions', CompletionSchema, { body: request, timeoutMs: TIMEOUT_MS.ai });
+    return this.request('POST', '/v1/ai/completions', request.responseSchema ? JsonCompletionSchema : CompletionSchema, { body: request, timeoutMs: TIMEOUT_MS.ai });
   }
 }

@@ -1,10 +1,10 @@
 /** Building blocks shared by the feature tabs. */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { legiitAiPayload, runProvider, type AiRequest } from '@/ai/provider';
 import { PRODUCT_NAME, SUGGESTED_SHORTCUT } from '@/config/constants';
 import { downloadText } from '@/lib/csv';
 import { errorMessage } from '@/lib/async';
-import { noteFailure } from '@/legiit/connection';
+import { markUnavailable, noteFailure } from '@/legiit/connection';
 import { isUnavailable, LegiitError, type LegiitMethod, type SaveOptions } from '@/legiit/client';
 import type { SaveResult } from '@/legiit/types';
 import { describeSites, hasAccess, requestAccess } from '@/net/permissions';
@@ -97,12 +97,15 @@ export function KeepAccess({ url }: { url: string }) {
 /** Explanation lines from the deterministic templates, with an optional AI rewrite. */
 export function Summary({ title = 'What explains it', request, testId }: { title?: string; request: AiRequest; testId?: string }) {
   const provider = useAiProvider();
+  const { refreshCapabilities } = useConnection();
   const [lines, setLines] = useState<string[] | null>(null);
   const [writtenBy, setWrittenBy] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const signature = request.fallback.join('\n');
+  const current = useRef(signature);
+  current.current = signature;
 
   useEffect(() => {
     // New facts: back to the template text.
@@ -116,11 +119,20 @@ export function Summary({ title = 'What explains it', request, testId }: { title
     setConfirming(false);
     setBusy(true);
     setNote(null);
+    const asked = signature;
     try {
       const outcome = await runProvider(provider, request);
+      if (outcome.endpointMissing) {
+        // Legiit has no AI endpoint (yet): say so once, then stop offering it, like a save that cannot be received.
+        markUnavailable('completeAI');
+        refreshCapabilities();
+      }
+      // The facts on screen changed while the model was writing: its text belongs to the old ones.
+      if (current.current !== asked) return;
       setLines(outcome.lines);
       setWrittenBy(outcome.fellBackBecause ? null : provider.label);
-      if (outcome.fellBackBecause) setNote(`${provider.label} could not be used (${outcome.fellBackBecause}). Showing the built-in summary.`);
+      if (outcome.endpointMissing) setNote('Legiit AI is not available yet. Showing the built-in summary.');
+      else if (outcome.fellBackBecause) setNote(`${provider.label} could not be used (${outcome.fellBackBecause}). Showing the built-in summary.`);
     } finally {
       setBusy(false);
     }
@@ -167,6 +179,8 @@ export function Summary({ title = 'What explains it', request, testId }: { title
   );
 }
 
+const NOT_OFFERED = 'Legiit cannot receive this yet. Nothing was saved.';
+
 /**
  * "Save to Command Center". Hidden unless a Legiit account is connected and
  * the endpoint is available. Shows the exact payload and sends that same
@@ -192,32 +206,48 @@ export function SaveToLegiit<T>({
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState<T | null>(null);
-  const [key, setKey] = useState('');
   const [state, setState] = useState<{ status: 'idle' | 'sending' | 'saved' | 'error'; message?: string; result?: SaveResult }>({ status: 'idle' });
+  /** The one-time key of this dialog, and the business it was last sent for. */
+  const attempt = useRef<{ key: string; sentTo: string | null }>({ key: '', sentTo: null });
+  /** Counts the sends of this button, so the reply to an earlier one cannot be shown as the outcome of a later one. */
+  const run = useRef(0);
 
   // The button goes away when Legiit turns out not to offer this. An open dialog stays, so the user reads why.
   const available = can(method);
   if (!available && !open) return null;
   const businessId = settings.legiit.businessId;
+  const sending = state.status === 'sending';
 
   const start = () => {
     setBody(payload());
-    // One key per confirmed save: sending again from this dialog repeats the key, so Legiit can avoid storing it twice.
-    setKey(crypto.randomUUID());
+    attempt.current = { key: crypto.randomUUID(), sentTo: null };
+    run.current += 1;
     setState({ status: 'idle' });
     setOpen(true);
   };
+  /** While a send is under way the dialog stays, so its outcome is always seen. */
+  const close = () => {
+    if (!sending) setOpen(false);
+  };
   const confirm = async () => {
     if (body === null) return;
+    const target = businessId ?? '';
+    // One key per save: sending again from this dialog repeats the key, so Legiit can avoid storing the item twice.
+    // The same item for another business (chosen meanwhile on another page) is another save and gets its own key.
+    if (attempt.current.sentTo !== null && attempt.current.sentTo !== target) attempt.current.key = crypto.randomUUID();
+    attempt.current.sentTo = target;
+    const mine = ++run.current;
     setState({ status: 'sending' });
     try {
-      const result = await send(body, businessId ?? '', { idempotencyKey: key });
+      const result = await send(body, target, { idempotencyKey: attempt.current.key });
+      if (mine !== run.current) return;
       setState({ status: 'saved', result });
       setOpen(false);
     } catch (error) {
       noteFailure(method, error);
       refreshCapabilities();
-      const message = isUnavailable(error) ? 'Legiit cannot receive this yet. Nothing was saved.' : error instanceof LegiitError ? error.message : errorMessage(error);
+      if (mine !== run.current) return;
+      const message = isUnavailable(error) ? NOT_OFFERED : error instanceof LegiitError ? error.message : errorMessage(error);
       setState({ status: 'error', message });
     }
   };
@@ -237,13 +267,15 @@ export function SaveToLegiit<T>({
       {open && (
         <Dialog
           title={label}
-          onClose={() => setOpen(false)}
+          onClose={close}
           testId="save-dialog"
           footer={
             <>
-              <Button onClick={() => setOpen(false)}>Cancel</Button>
-              <Button variant="primary" disabled={state.status === 'sending' || !available || (needsBusiness && !businessId)} onClick={() => void confirm()} data-testid="save-confirm">
-                {state.status === 'sending' ? 'Sending…' : 'Send to Legiit'}
+              <Button disabled={sending} onClick={close} data-testid="save-cancel">
+                Cancel
+              </Button>
+              <Button variant="primary" disabled={sending || !available || (needsBusiness && !businessId)} onClick={() => void confirm()} data-testid="save-confirm">
+                {sending ? 'Sending…' : 'Send to Legiit'}
               </Button>
             </>
           }
@@ -261,10 +293,17 @@ export function SaveToLegiit<T>({
           <p className="small muted" data-testid="save-also-sent">
             Sent with it: your Legiit token, this extension’s version number, and a one-time number that stops an accidental repeat from being stored twice.
           </p>
-          {state.status === 'error' && (
+          {state.status === 'error' ? (
             <Notice tone="error" testId="save-error">
               {state.message}
             </Notice>
+          ) : (
+            // Send is switched off whenever Legiit does not offer this; the reason is always next to it.
+            !available && (
+              <Notice tone="error" testId="save-error">
+                {NOT_OFFERED}
+              </Notice>
+            )
           )}
         </Dialog>
       )}

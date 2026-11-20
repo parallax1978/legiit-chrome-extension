@@ -16,6 +16,65 @@ export interface SitePageLink {
 
 export const MAX_SITE_PAGES = 8;
 
+/**
+ * The same page, for the brief: same site and same path. Query string and
+ * fragment are ignored, exactly as they are when the pages are picked, so an
+ * address that arrived with "?gad_source=1" or "?ref=…" is still that page.
+ */
+export function samePage(a: string, b: string): boolean {
+  const key = (value: string): string | null => {
+    try {
+      const url = new URL(value);
+      return `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`;
+    } catch {
+      return null;
+    }
+  };
+  const first = key(a);
+  return first !== null && first === key(b);
+}
+
+/** The picked links that still have to be read: every one except the open page, which is already in hand. */
+export function linksToRead(links: readonly SitePageLink[], openUrl: string): SitePageLink[] {
+  return links.filter((link) => !samePage(link.url, openUrl));
+}
+
+/**
+ * Puts the open page and the pages read from the site into one list, each page
+ * once. A page listed twice would be reported as "duplicate titles" and would
+ * double every count taken across pages, so:
+ * - the open page is never taken from a second read, whatever its query string;
+ * - two links that end on one page (a redirect) count once.
+ */
+export function assembleSitePages<D>(
+  open: { url: string; doc: D },
+  links: readonly SitePageLink[],
+  read: readonly { url: string; ok: boolean; finalUrl: string | null; html: string }[],
+  parse: (html: string) => D,
+): { pages: { url: string; kind: PageKind; doc: D }[]; unread: string[] } {
+  const pages: { url: string; kind: PageKind; doc: D }[] = [];
+  const unread: string[] = [];
+  for (const link of links) {
+    if (samePage(link.url, open.url)) {
+      if (!pages.some((p) => samePage(p.url, open.url))) pages.push({ url: open.url, kind: link.kind, doc: open.doc });
+      continue;
+    }
+    const page = read.find((p) => p.url === link.url);
+    if (!page?.ok) {
+      unread.push(link.url);
+      continue;
+    }
+    const url = page.finalUrl ?? link.url;
+    if (samePage(url, open.url) || pages.some((p) => samePage(p.url, url))) continue;
+    pages.push({ url, kind: link.kind, doc: parse(page.html) });
+  }
+  // The open page is always part of the brief, also when no picked link names it.
+  if (!pages.some((p) => samePage(p.url, open.url))) {
+    pages.unshift({ url: open.url, kind: classifyPage(new URL(open.url).pathname, ''), doc: open.doc });
+  }
+  return { pages, unread };
+}
+
 /** Checked in this order: the more specific labels first ("service areas" is a locations page, not a services page). */
 const KIND_PATTERNS: readonly { kind: PageKind; pattern: RegExp }[] = [
   { kind: 'about', pattern: /\b(about|our[- ]story|who[- ]we[- ]are|team|company|meet)\b/i },

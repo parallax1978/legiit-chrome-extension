@@ -9,10 +9,10 @@
  * only rewrites text that already exists; it is never given the job of
  * finding the facts.
  */
-import type { LegiitClient } from '@/legiit/client';
+import { isUnavailable, type LegiitClient } from '@/legiit/client';
 import { LIMITS } from '@/legiit/limits';
 import type { AiCompletionRequest } from '@/legiit/types';
-import { cutText, wellFormedDeep } from '@/lib/sanitize';
+import { cleanText, cutText, wellFormedDeep } from '@/lib/sanitize';
 
 export type AiProviderId = 'legiit' | 'chrome-prompt' | 'none';
 export type AiTask = AiCompletionRequest['task'];
@@ -51,7 +51,9 @@ export function buildPrompt(request: AiRequest): { system: string; prompt: strin
   const facts: string[] = [];
   let used = 0;
   for (const fact of request.facts) {
-    const line = cutText(fact.replace(/\s+/g, ' ').trim(), 600);
+    // One line of clean text per fact. Page text cannot close the <facts> block early: a tag that looks like
+    // one of ours is defused.
+    const line = cleanText(fact, 600).replace(/<\s*\/?\s*facts\b[^>]*>/gi, '[facts]');
     if (!line) continue;
     if (used + line.length > MAX_FACT_CHARS) break;
     facts.push(`- ${line}`);
@@ -74,7 +76,7 @@ export function legiitAiPayload(request: AiRequest): AiCompletionRequest {
     system: cutText(system, LIMITS.ai.system),
     prompt: cutText(prompt, LIMITS.ai.prompt),
     ...(request.responseSchema ? { responseSchema: request.responseSchema } : {}),
-    maxOutputTokens: LIMITS.ai.maxOutputTokens,
+    maxOutputTokens: request.responseSchema ? LIMITS.ai.maxOutputTokensJson : LIMITS.ai.maxOutputTokens,
   });
 }
 
@@ -181,15 +183,38 @@ export interface AiOutcome {
   lines: string[];
   /** Set when the chosen provider failed and the template text was used instead. */
   fellBackBecause: string | null;
+  /** Set when the provider is Legiit and its AI endpoint turned out not to exist. */
+  endpointMissing?: true;
 }
 
-/** Cleans a model reply into plain lines: strips bullets, numbering and stray markup. */
+const MAX_LINE = 600;
+
+/**
+ * Cleans a model reply into plain lines for display as bullet points.
+ *
+ * Only markup is removed: a leading bullet, short numbering or heading mark,
+ * and emphasis or code marks that come in pairs. Characters inside the text
+ * stay ("result #6", "snake_case", "2026. A year"). An introduction such as
+ * "Here is the summary:" above the points is dropped, and a line that is too
+ * long is cut rather than lost.
+ */
 export function toLines(text: string, max = 8): string[] {
-  return text
+  const lines = text
     .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/[*_`#]+/g, '').trim())
-    .filter((line) => line.length > 0 && line.length < 600)
-    .slice(0, max);
+    .map((line) =>
+      line
+        .replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s+/, '')
+        .replace(/^\s*#{1,6}\s+/, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/__(.+?)__/g, '$1')
+        .replace(/(^|[\s(])\*(\S(?:.*?\S)?)\*(?=[\s).,;:!?]|$)/g, '$1$2')
+        .replace(/`([^`]+)`/g, '$1')
+        .trim(),
+    )
+    // A line of nothing but marks (a code fence, a rule) says nothing.
+    .filter((line) => /[\p{L}\p{N}]/u.test(line));
+  if (lines.length > 1 && lines[0]!.endsWith(':')) lines.shift();
+  return lines.slice(0, max).map((line) => (line.length > MAX_LINE ? `${cutText(line, MAX_LINE - 1).trimEnd()}…` : line));
 }
 
 /** Runs a provider and always returns usable text: the template is the safety net. */
@@ -201,6 +226,11 @@ export async function runProvider(provider: AiProvider, request: AiRequest, sign
     return { provider: provider.id, lines, fellBackBecause: null };
   } catch (error) {
     if (signal?.aborted) throw error;
-    return { provider: 'none', lines: request.fallback, fellBackBecause: error instanceof Error ? error.message : 'The AI provider failed' };
+    return {
+      provider: 'none',
+      lines: request.fallback,
+      fellBackBecause: error instanceof Error ? error.message : 'The AI provider failed',
+      ...(isUnavailable(error) ? { endpointMissing: true as const } : {}),
+    };
   }
 }

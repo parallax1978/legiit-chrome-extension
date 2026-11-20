@@ -52,6 +52,9 @@ describe('sanitize', () => {
     expect(normalizeDomainInput('example.com')).toBe('example.com');
     expect(normalizeDomainInput('not a domain')).toBeNull();
     expect(normalizeDomainInput('javascript:alert(1)')).toBeNull();
+    // An e-mail address is not read as its domain.
+    for (const value of ['info@example.com', 'mailto:info@example.com', 'https://user@example.com/', 'jane.doe@gmail.com']) expect(normalizeDomainInput(value), value).toBeNull();
+    expect(normalizeDomainInput('*.example.com')).toBeNull();
   });
 
   it('builds safe file-name slugs', () => {

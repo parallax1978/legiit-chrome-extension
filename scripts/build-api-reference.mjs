@@ -20,6 +20,7 @@ const kit = join(root, 'docs', 'legiit-api');
 const contractPath = join(kit, 'openapi.yaml');
 const examplesDir = join(kit, 'examples');
 const target = join(kit, 'reference.md');
+const bundleTarget = join(kit, 'openapi.examples.json');
 
 const contract = parse(readFileSync(contractPath, 'utf8'));
 
@@ -31,6 +32,8 @@ const contract = parse(readFileSync(contractPath, 'utf8'));
 function deref(node) {
   let current = node;
   let name = null;
+  /** A shared type whose own text the field replaced with its own: the reader is pointed to it. */
+  let shared = null;
   let guard = 0;
   while (current && typeof current === 'object') {
     let ref = typeof current.$ref === 'string' ? current.$ref : null;
@@ -45,15 +48,29 @@ function deref(node) {
     const target = parts.reduce((value, part) => (value ? value[part] : undefined), contract);
     if (!target) throw new Error(`Unresolved $ref: ${ref}`);
     const { $ref: _ref, oneOf: _oneOf, ...siblings } = current;
+    if (parts[1] === 'schemas' && target.description && siblings.description) shared = name;
     current = { ...target, ...siblings };
     if (nullable) current.type = [...new Set([...(Array.isArray(current.type) ? current.type : [current.type]), 'null'])];
     if (++guard > 20) throw new Error(`Circular $ref at ${ref}`);
   }
   if (!current) throw new Error(`Unresolved $ref: ${JSON.stringify(node)}`);
-  return { schema: current, name };
+  return { schema: current, name, shared };
 }
 
+/** "#id" for the heading "### Id". */
+const anchor = (name) => `#${String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+/** Shared types that some field points to, in the order they were first used. */
+const sharedUsed = new Set();
+const sharedLink = (name) => {
+  sharedUsed.add(name);
+  return `See [${name}](${anchor(name)}).`;
+};
+
 const types = (schema) => (Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : []);
+/** The schemas that are one plain value (an id, an address…), used by many fields. */
+const SHARED_TYPES = Object.entries(contract.components.schemas)
+  .filter(([, schema]) => !types(schema).includes('object') && !schema.properties)
+  .map(([name]) => name);
 const code = (value) => `\`${String(value)}\``;
 
 /** "string", "string or null", "array of string", "object"… */
@@ -71,15 +88,26 @@ function typeLabel(schema) {
 
 const count = (n) => Number(n).toLocaleString('en-US');
 
+/** How much of a reply value the extension uses ("x-uses"): more is allowed and is cut. */
+function uses(schema) {
+  const u = schema['x-uses'];
+  if (!u) return '';
+  if (u.chars !== undefined) return `first ${count(u.chars)} chars are used`;
+  if (u.items !== undefined) return `first ${count(u.items)} items are used`;
+  return '';
+}
+
 function limits(schema) {
   const all = types(schema);
   const out = [];
   if (schema.const !== undefined) out.push(`always ${code(JSON.stringify(schema.const))}`);
   if (schema.format) out.push({ 'date-time': 'date and time (ISO 8601)', date: 'date (YYYY-MM-DD)', uuid: 'UUID' }[schema.format] ?? schema.format);
   if (all.includes('string')) {
+    // A text with a fixed set of values, or one that must follow a pattern, cannot be empty: "at most" says it better than "0 to".
+    const shaped = schema.pattern !== undefined || schema['x-values'] !== undefined;
     if (schema.minLength !== undefined && schema.maxLength !== undefined) out.push(`${count(schema.minLength)} to ${count(schema.maxLength)} chars`);
     else if (schema.minLength !== undefined) out.push(`at least ${count(schema.minLength)} char${schema.minLength === 1 ? '' : 's'}`);
-    else if (schema.maxLength !== undefined) out.push(`0 to ${count(schema.maxLength)} chars`);
+    else if (schema.maxLength !== undefined) out.push(shaped ? `at most ${count(schema.maxLength)} chars` : `0 to ${count(schema.maxLength)} chars`);
   }
   if (all.includes('array')) {
     if (schema.minItems !== undefined && schema.maxItems !== undefined) out.push(`${count(schema.minItems)} to ${count(schema.maxItems)} items`);
@@ -103,6 +131,9 @@ function limits(schema) {
   if (schema.pattern === '^https?://') out.push('starts with http:// or https://');
   else if (schema.pattern === '^https://') out.push('starts with https://');
   else if (schema.pattern === '^(https?://|mailto:)') out.push('starts with http://, https:// or mailto:');
+  else if (schema.pattern !== undefined) out.push(`matches ${code(schema.pattern)}`);
+  const used = uses(schema);
+  if (used) out.push(used);
   return out.join('; ');
 }
 
@@ -110,8 +141,11 @@ function describe(schema) {
   const parts = [];
   if (schema.description) parts.push(String(schema.description).trim().replace(/\s*\n\s*/g, ' '));
   const item = types(schema).includes('array') && schema.items ? deref(schema.items).schema : null;
-  const values = (schema.enum ?? item?.enum)?.filter((v) => v !== null);
-  if (values && values.length > 0) parts.push(`${item?.enum ? 'Values' : 'One of'}: ${values.map(code).join(', ')}.`);
+  // A closed list ("enum") and a list that a later version may extend ("x-values") are worded differently.
+  const closed = (schema.enum ?? item?.enum)?.filter((v) => v !== null);
+  if (closed && closed.length > 0) parts.push(`One of: ${closed.map(code).join(', ')}.`);
+  const open = schema['x-values'] ?? item?.['x-values'];
+  if (open && open.length > 0) parts.push(`Values in this version: ${open.map(code).join(', ')}.`);
   const examples = schema['x-examples'] ?? item?.['x-examples'];
   if (examples) parts.push(`For example: ${examples.map(code).join(', ')}.`);
   return parts.join(' ');
@@ -119,10 +153,13 @@ function describe(schema) {
 
 /** Flattens a schema into table rows: one per field, nested fields as "a.b" and "a[].b". */
 function rows(schemaNode, prefix = '', requiredHere = true, out = []) {
-  const { schema } = deref(schemaNode);
+  const { schema, shared } = deref(schemaNode);
   const all = types(schema);
   if (prefix) {
-    out.push({ path: prefix, type: typeLabel(schema), required: requiredHere, limits: limits(schema), description: describe(schema) });
+    // The rules written once on a shared type (Id, HttpUrl, Fold) are not repeated in every row: the row links to them.
+    const itemShared = all.includes('array') && schema.items ? deref(schema.items).name : null;
+    const pointer = shared ?? (itemShared && SHARED_TYPES.includes(itemShared) ? itemShared : null);
+    out.push({ path: prefix, type: typeLabel(schema), required: requiredHere, limits: limits(schema), description: [describe(schema), pointer ? sharedLink(pointer) : ''].filter(Boolean).join(' ') });
   }
   if (all.includes('object') || schema.properties) {
     const required = new Set(schema.required ?? []);
@@ -200,8 +237,8 @@ for (const [path, methods] of Object.entries(contract.paths)) {
     const facts = [
       ['Capability', op['x-capability'] ? code(op['x-capability']) : 'none: always available'],
       ['Called when', flat(op['x-called-when'])],
-      ['Success', Object.keys(op.responses).filter((status) => status.startsWith('2')).map(code).join(' or ')],
-      ['Errors', `${errors.map(([status, node]) => `${code(status.replace('XX', 'xx'))}${responseName(node) === 'NotFound' ? ' (business not found, or feature not available)' : responseName(node) === 'Unavailable' ? ' (feature not available)' : ''}`).join(', ')}. See [Errors](#errors).`],
+      ['Success', Object.keys(op.responses).filter((status) => status.startsWith('2')).sort((a, b) => Number(b) - Number(a)).map(code).join(' or ')],
+      ['Errors', `${errors.map(([status, node]) => `${code(status.replace('XX', 'xx'))}${responseName(node) === 'NotFound' ? ' (business not found, or endpoint not available)' : responseName(node) === 'Unavailable' ? ' (endpoint not available)' : ''}`).join(', ')}. See [Errors](#errors).`],
       ['Operation id', code(op.operationId)],
     ].filter(([, value]) => value);
     lines.push('| | |', '| --- | --- |', ...facts.map(([k, v]) => `| ${k} | ${cell(v)} |`));
@@ -230,11 +267,12 @@ for (const [path, methods] of Object.entries(contract.paths)) {
       }
     }
 
-    const success = Object.entries(op.responses).find(([status]) => status.startsWith('2'));
+    const successes = Object.entries(op.responses).filter(([status]) => status.startsWith('2')).sort((a, b) => Number(b[0]) - Number(a[0]));
+    const success = successes[0];
     if (success) {
       const response = deref(success[1]).schema;
       const schema = response.content?.['application/json']?.schema;
-      lines.push(`### Response ${success[0]}`, '');
+      lines.push(`### Response ${successes.map(([status]) => status).join(' or ')}`, '');
       if (response.description) lines.push(flat(response.description), '');
       if (schema) {
         const top = deref(schema).schema;
@@ -251,14 +289,14 @@ for (const [path, methods] of Object.entries(contract.paths)) {
 }
 
 // One table for the error replies, which are the same for every endpoint.
-const statusOf = { Unauthorised: '401', Forbidden: '403', NotFound: '404', Unavailable: '404, 405, 501', Invalid: '422, 400', RateLimited: '429', ServerError: '5xx' };
+const statusOf = { Unauthorised: '401', Forbidden: '403', NotFound: '404', Unavailable: '404, 405, 501', BadRequest: '400', TooLarge: '413', Invalid: '422, other 4xx', RateLimited: '429', ServerError: '5xx except 501' };
 const errorRows = Object.entries(statusOf).map(([name, status]) => `| ${code(status)} | ${cell(flat(responses[name].description))} | ${cell(flat(responses[name]['x-extension-reaction']))} |`);
 const errorSchema = contract.components.schemas.Error;
 const errorExamples = exampleFiles.filter((f) => f.startsWith('error.'));
 const errorSection = [
   '## Errors',
   '',
-  'The same for every endpoint. A reply that is not listed here (any other 4xx) is shown to the user like a 422.',
+  'The same for every endpoint. The third column describes a save unless it says otherwise; each endpoint above says what happens when it fails. A 4xx status that is not listed is treated like a 422.',
   '',
   '| Status | Meaning | What the extension does |',
   '| --- | --- | --- |',
@@ -272,6 +310,18 @@ const errorSection = [
   ...errorExamples.map((file) => exampleBlock(file, `Example: ${file.replace(/^error\./, '').replace(/\.json$/, '').replace(/-/g, ' ')}`)),
 ].join('\n');
 
+// The types that many fields share, each described once.
+const sharedSection = [
+  '## Shared types',
+  '',
+  'Rules that are the same wherever one of these values appears. The field tables above link here.',
+  '',
+  ...SHARED_TYPES.filter((name) => sharedUsed.has(name) || name === 'Capability').flatMap((name) => {
+    const schema = contract.components.schemas[name];
+    return [`### ${name}`, '', `${typeLabel(schema)}${limits(schema) ? ` (${limits(schema)})` : ''}. ${describe(schema)}`, ''];
+  }),
+].join('\n');
+
 const output = `${[
   '# Endpoint reference',
   '',
@@ -282,8 +332,11 @@ const output = `${[
   'How to read the tables:',
   '',
   `- ${code('a.b')} is field ${code('b')} of object ${code('a')}. ${code('a[].b')} is field ${code('b')} of every item of list ${code('a')}.`,
-  '- Request tables describe what the extension sends. "Always sent: yes" means the key is in every request, possibly with the value null, "" or [].',
-  '- Response tables describe what you return. "Required: no" means the key may be left out or be null.',
+  '- Request tables describe what the extension sends. "Always sent: yes" means the key is in every request, possibly with the value null, "" or [] where its row allows that.',
+  '- Response tables describe what you return. "Required: no" means the key may be left out or be null. "First N chars are used" is not a limit for you: longer text is fine, the extension cuts it.',
+  '- "One of" is a closed list. "Values in this version" is a list that a later extension version may extend: store the value as text and accept one you do not know.',
+  '- Sentences such as "null exactly when…" or "always the number of…" describe what the extension sends. You can rely on them; do not reject a request because of them.',
+  '- "See Id", "See HttpUrl" and "See Fold" lead to [Shared types](#shared-types): rules that hold wherever such a value appears.',
   '- Lengths are in UTF-16 code units, the "length" of a JavaScript string. One unit is at most 3 bytes of UTF-8.',
   '- The examples are real: requests were built by the extension\'s own code from its test pages, responses come from the mock server. Long lists are shortened here; the files in `examples/` are complete.',
   '',
@@ -293,16 +346,52 @@ const output = `${[
   '',
   sections.join('\n\n'),
   '',
+  sharedSection,
+  '',
   errorSection,
 ].join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 
+/**
+ * openapi.examples.json: the contract as JSON with the example files built in, for tools that show or send
+ * example requests (Postman, Insomnia, Swagger UI). The hand-written openapi.yaml stays free of generated text.
+ */
+function bundle() {
+  const doc = structuredClone(contract);
+  const load = (file) => JSON.parse(readFileSync(join(examplesDir, file), 'utf8'));
+  const named = (files, operationId, kind) =>
+    Object.fromEntries(files.map((file) => [variantOf(file, operationId, kind).replace(/ /g, '-') || 'typical', { summary: variantOf(file, operationId, kind) || 'typical', value: load(file) }]));
+  for (const methods of Object.values(doc.paths)) {
+    for (const op of Object.values(methods)) {
+      const requests = examplesFor(op.operationId, 'request');
+      const media = op.requestBody?.content?.['application/json'];
+      if (media && requests.length > 0) media.examples = named(requests, op.operationId, 'request');
+      const replies = examplesFor(op.operationId, 'response');
+      const status = Object.keys(op.responses).filter((code) => code.startsWith('2')).sort((a, b) => Number(b) - Number(a))[0];
+      if (status && replies.length > 0) {
+        // A reply that is shared between endpoints is copied into this one, so that it can carry this endpoint's examples.
+        const response = structuredClone(deref(op.responses[status]).schema);
+        response.content['application/json'].examples = named(replies, op.operationId, 'response');
+        op.responses[status] = response;
+      }
+    }
+  }
+  const errors = { Unauthorised: 'error.401-bad-token.json', NotFound: 'error.404-business-not-found.json', Unavailable: 'error.404-feature-not-available.json', Invalid: 'error.422-invalid-body.json' };
+  for (const [name, file] of Object.entries(errors)) {
+    if (exampleFiles.includes(file)) doc.components.responses[name].content['application/json'].example = load(file);
+  }
+  doc.info.description = `Generated from openapi.yaml and examples/ by scripts/build-api-reference.mjs. Do not edit: change openapi.yaml.\n\n${doc.info.description}`;
+  return `${JSON.stringify(doc, null, 1)}\n`;
+}
+const bundled = bundle();
+
 if (process.argv.includes('--check')) {
-  if (!existsSync(target) || readFileSync(target, 'utf8') !== output) {
-    console.error('docs/legiit-api/reference.md is out of date. Run: npm run api:reference');
+  if (!existsSync(target) || readFileSync(target, 'utf8') !== output || !existsSync(bundleTarget) || readFileSync(bundleTarget, 'utf8') !== bundled) {
+    console.error('docs/legiit-api/reference.md or openapi.examples.json is out of date. Run: npm run api:reference');
     process.exit(1);
   }
-  console.log('docs/legiit-api/reference.md is up to date');
+  console.log('docs/legiit-api/reference.md and openapi.examples.json are up to date');
 } else {
+  writeFileSync(bundleTarget, bundled);
   writeFileSync(target, output);
   console.log(`wrote docs/legiit-api/reference.md (${number} endpoints, ${exampleFiles.length} example files, ${(output.length / 1024).toFixed(1)} KB)`);
 }

@@ -88,6 +88,56 @@ test.describe('without a Legiit account', () => {
     await expect(options.getByTestId('legiit-connected')).toBeVisible();
     await expect(options.getByTestId('legiit-error')).toHaveCount(0);
   });
+
+  test('a session check that fails for another reason keeps the token, says so in the panel, and can be tried again', async ({ lens }) => {
+    await lens.worker.evaluate(async () => chrome.storage.local.set({ legiitAuth: { token: 'demo-token', savedAt: 1 } }));
+    // Legiit is down when the panel opens.
+    let down = true;
+    await lens.context.route('**/v1/session', (route) => (down ? route.fulfill({ status: 503, contentType: 'text/html', body: 'Service Unavailable' }) : route.fallback()));
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    await expect(panel.getByTestId('connection-problem')).toHaveText('Legiit not connected');
+    await expect(panel.getByTestId('connection-chip')).toHaveCount(0);
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toHaveCount(0);
+    // The chip leads to Settings, which shows the reason and offers to try again without pasting the token.
+    await panel.getByTestId('connection-problem').click();
+    await expect(panel.getByTestId('legiit-error')).toHaveText('Legiit had a problem (503)');
+    expect(await lens.worker.evaluate(async () => Object.keys(await chrome.storage.local.get('legiitAuth')))).toEqual(['legiitAuth']);
+    down = false;
+    await panel.getByTestId('legiit-retry').click();
+    await expect(panel.getByTestId('legiit-connected')).toBeVisible();
+    await expect(panel.getByTestId('connection-chip')).toBeVisible();
+    await expect(panel.getByTestId('connection-problem')).toHaveCount(0);
+  });
+
+  test('a 401 that does not come from the API itself does not delete the token', async ({ lens }) => {
+    await lens.worker.evaluate(async () => chrome.storage.local.set({ legiitAuth: { token: 'demo-token', savedAt: 1 } }));
+    // A gateway in front of the API answers 401 with its own page during an outage.
+    await lens.context.route('**/v1/session', (route) => route.fulfill({ status: 401, contentType: 'text/html', body: '<h1>401 Authorization Required</h1>' }));
+    const options = await lens.openExtensionPage('options.html');
+    await expect(options.getByTestId('legiit-error')).toHaveText('Legiit answered 401 without saying why, so your token was kept. Try again, or paste a new token.');
+    await expect(options.getByTestId('legiit-retry')).toBeVisible();
+    expect(await lens.worker.evaluate(async () => Object.keys(await chrome.storage.local.get('legiitAuth')))).toEqual(['legiitAuth']);
+  });
+
+  test('connecting as another Legiit user forgets the business that was chosen', async ({ lens }) => {
+    const options = await connect(lens, 'demo-token');
+    await expect(options.getByTestId('brand-mine')).toHaveCount(1);
+    // The token is revoked; the same person then connects with a token of another account.
+    await lens.worker.evaluate(async () => chrome.storage.local.set({ legiitAuth: { token: 'revoked-token', savedAt: 1 } }));
+    await options.reload();
+    await expect(options.getByTestId('legiit-error')).toContainText('was not accepted');
+    // What was pre-filled is still there for now: the user did not disconnect.
+    await expect(options.getByTestId('brand-mine')).toHaveCount(1);
+    (lens.legiit.session as unknown as { user: { id: string } }).user.id = 'usr_another_account';
+    await options.getByTestId('legiit-token').fill('demo-token');
+    await options.getByTestId('legiit-connect').click();
+    await expect(options.getByTestId('legiit-connected')).toBeVisible();
+    await expect(options.getByTestId('legiit-business')).toHaveValue('');
+    await expect(options.getByTestId('brand-mine')).toHaveCount(0);
+    const stored = await lens.worker.evaluate(async () => (await chrome.storage.local.get('settings'))['settings'] as { legiit: { userId: string; businessId: string | null } });
+    expect(stored.legiit).toMatchObject({ userId: 'usr_another_account', businessId: null });
+  });
 });
 
 test.describe('connected to Legiit', () => {
@@ -135,7 +185,7 @@ test.describe('connected to Legiit', () => {
     // Opening and cancelling the dialog sends nothing.
     await panel.getByTestId('save-saveVisibilitySnapshot').click();
     await expect(panel.getByTestId('save-dialog')).toContainText('for BrightPath Dental');
-    await panel.getByTestId('save-dialog').getByRole('button', { name: 'Cancel' }).click();
+    await panel.getByTestId('save-cancel').click();
     expect(lens.legiit.saved.visibilitySnapshots).toEqual([]);
 
     const shown = (await reviewAndSend(lens, panel, 'saveVisibilitySnapshot')) as { keyword: string; grade: { letter: string; estimate: boolean }; organic: unknown[]; tracked: { name: string }[] };
@@ -203,6 +253,7 @@ test.describe('connected to Legiit', () => {
     const panel = await lens.openPanel(tabId, 'click');
     const summary = panel.getByTestId('cp-summary');
     await expect(summary.getByTestId('summary-source')).toHaveText('Built from the measured facts. No AI was used.');
+    await expect(summary).toContainText('Estimated organic click potential');
     // Being connected is not enough: nothing was sent to the AI endpoint yet.
     expect(lens.legiit.aiRequests).toEqual([]);
 
@@ -216,8 +267,11 @@ test.describe('connected to Legiit', () => {
     await panel.getByTestId('ai-confirm-send').click();
 
     await expect(summary.getByTestId('summary-source')).toContainText('Rewritten by Legiit AI');
-    await expect(summary).toContainText('Summary from Legiit AI (mock):');
+    // The mock model restates the first four facts: its text replaced the built-in summary, and "#6" kept its "#".
+    await expect(summary).toContainText('BrightPath Dental is organic result #6');
+    await expect(summary).not.toContainText('Estimated organic click potential');
     expect(lens.legiit.aiRequests).toEqual([shown]);
+    expect((shown as unknown as { maxOutputTokens: number }).maxOutputTokens).toBe(700);
     expect(lens.errors).toEqual([]);
   });
 
@@ -295,11 +349,54 @@ test.describe('an account with some endpoints switched off', () => {
     // The user is told what happened; the dialog does not just vanish.
     await expect(panel.getByTestId('save-error')).toHaveText('Legiit cannot receive this yet. Nothing was saved.');
     await expect(panel.getByTestId('save-confirm')).toBeDisabled();
-    await panel.getByTestId('save-dialog').getByRole('button', { name: 'Cancel' }).click();
+    await panel.getByTestId('save-cancel').click();
     await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toHaveCount(0);
     expect(lens.legiit.saved.visibilitySnapshots).toEqual([]);
     // The rest of the tab is unaffected.
     await expect(panel.getByTestId('cp-organic')).toBeVisible();
+  });
+
+  test('when an endpoint is missing, every button for it goes away, not only the one that was clicked', async ({ lens }) => {
+    const options = await connect(lens, 'demo-token');
+    for (const name of ['Riverbend Dental', 'Hilltop Smiles']) {
+      await options.getByTestId('add-competitor').click();
+      const row = options.getByTestId('brand-competitor').last();
+      await row.getByTestId('brand-name').fill(name);
+      await row.getByTestId('brand-name').blur();
+    }
+    await expect(options.getByTestId('save-addCompetitor')).toHaveCount(2);
+    // The session lists "competitors", but the endpoint is not built.
+    await lens.context.route('**/v1/businesses/*/competitors', (route) => route.fulfill({ status: 404, contentType: 'text/html', body: '<h1>Not Found</h1>' }));
+    await options.getByTestId('save-addCompetitor').first().click();
+    await options.getByTestId('save-confirm').click();
+    await expect(options.getByTestId('save-error')).toHaveText('Legiit cannot receive this yet. Nothing was saved.');
+    await options.getByTestId('save-cancel').click();
+    // No button is left that would open a dialog which cannot send.
+    await expect(options.getByTestId('save-addCompetitor')).toHaveCount(0);
+    await expect(options.getByTestId('save-dialog')).toHaveCount(0);
+  });
+
+  test('the outcome of a save is always seen: the dialog cannot be closed while it is sending', async ({ lens }) => {
+    await connect(lens, 'demo-token');
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await lens.context.route('**/v1/businesses/*/visibility-snapshots', async (route) => {
+      await held;
+      await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+    });
+    await panel.getByTestId('save-saveVisibilitySnapshot').click();
+    await panel.getByTestId('save-confirm').click();
+    await expect(panel.getByTestId('save-confirm')).toHaveText('Sending…');
+    await expect(panel.getByTestId('save-cancel')).toBeDisabled();
+    await panel.keyboard.press('Escape');
+    await expect(panel.getByTestId('save-dialog')).toBeVisible();
+    release();
+    await expect(panel.getByTestId('save-error')).toHaveText('Legiit had a problem (503)');
+    await expect(panel.getByTestId('save-cancel')).toBeEnabled();
+    await panel.getByTestId('save-cancel').click();
+    await expect(panel.getByTestId('save-dialog')).toHaveCount(0);
   });
 
   test('a business list that Legiit does not offer hides the drop-down instead of showing an empty one', async ({ lens }) => {
@@ -323,6 +420,60 @@ test.describe('an account with some endpoints switched off', () => {
     await expect(options.getByTestId('legiit-no-businesses')).toHaveCount(0);
   });
 
+  test('a list that fails later keeps showing the chosen business; an emptied account says the business is gone', async ({ lens }) => {
+    const options = await connect(lens, 'demo-token');
+    await expect(options.getByTestId('legiit-business')).toHaveValue('biz_brightpath');
+    // The list cannot be read: the chosen business is still shown as chosen, and nothing claims it is gone.
+    await lens.context.route('**/v1/businesses', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }));
+    await options.reload();
+    await expect(options.getByTestId('legiit-businesses-error')).toBeVisible();
+    await expect(options.getByTestId('legiit-business')).toHaveValue('biz_brightpath');
+    await expect(options.getByTestId('legiit-business').locator('option:checked')).toHaveText('BrightPath Dental');
+    await expect(options.getByTestId('legiit-business-gone')).toHaveCount(0);
+    // The account's last business was deleted: the list is read, and it is empty.
+    await lens.context.unroute('**/v1/businesses');
+    await lens.context.route('**/v1/businesses', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"businesses":[]}' }));
+    await options.reload();
+    await expect(options.getByTestId('legiit-business-gone')).toHaveText('BrightPath Dental is no longer in this Legiit account. Saves cannot reach it any more.');
+    await expect(options.getByTestId('legiit-no-businesses')).toBeVisible();
+    await expect(options.getByTestId('legiit-business')).toHaveValue('');
+  });
+
+  test('an AI endpoint that turns out to be missing is reported once, then no longer offered', async ({ lens }) => {
+    await connect(lens, 'demo-token');
+    await lens.context.route('**/v1/ai/completions', (route) => route.fulfill({ status: 404, contentType: 'text/html', body: '<h1>Not Found</h1>' }));
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    const summary = panel.getByTestId('cp-summary');
+    await summary.getByTestId('ai-rewrite').click();
+    await panel.getByTestId('ai-confirm-send').click();
+    await expect(summary).toContainText('Legiit AI is not available yet. Showing the built-in summary.');
+    await expect(summary.getByTestId('summary-source')).toHaveText('Built from the measured facts. No AI was used.');
+    await expect(summary).toContainText('Estimated organic click potential');
+    await expect(summary.getByTestId('ai-rewrite')).toHaveCount(0);
+  });
+
+  test('a redirect is never followed: the save fails with a clear reason', async ({ lens }) => {
+    await connect(lens, 'demo-token');
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    // A framework that "helpfully" redirects to a trailing slash. Chrome would repeat the POST as a GET without its body.
+    let redirected = 0;
+    await lens.context.route('**/v1/businesses/*/visibility-snapshots', (route) => {
+      redirected += 1;
+      return route.fulfill({ status: 302, headers: { location: `${LEGIIT_ORIGIN}/v1/session` } });
+    });
+    const before = legiitRequests(lens).length;
+    await panel.getByTestId('save-saveVisibilitySnapshot').click();
+    await panel.getByTestId('save-confirm').click();
+    await expect(panel.getByTestId('save-error')).toHaveText('Could not reach Legiit: The Legiit API answered with a redirect instead of a reply');
+    expect(redirected).toBe(1);
+    expect(lens.legiit.saved.visibilitySnapshots).toEqual([]);
+    // The address the redirect pointed to was never requested.
+    expect(legiitRequests(lens)).toHaveLength(before);
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toBeVisible();
+  });
+
   test('a business that no longer exists is reported, and the save action stays', async ({ lens }) => {
     const options = await connect(lens, 'demo-token');
     const { tabId } = await lens.open(scenario.urls.serpFull!);
@@ -333,7 +484,7 @@ test.describe('an account with some endpoints switched off', () => {
     await panel.getByTestId('save-saveVisibilitySnapshot').click();
     await panel.getByTestId('save-confirm').click();
     await expect(panel.getByTestId('save-error')).toHaveText('Legiit could not find it (404): No such business');
-    await panel.getByTestId('save-dialog').getByRole('button', { name: 'Cancel' }).click();
+    await panel.getByTestId('save-cancel').click();
     await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toBeVisible();
     // Settings says which business is gone, so the user can choose again.
     await options.reload();

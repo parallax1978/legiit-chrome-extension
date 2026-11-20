@@ -62,6 +62,12 @@ export class LegiitError extends Error {
     readonly code: LegiitErrorCode,
     message: string,
     readonly status = 0,
+    /**
+     * Only meaningful for "unauthorised". False when a 401 arrived without the
+     * agreed JSON error body: it may come from a proxy or gateway in front of
+     * the API rather than from the API, so the stored token is not deleted for it.
+     */
+    readonly definite = true,
   ) {
     super(message);
     this.name = 'LegiitError';

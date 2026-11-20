@@ -1,0 +1,24 @@
+{
+  "source": "Pasted answer",
+  "subject": "",
+  "capturedAt": "2026-11-20T12:00:00.000Z",
+  "rows": [
+    {
+      "surfaceId": "answer_text",
+      "surface": "Answer text",
+      "position": null,
+      "title": "The pasted answer names Lakeside Smiles and Capitol Dental Care",
+      "url": null,
+      "domain": null,
+      "competitors": [
+        "Lakeside Smiles",
+        "Capitol Dental Care"
+      ],
+      "evidence": "The pasted answer names Lakeside Smiles and Capitol Dental Care and does not mention you.",
+      "pageType": "surface",
+      "actionable": false,
+      "scanned": false,
+      "contacts": []
+    }
+  ]
+}

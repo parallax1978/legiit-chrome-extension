@@ -73,7 +73,7 @@ npm run mock
 LEGIIT_API_BASE_URL=http://localhost:8787 npm run dev
 ```
 
-In the extension: Settings → Legiit account → paste `demo-token` → Connect. `limited-token` simulates an account with fewer features; `invalid` is rejected.
+In the extension: Settings → Legiit account → paste `demo-token` → Connect. `limited-token` simulates an account with fewer features; any other token is rejected.
 
 ## Configuration
 

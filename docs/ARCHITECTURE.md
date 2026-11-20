@@ -122,12 +122,13 @@ Callers always pass the facts and the template text (`fallback`). If a model fai
 ## Legiit — `src/legiit/`
 
 - `client.ts`: the `LegiitClient` interface (ten methods) and the capability each needs.
-- `http-client.ts`: real HTTP against `LEGIIT_API_BASE_URL`. Replies are read tolerantly (unknown fields ignored, integer ids accepted, over-long text cut) and never trusted. 401 → `unauthorised`; 404 with `error.code` "not_found" → `rejected`; any other 404, 405 or 501 → `unavailable`; other 4xx → `rejected` with the server's message; 5xx → `server`. Bodies are capped at 1 MB; the time limit is 20 s (60 s for AI).
+- `http-client.ts`: real HTTP against `LEGIIT_API_BASE_URL`. Replies are read tolerantly and never trusted: unknown fields are ignored, integer ids and numeric text are accepted, over-long values are cut, an unreadable list entry is skipped, a reply over 5 MB is not read. 401 → `unauthorised` (`definite` only when the agreed error body came with it); 404 with `error.code` "not_found" on a path that names a business → `rejected`; any other 404, 405 or 501 → `unavailable`; other 4xx → `rejected` with the server's message; 5xx → `server`. Bodies are capped at 1 MB; the time limit covers the whole reply: 20 s, 60 s for AI. A redirect is never followed (`guardedFetch` uses `redirect: 'manual'` for the Legiit host).
 - `mock-client.ts`: fixtures, for unit tests. `mock-server/`: the same contract over HTTP for development (`npm run mock`) and for the end-to-end tests.
 - `auth.ts`: `AuthProvider`. v1 is a pasted token; OAuth means adding one class here.
 - `payloads.ts`: builds each save payload once; the dialog shows it and the client sends it. `limits.ts` holds the size limits the builders enforce; a unit test keeps them equal to the contract.
-- `prefill.ts`: tracked brands and competitors from Business Details.
-- `docs/legiit-api/`: the handoff kit for the Legiit backend team. `openapi.yaml` is the contract (OpenAPI 3.1), `reference.md` is generated from it, `examples/` are real requests built by the payload code and real replies of the mock server, and `tests/api/` is the conformance check (`npm run api:check`). Unit tests keep all of them in step with the client and the mock server; `npm run api:examples` refreshes the generated files.
+- `connection.ts`: the connection state. A confirmed 401 deletes the token; any other failure keeps it (`tokenKept`) so the panel can say "Legiit not connected" and offer "Try again". Endpoints that answer "not built" are hidden per extension page.
+- `prefill.ts`: tracked brands and competitors from Business Details; forgets the chosen business when another Legiit user connects.
+- `docs/legiit-api/`: the handoff kit for the Legiit backend team. `openapi.yaml` is the contract (OpenAPI 3.1), `reference.md` and `openapi.examples.json` (the contract with the examples built in, for Postman and similar tools) are generated from it, `examples/` are real requests built by the payload code and real replies of the mock server, and `tests/api/` is the conformance check (`npm run api:check`, started by `scripts/api-check.mjs`). Unit tests keep all of them in step with the client and the mock server; `npm run api:examples` refreshes the generated files.
 
 ## Build and packaging
 

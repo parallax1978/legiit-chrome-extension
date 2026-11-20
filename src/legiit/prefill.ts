@@ -60,6 +60,7 @@ export function applyBusinessDetails(settings: Settings, details: LegiitBusiness
     });
   }
   next.legiit = {
+    userId: next.legiit.userId,
     businessId: details.id,
     businessName: details.name,
     focusKeywords: details.focusKeywords.slice(0, 200),
@@ -73,6 +74,19 @@ export function clearBusinessDetails(settings: Settings): Settings {
   const next = structuredClone(settings);
   next.myBrands = next.myBrands.filter((b) => b.source !== 'legiit');
   next.competitors = next.competitors.filter((b) => b.source !== 'legiit');
-  next.legiit = { businessId: null, businessName: null, focusKeywords: [], avatars: [] };
+  next.legiit = { userId: null, businessId: null, businessName: null, focusKeywords: [], avatars: [] };
+  return next;
+}
+
+/**
+ * Records which Legiit user is connected. When it is a different user than
+ * before, the business that was chosen and everything pre-filled from it
+ * belong to the other account and are removed: a save must never go to a
+ * business of the previous account.
+ */
+export function applyConnectedUser(settings: Settings, userId: string): Settings {
+  const changed = settings.legiit.userId !== null && settings.legiit.userId !== userId;
+  const next = changed ? clearBusinessDetails(settings) : structuredClone(settings);
+  next.legiit.userId = userId;
   return next;
 }

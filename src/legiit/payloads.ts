@@ -4,7 +4,7 @@
  * The UI shows the object these functions return, verbatim, before the user
  * confirms, and then sends that same object: what you see is what is sent.
  */
-import type { TrackedBrands } from '@/brands/matcher';
+import { displayName, type TrackedBrands } from '@/brands/matcher';
 import type { SnapshotRecord } from '@/features/click-potential/snapshot';
 import type { Brief } from '@/features/instant-brief/compose';
 import type { NoiseReport } from '@/features/new-or-noise/classify';
@@ -15,6 +15,9 @@ import { clip, clipDomain, clipUrl, LIMITS } from './limits';
 import type { CompetitorPayload, ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
 
 const round = (value: number, digits = 4): number => Number(value.toFixed(digits));
+const within = (value: number, min: number, max: number): number => Math.min(Math.max(Math.round(value), min), max);
+/** A pixel position as the contract defines it: a whole number from 0 up, or null when it was not measured. */
+const px = (value: number | null): number | null => (value === null || !Number.isFinite(value) ? null : within(value, 0, LIMITS.px));
 
 /** Google's "start" parameter: how many results precede this page (0 on the first page). */
 function resultsOffset(pageUrl: string): number {
@@ -34,14 +37,15 @@ function resultsOffset(pageUrl: string): number {
 export function snapshotPayload(snapshot: SnapshotRecord, brands: TrackedBrands = { mine: [], competitors: [] }): VisibilitySnapshotPayload {
   // A brand counts as found only when its result is among the results that are sent.
   const sent = snapshot.tracked.filter((t) => t.position !== null && t.position <= LIMITS.snapshot.organic);
-  const found = sent.map((t) => ({ owner: t.owner, name: clip(t.name, LIMITS.brandName), position: t.position, topPx: t.top, fold: t.fold }));
+  const found = sent.map((t) => ({ owner: t.owner, name: clip(t.name, LIMITS.brandName), position: t.position, topPx: px(t.top), fold: px(t.top) === null ? null : t.fold }));
   const foundIds = new Set(sent.map((t) => t.brandId));
   const absent = [
     ...brands.mine.map((b) => ({ owner: 'mine' as const, brand: b })),
     ...brands.competitors.map((b) => ({ owner: 'competitor' as const, brand: b })),
   ]
-    .filter(({ brand }) => !foundIds.has(brand.id))
-    .map(({ owner, brand }) => ({ owner, name: clip(brand.name, LIMITS.brandName), position: null, topPx: null, fold: null }));
+    // A row the user added in Settings and left blank is not a brand: it has nothing to be found by.
+    .filter(({ brand }) => !foundIds.has(brand.id) && displayName(brand) !== '')
+    .map(({ owner, brand }) => ({ owner, name: clip(displayName(brand), LIMITS.brandName), position: null, topPx: null, fold: null }));
 
   return wellFormedDeep({
     keyword: clip(snapshot.keyword, LIMITS.snapshot.keyword),
@@ -49,10 +53,10 @@ export function snapshotPayload(snapshot: SnapshotRecord, brands: TrackedBrands 
     googleHost: snapshot.host,
     mode: 'web' as const,
     resultsOffset: resultsOffset(snapshot.url),
-    viewport: { width: Math.round(snapshot.viewport.width), height: Math.round(snapshot.viewport.height) },
+    viewport: { width: within(snapshot.viewport.width, 1, LIMITS.viewport), height: within(snapshot.viewport.height, 1, LIMITS.viewport) },
     location: snapshot.locationText === null ? null : clip(snapshot.locationText, LIMITS.snapshot.location),
-    firstOrganicTopPx: snapshot.firstOrganicTop,
-    firstOrganicFold: snapshot.firstOrganicFold,
+    firstOrganicTopPx: px(snapshot.firstOrganicTop),
+    firstOrganicFold: px(snapshot.firstOrganicTop) === null ? null : snapshot.firstOrganicFold,
     organicShare: round(snapshot.organicShare),
     grade: { letter: snapshot.gradeLetter, score: snapshot.gradeScore, estimate: true as const },
     firstScreenShares: snapshot.shares.slice(0, LIMITS.snapshot.firstScreenShares).map((s) => ({ type: s.type, share: round(s.share) })),
@@ -61,8 +65,8 @@ export function snapshotPayload(snapshot: SnapshotRecord, brands: TrackedBrands 
       url: clipUrl(o.url),
       domain: clipDomain(o.domain),
       title: clip(o.title, LIMITS.snapshot.title),
-      topPx: o.top,
-      fold: o.fold,
+      topPx: px(o.top),
+      fold: px(o.top) === null ? null : o.fold,
     })),
     tracked: [...found, ...absent].slice(0, LIMITS.snapshot.tracked),
   });
@@ -76,7 +80,7 @@ export function gapPayload(presence: Presence, rows: readonly GapRow[]): GapList
     rows: rows.slice(0, LIMITS.gapList.rows).map((r) => ({
       surfaceId: r.surfaceId,
       surface: clip(r.surface, LIMITS.gapList.surface),
-      position: r.position,
+      position: r.position === null ? null : within(r.position, 1, LIMITS.gapList.position),
       title: clip(r.title, LIMITS.gapList.title),
       url: r.url === null ? null : clipUrl(r.url),
       domain: r.domain === null ? null : clipDomain(r.domain),

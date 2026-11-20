@@ -1,0 +1,40 @@
+{
+  "keyword": "best dentist in austin",
+  "capturedAt": "2026-11-20T12:00:00.000Z",
+  "googleHost": "www.google.com",
+  "mode": "web",
+  "resultsOffset": 0,
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "location": null,
+  "firstOrganicTopPx": null,
+  "firstOrganicFold": null,
+  "organicShare": 0,
+  "grade": {
+    "letter": "F",
+    "score": 0,
+    "estimate": true
+  },
+  "firstScreenShares": [
+    {
+      "type": "ai_overview",
+      "share": 0.2681
+    },
+    {
+      "type": "ad",
+      "share": 0.1267
+    }
+  ],
+  "organic": [],
+  "tracked": [
+    {
+      "owner": "competitor",
+      "name": "lakesidesmiles.example",
+      "position": null,
+      "topPx": null,
+      "fold": null
+    }
+  ]
+}

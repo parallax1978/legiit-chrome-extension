@@ -11,7 +11,8 @@
  *            granted through Chrome's permission prompt          (source scans, comparisons)
  *
  * Requests never carry cookies or a referrer. A page that redirects to a site
- * the user did not grant is discarded unread.
+ * the user did not grant is discarded unread. A Legiit request is never
+ * redirected at all.
  */
 import { LEGIIT_ORIGIN, WAYBACK_ORIGIN } from '@/config/runtime';
 import { safeHttpUrl } from '@/lib/sanitize';
@@ -86,13 +87,18 @@ export async function guardedFetch(url: string, purpose: FetchPurpose, init: Req
       ...init,
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
-      redirect: 'follow',
+      // The Legiit API answers on the address that was called. A redirect is never followed there: Chrome would
+      // repeat a redirected POST as a GET without its body, and the reply to that GET would be taken for the answer.
+      redirect: purpose === 'legiit' ? 'manual' : 'follow',
     });
   } catch (error) {
     record({ at: Date.now(), host: target.host, purpose, status: 0 });
     throw error;
   }
   record({ at: Date.now(), host: target.host, purpose, status: response.status });
+  if (purpose === 'legiit' && (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400))) {
+    throw new NetworkPolicyError('The Legiit API answered with a redirect instead of a reply');
+  }
 
   // Where did the request actually end up?
   const finalUrl = safeHttpUrl(response.url) ?? target.href;

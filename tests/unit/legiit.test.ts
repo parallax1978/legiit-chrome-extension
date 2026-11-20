@@ -18,14 +18,16 @@ import { can, connect, disconnect, DISCONNECTED, loadConnection, noteFailure, re
 import { HttpLegiitClient, type HttpClientOptions } from '@/legiit/http-client';
 import { MockLegiitClient } from '@/legiit/mock-client';
 import { contentEditorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
-import { applyBusinessDetails, clearBusinessDetails } from '@/legiit/prefill';
-import { LIMITS, MAX_REQUEST_BYTES, TIMEOUT_MS } from '@/legiit/limits';
-import { ALL_CAPABILITIES, type WorkspaceFromBriefPayload } from '@/legiit/types';
+import { applyBusinessDetails, applyConnectedUser, clearBusinessDetails } from '@/legiit/prefill';
+import { LIMITS, MAX_REPLY_BYTES, MAX_REQUEST_BYTES, TIMEOUT_MS } from '@/legiit/limits';
+import { ALL_CAPABILITIES, type GapListPayload, type WorkspaceFromBriefPayload } from '@/legiit/types';
+import { hasLegiitAccess, requestLegiitAccess } from '@/net/permissions';
 import { getPack } from '@/selectors';
 import { LexicalEngine } from '@/similarity/engine';
 import { parseSerp } from '@/serp/parse';
 import { DEFAULT_SETTINGS, getLegiitToken, parseSettings } from '@/storage/settings';
 import { buildExampleNoiseReport } from '../helpers/api-examples';
+import type { ChromeMock } from '../helpers/chrome-mock';
 import { fixtureDoc, scenario, scenarioBrands, serpEnv } from '../helpers/fixtures';
 import { httpClient, mockLegiitFetch } from '../helpers/legiit';
 
@@ -126,7 +128,60 @@ describe('HTTP client against the mock API', () => {
     const details = await httpClient().client.getBusinessDetails('biz_deleted').catch((e: unknown) => e);
     expect(details).toMatchObject({ code: 'rejected', status: 404 });
     const { client } = answering(() => errorBody(404, 'not_found', ''));
-    await expect(client.getSession()).rejects.toMatchObject({ code: 'rejected', message: 'Legiit could not find it (404)' });
+    await expect(client.saveGapList('b', gapPayload(presence, buildGapRows(presence)))).rejects.toMatchObject({ code: 'rejected', message: 'Legiit could not find it (404)' });
+    // The code "not_found" only means "business missing" where the path names a business. A framework that puts
+    // that code on every 404 must not turn "this endpoint is not built" into an error message.
+    for (const call of [() => client.getSession(), () => client.listBusinesses(), () => client.getIndustryPulse(), () => client.createWorkspaceFromBrief(workspaceExample()), () => client.completeAI({ task: 'rewind', system: 's', prompt: 'p', maxOutputTokens: 700 })]) {
+      expect(isUnavailable(await call().catch((e: unknown) => e))).toBe(true);
+    }
+  });
+
+  it('takes a 401 as a verdict on the token only when the API says so in its error body', async () => {
+    const confirmed = await answering(() => errorBody(401, 'unauthorised', 'Token revoked')).client.getSession().catch((e: unknown) => e);
+    expect(confirmed).toMatchObject({ code: 'unauthorised', status: 401, definite: true });
+    for (const reply of [new Response('', { status: 401 }), new Response('<html>401 Authorization Required</html>', { status: 401 }), Response.json({ message: 'Unauthenticated.' }, { status: 401 })]) {
+      const bare = await answering(() => reply).client.getSession().catch((e: unknown) => e);
+      expect(bare).toMatchObject({ code: 'unauthorised', status: 401, definite: false });
+    }
+    // A gateway's bare 401 keeps the stored token and says so; the API's own 401 deletes it.
+    await new TokenAuthProvider().store('valid-but-gateway-is-down');
+    const kept = await loadConnection(answering(() => new Response('', { status: 401 })).client);
+    expect(kept).toMatchObject({ status: 'disconnected', error: 'Legiit answered 401 without saying why, so your token was kept. Try again, or paste a new token.', tokenKept: true });
+    expect(await getLegiitToken()).toBe('valid-but-gateway-is-down');
+    const removed = await loadConnection(answering(() => errorBody(401, 'unauthorised', 'Token revoked')).client);
+    expect(removed).toMatchObject({ status: 'disconnected', error: 'Your Legiit token was not accepted. Paste a new one to reconnect.' });
+    expect(await getLegiitToken()).toBeNull();
+    // A slow 401 for an old token does not delete a newer token stored in the meantime.
+    await new TokenAuthProvider().store('old');
+    const slow = answering(async () => {
+      await new TokenAuthProvider().store('new');
+      return errorBody(401, 'unauthorised', 'Token revoked');
+    });
+    await loadConnection(slow.client);
+    expect(await getLegiitToken()).toBe('new');
+    await disconnect();
+  });
+
+  it('refuses a reply that is too large to be real, and never follows a redirect', async () => {
+    const huge = await answering(() => new Response('{}', { status: 200, headers: { 'content-length': String(MAX_REPLY_BYTES + 1) } })).client.getSession().catch((e: unknown) => e);
+    expect(huge).toMatchObject({ code: 'invalid-response', message: 'Legiit sent a reply that is too large to read' });
+    const long = await answering(() => new Response(`{"user":{"id":"u"},"pad":"${'x'.repeat(MAX_REPLY_BYTES)}"}`)).client.getSession().catch((e: unknown) => e);
+    expect(long).toMatchObject({ code: 'invalid-response', message: 'Legiit sent a reply that is too large to read' });
+
+    for (const status of [301, 302, 303, 307, 308]) {
+      const fetchSpy = vi.fn(async () => new Response(null, { status, headers: { location: 'https://api.legiit.com/v1/session/' } }));
+      vi.stubGlobal('fetch', fetchSpy);
+      try {
+        await new TokenAuthProvider().store('demo-token');
+        expect(await loadConnection()).toMatchObject({ status: 'disconnected', error: 'Could not reach Legiit: The Legiit API answered with a redirect instead of a reply' });
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(fetchSpy.mock.calls[0]).toMatchObject(['https://api.legiit.com/v1/session', { redirect: 'manual', credentials: 'omit' }]);
+        expect(await getLegiitToken()).toBe('demo-token');
+      } finally {
+        vi.unstubAllGlobals();
+        await disconnect();
+      }
+    }
   });
 
   it('only 401 means the token is bad: 403 and other refusals keep it and show the reason', async () => {
@@ -183,6 +238,68 @@ describe('HTTP client against the mock API', () => {
     expect(TIMEOUT_MS).toEqual({ default: 20_000, ai: 60_000 });
   });
 
+  it('does not take an error reply that stops half-way for a verdict of the server', async () => {
+    const competitor = { name: 'n', domains: [] };
+    // The headers arrive, the body never finishes: that is the time limit, whatever the status says.
+    const stalled = (status: number) => (_url: string, init: RequestInit) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"error":'));
+          init.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')));
+        },
+      });
+      return new Response(body, { status });
+    };
+    for (const status of [401, 404, 422]) {
+      const error = await answering(stalled(status), { timeoutMs: 20 }).client.addCompetitor('b', competitor).catch((e: unknown) => e);
+      expect(error).toMatchObject({ code: 'network', message: 'Legiit did not answer in time' });
+      // Not "this endpoint does not exist": the save action must not be hidden for it.
+      expect(isUnavailable(error)).toBe(false);
+    }
+    // The connection drops in the middle of the body.
+    const dropped = (status: number) => () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"error":'));
+            controller.error(new TypeError('network error'));
+          },
+        }),
+        { status },
+      );
+    for (const status of [401, 404, 422]) {
+      const error = await answering(dropped(status)).client.addCompetitor('b', competitor).catch((e: unknown) => e);
+      expect(error).toMatchObject({ code: 'network' });
+      expect((error as LegiitError).message).toMatch(/^Could not reach Legiit: /);
+    }
+    // A complete reply in another shape is still read by its status.
+    expect(isUnavailable(await answering(() => new Response('<h1>Not Found</h1>', { status: 404 })).client.addCompetitor('b', competitor).catch((e: unknown) => e))).toBe(true);
+  });
+
+  it('never puts an id into a path that it could not be part of', async () => {
+    const loneSurrogate = String.fromCharCode(0xd800);
+    const { client, calls } = answering((url) => {
+      const path = new URL(url).pathname;
+      if (path === '/v1/businesses') return Response.json({ businesses: [{ id: '..', name: 'Up' }, { id: '.', name: 'Here' }, { id: loneSurrogate, name: 'Broken' }, { id: ' ', name: 'Blank' }, { id: 'ok/1', name: 'Fine' }] });
+      return Response.json({ id: '..' }, { status: 201 });
+    });
+    // Such a row is skipped like any other row that cannot be read.
+    expect(await client.listBusinesses()).toEqual([{ id: 'ok/1', name: 'Fine', domain: null }]);
+    // An id with a slash is one path segment.
+    await client.addCompetitor('ok/1', { name: 'n', domains: [] }).catch(() => undefined);
+    expect(new URL(calls.at(-1)!.url).pathname).toBe('/v1/businesses/ok%2F1/competitors');
+    // A saved item whose id is unusable is not reported as saved.
+    await expect(client.addCompetitor('ok', { name: 'n', domains: [] })).rejects.toMatchObject({ code: 'invalid-response' });
+    // A stored id of that kind is never sent, and the failure is a rejected promise like every other.
+    const before = calls.length;
+    for (const bad of ['..', '.', '', loneSurrogate]) {
+      await expect(client.getBusinessDetails(bad)).rejects.toMatchObject({ code: 'rejected' });
+      await expect(client.saveGapList(bad, {} as GapListPayload)).rejects.toMatchObject({ code: 'rejected' });
+      await expect(client.addCompetitor(bad, { name: 'n', domains: [] })).rejects.toMatchObject({ code: 'rejected' });
+    }
+    expect(calls).toHaveLength(before);
+  });
+
   it('reads replies tolerantly: integer ids, missing or null optional fields, unknown fields and capabilities', async () => {
     const { client } = answering((url) => {
       const path = new URL(url).pathname;
@@ -222,7 +339,7 @@ describe('HTTP client against the mock API', () => {
           brandNames: ['Acme', null, 42, { no: 1 }],
           domains: 'acme.example',
           competitors: [{ name: null, domains: ['rival.example', null] }, 'junk', { name: 'Named Only' }, { domains: 'solo.example' }],
-          focusKeywords: { not: 'a list' },
+          focusKeywords: true,
           avatars: [{ name: 'A', description: 5 }, { description: 'no name' }],
         });
       }
@@ -287,7 +404,7 @@ describe('HTTP client against the mock API', () => {
     expect(long.myBrands[0]!.domains).toEqual([longDomain]);
 
     // What a reply cannot do without is still required.
-    for (const body of [{}, { businesses: null }, { businesses: { 0: { id: 1 } } }, [{ id: 1, name: 'bare array' }], { data: { businesses: [] } }]) {
+    for (const body of [{}, { businesses: null }, { businesses: 'none' }, [{ id: 1, name: 'bare array' }], { data: { businesses: [] } }]) {
       await expect(answering(() => Response.json(body)).client.listBusinesses()).rejects.toMatchObject({ code: 'invalid-response' });
     }
     for (const body of [{}, { events: null }, [{ date: '2026-03-05', title: 'bare array' }]]) {
@@ -299,6 +416,34 @@ describe('HTTP client against the mock API', () => {
     for (const body of [{ data: { id: 1 } }, { id: null }, { id: 1.5 }, { id: 9007199254740993 }, { id: '   ' }]) {
       await expect(answering(() => Response.json(body, { status: 201 })).client.addCompetitor('b', { name: 'n', domains: [] })).rejects.toMatchObject({ code: 'invalid-response' });
     }
+    // Business details must look like a business: anything else would wipe the brands that were pre-filled before.
+    for (const body of [{}, { data: { name: 'Wrapped' } }, { error: { code: 'x', message: 'sent with 200' } }, { brand_names: ['snake_case only'] }, [], 'text', null]) {
+      await expect(answering(() => Response.json(body)).client.getBusinessDetails('1')).rejects.toMatchObject({ code: 'invalid-response' });
+    }
+    expect(await answering(() => Response.json({ domains: ['only-domains.example'] })).client.getBusinessDetails('1')).toMatchObject({ name: '', domains: ['only-domains.example'] });
+  });
+
+  it('understands the forms that JSON encoders and model APIs commonly produce', async () => {
+    const { client } = answering((url) => {
+      const path = new URL(url).pathname;
+      // A filtered PHP array is encoded as an object with numeric keys.
+      if (path === '/v1/session') return Response.json({ user: { id: 'u' }, capabilities: { 0: 'businesses', 2: 'ai' } });
+      if (path === '/v1/businesses') return Response.json({ businesses: { 1: { id: 1, name: 'One' }, 3: { id: 3, name: 'Three' } } });
+      if (path === '/v1/businesses/1') return Response.json({ name: 'One', domains: { 0: 'one.example', 4: 'uno.example' }, competitors: { 2: { name: 'Rival', domains: { 1: 'rival.example' } } } });
+      if (path === '/v1/industry-pulse') return Response.json({ events: { 7: { date: '2026-02-30', title: 'Day that does not exist' }, 9: { date: '2026-02-28', title: 'Real day' } } });
+      // The model's structured output placed in "text" as an object instead of a string.
+      if (path === '/v1/ai/completions') return Response.json({ text: { avatars: [], nextSteps: ['One'] } });
+      return Response.json({ id: 5, url: `https://app.legiit.example/${'x'.repeat(3000)}` }, { status: 201 });
+    });
+    expect((await client.getSession()).capabilities).toEqual(['businesses', 'ai']);
+    expect(await client.listBusinesses()).toEqual([{ id: '1', name: 'One', domain: null }, { id: '3', name: 'Three', domain: null }]);
+    expect(await client.getBusinessDetails('1')).toMatchObject({ domains: ['one.example', 'uno.example'], competitors: [{ name: 'Rival', domains: ['rival.example'] }] });
+    expect((await client.getIndustryPulse()).events).toEqual([{ date: '2026-02-28', title: 'Real day', type: 'news', url: null }]);
+    expect((await client.completeAI({ task: 'brief', system: 's', prompt: 'p', responseSchema: { type: 'object' }, maxOutputTokens: 2000 })).text).toBe('{"avatars":[],"nextSteps":["One"]}');
+    // Without a schema the reply is plain text: an object is not text.
+    await expect(client.completeAI({ task: 'rewind', system: 's', prompt: 'p', maxOutputTokens: 700 })).rejects.toMatchObject({ code: 'invalid-response' });
+    // A link that is too long to be whole is not shown at all.
+    expect(await client.addCompetitor('1', { name: 'n', domains: [] })).toEqual({ id: '5', url: null });
   });
 
   it('cuts text and lists that are longer than the limits instead of failing', async () => {
@@ -574,7 +719,7 @@ describe('pre-filling tracked brands from Business Details', () => {
       { id: expect.stringMatching(/^legiit-/), name: 'BrightPath Dental', domains: ['brightpathdental.example'], aliases: ['Bright Path Dental'], source: 'legiit' },
     ]);
     expect(next.competitors.map((c) => [c.name, c.domains, c.source])).toEqual([['Lakeside Smiles', ['lakesidesmiles.example'], 'legiit']]);
-    expect(next.legiit).toEqual({ businessId: 'biz_brightpath', businessName: 'BrightPath Dental', focusKeywords: ['best dentist in austin'], avatars: [{ name: 'Busy parent', description: 'd' }] });
+    expect(next.legiit).toEqual({ userId: null, businessId: 'biz_brightpath', businessName: 'BrightPath Dental', focusKeywords: ['best dentist in austin'], avatars: [{ name: 'Busy parent', description: 'd' }] });
     expect(parseSettings(next)).toEqual(next);
   });
 
@@ -591,6 +736,25 @@ describe('pre-filling tracked brands from Business Details', () => {
     expect(next.competitors.map((b) => b.id)).toEqual(['c']);
     const cleared = clearBusinessDetails(applyBusinessDetails(DEFAULT_SETTINGS, details));
     expect(cleared).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it('forgets the chosen business when another Legiit user connects', () => {
+    const first = applyConnectedUser(DEFAULT_SETTINGS, 'user-1');
+    expect(first.legiit.userId).toBe('user-1');
+    const chosen = applyBusinessDetails(first, details);
+    expect(chosen.legiit).toMatchObject({ userId: 'user-1', businessId: 'biz_brightpath' });
+    // The same user again (a new token, a reconnect): nothing is lost.
+    const again = applyConnectedUser(chosen, 'user-1');
+    expect(again).toEqual(chosen);
+    // Another user: the business and what was pre-filled from it belong to the other account.
+    const typed = { id: 'm', name: 'Typed By Hand', domains: [], aliases: [], source: 'manual' as const };
+    const other = applyConnectedUser({ ...chosen, competitors: [...chosen.competitors, typed] }, 'user-2');
+    expect(other.legiit).toEqual({ userId: 'user-2', businessId: null, businessName: null, focusKeywords: [], avatars: [] });
+    expect(other.myBrands).toEqual([]);
+    expect(other.competitors).toEqual([typed]);
+    expect(parseSettings(other)).toEqual(other);
+    // Disconnecting forgets the user as well.
+    expect(clearBusinessDetails(chosen).legiit.userId).toBeNull();
   });
 });
 
@@ -620,6 +784,57 @@ describe('connection', () => {
     const restored = await loadConnection(new MockLegiitClient({ unauthorised: true }));
     expect(restored).toMatchObject({ status: 'disconnected', error: 'Your Legiit token was not accepted. Paste a new one to reconnect.' });
     expect(await getLegiitToken()).toBeNull();
+  });
+
+  it('does not send something that cannot be a token, and keeps a working token when a new one fails', async () => {
+    const client = new MockLegiitClient();
+    for (const pasted of ['two words', 'line\nbreak', 'tab\there', 'emoji-😀', 'ünïcode', 'x'.repeat(4097)]) {
+      await expect(connect(pasted, client)).rejects.toMatchObject({ code: 'unauthorised', message: expect.stringContaining('does not look like a Legiit token') });
+    }
+    expect(client.calls).toHaveLength(0);
+    expect(await getLegiitToken()).toBeNull();
+    expect((await connect(`  ${'x'.repeat(4096)}  `, client)).status).toBe('connected');
+
+    // Pasting a second token that Legiit refuses leaves the first one in place.
+    await connect('good-token', client);
+    await expect(connect('typo-token', new MockLegiitClient({ unauthorised: true }))).rejects.toMatchObject({ code: 'unauthorised' });
+    expect(await getLegiitToken()).toBe('good-token');
+    // So does a server that cannot be reached at that moment.
+    class Down extends MockLegiitClient {
+      override async getSession(): Promise<never> {
+        throw new LegiitError('server', 'Legiit had a problem (503)', 503);
+      }
+    }
+    await expect(connect('another-token', new Down())).rejects.toMatchObject({ code: 'server' });
+    expect(await getLegiitToken()).toBe('good-token');
+    await disconnect();
+  });
+
+  it('says so when Chrome is not letting the extension reach Legiit, and can ask for the access back', async () => {
+    const chromeMock = (globalThis as unknown as { __chromeMock: ChromeMock }).__chromeMock;
+    class Unreachable extends MockLegiitClient {
+      override async getSession(): Promise<never> {
+        throw new LegiitError('network', 'Could not reach Legiit: Failed to fetch');
+      }
+    }
+    await new TokenAuthProvider().store('demo-token');
+    // Normal case: the host is granted, so a network failure is reported as it is.
+    expect(await hasLegiitAccess()).toBe(true);
+    expect(await loadConnection(new Unreachable())).toMatchObject({ status: 'disconnected', tokenKept: true, error: 'Could not reach Legiit: Failed to fetch' });
+    // The user switched the Legiit host off under the extension's site access in Chrome.
+    chromeMock.withheld.add('https://api.legiit.com/*');
+    expect(await hasLegiitAccess()).toBe(false);
+    expect(await loadConnection(new Unreachable())).toMatchObject({ status: 'disconnected', tokenKept: true, error: 'Chrome is not letting Legiit Lens reach api.legiit.com. Click “Try again” to allow it.' });
+    expect(await getLegiitToken()).toBe('demo-token');
+    // A click asks Chrome for exactly that host, and nothing is asked when it is already there.
+    chromeMock.requestAnswer = false;
+    expect(await requestLegiitAccess()).toBe(false);
+    chromeMock.requestAnswer = true;
+    expect(await requestLegiitAccess()).toBe(true);
+    expect(await requestLegiitAccess()).toBe(true);
+    expect(chromeMock.requested).toEqual([['https://api.legiit.com/*'], ['https://api.legiit.com/*']]);
+    expect(await hasLegiitAccess()).toBe(true);
+    await disconnect();
   });
 
   it('explains when the API does not exist yet, and keeps nothing', async () => {
@@ -665,7 +880,7 @@ describe('API contract (docs/legiit-api/openapi.yaml)', () => {
   const contract = parseYaml(readFileSync(resolve(__dirname, '../../docs/legiit-api/openapi.yaml'), 'utf8')) as {
     openapi: string;
     paths: Record<string, Record<string, { operationId: string; 'x-capability'?: string }>>;
-    components: { schemas: Record<string, { enum?: string[] }> };
+    components: { schemas: Record<string, { 'x-values'?: string[] }> };
   };
   const operations = Object.entries(contract.paths).flatMap(([path, methods]) =>
     Object.entries(methods).map(([method, op]) => ({ path, method: method.toUpperCase(), ...op })),
@@ -678,7 +893,7 @@ describe('API contract (docs/legiit-api/openapi.yaml)', () => {
 
   it('declares the same capability for each operation as the client', () => {
     for (const op of operations) expect(op['x-capability'] ?? null, op.operationId).toBe(METHOD_CAPABILITY[op.operationId as LegiitMethod]);
-    expect(contract.components.schemas['Capability']?.enum).toEqual([...ALL_CAPABILITIES]);
+    expect(contract.components.schemas['Capability']?.['x-values']).toEqual([...ALL_CAPABILITIES]);
   });
 
   it('is implemented, path for path, by the mock server', () => {

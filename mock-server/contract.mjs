@@ -1,7 +1,9 @@
 /**
  * The API contract (docs/legiit-api/openapi.yaml) as something the mock can
  * check requests against. A body the contract does not allow is refused with
- * 422, exactly as a server built from the contract would refuse it.
+ * 422, exactly as a server built from the contract would refuse it. Lengths are
+ * counted in characters (code points), as the guide tells a server to: that is
+ * never stricter than the count the extension uses (UTF-16 units).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

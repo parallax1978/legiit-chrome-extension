@@ -6,6 +6,7 @@ import { errorMessage, isAbortError } from '@/lib/async';
 import { can, connect as connectLegiit, disconnect as disconnectLegiit, DISCONNECTED, loadConnection, type Connection } from '@/legiit/connection';
 import type { LegiitMethod } from '@/legiit/client';
 import type { InvokeIntent, PanelEvent } from '@/model/messages';
+import { requestLegiitAccess } from '@/net/permissions';
 import { activeTabId, pinnedTabId, probeTab, type Access } from '@/panel/tabs';
 import { DEFAULT_SETTINGS, getSettings, onLegiitTokenChanged, onSettingsChanged, trackedBrands, updateSettings, type Settings } from '@/storage/settings';
 
@@ -85,7 +86,10 @@ export function useSettings(): SettingsValue {
 interface ConnectionValue {
   connection: Connection;
   loading: boolean;
-  connect: (token: string) => Promise<void>;
+  /** Resolves with the new connection, so the caller can tell which account it is. */
+  connect: (token: string) => Promise<Connection>;
+  /** Checks the stored token again after a failed check. Call from a click: it may have to ask Chrome for access. */
+  retry: () => Promise<void>;
   disconnect: () => Promise<void>;
   /** True when the UI for this Legiit method should be shown. */
   can: (method: LegiitMethod) => boolean;
@@ -98,7 +102,8 @@ const ConnectionContext = createContext<ConnectionValue | null>(null);
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState<Connection>(DISCONNECTED);
   const [loading, setLoading] = useState(true);
-  const [, bump] = useState(0);
+  /** Goes up when an endpoint turned out to be missing: every consumer then asks `can` again. */
+  const [revision, bump] = useState(0);
 
   /** True while this page itself is connecting or disconnecting: its own token change needs no reload. */
   const changingRef = useRef(false);
@@ -127,10 +132,20 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     () => ({
       connection,
       loading,
+      retry: async () => {
+        // First thing in the click: if the user withheld the Legiit host in Chrome, this is where Chrome asks.
+        await requestLegiitAccess();
+        setLoading(true);
+        setConnection(await loadConnection());
+        setLoading(false);
+      },
       connect: async (token) => {
+        await requestLegiitAccess();
         changingRef.current = true;
         try {
-          setConnection(await connectLegiit(token));
+          const next = await connectLegiit(token);
+          setConnection(next);
+          return next;
         } finally {
           changingRef.current = false;
         }
@@ -147,7 +162,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       can: (method) => can(connection, method),
       refreshCapabilities,
     }),
-    [connection, loading, refreshCapabilities],
+    // `revision` is listed on purpose: `can` also reads which endpoints were found missing on this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [connection, loading, refreshCapabilities, revision],
   );
   return <ConnectionContext.Provider value={value}>{children}</ConnectionContext.Provider>;
 }

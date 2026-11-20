@@ -93,10 +93,13 @@ export function stripWww(host: string): string {
   return h.startsWith('www.') ? h.slice(4) : h;
 }
 
-/** Normalise user-typed domains: accepts "https://www.Example.com/path" and returns "example.com". */
+/**
+ * Normalise user-typed domains: accepts "https://www.Example.com/path" and returns "example.com".
+ * An e-mail address is not a domain: "jane@gmail.com" must not make every gmail.com result count as a brand's own.
+ */
 export function normalizeDomainInput(value: string): string | null {
   const raw = value.trim().toLowerCase();
-  if (!raw) return null;
+  if (!raw || raw.includes('@')) return null;
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//.test(raw) ? raw : `https://${raw}`;
   const safe = safeHttpUrl(withScheme);
   if (!safe) return null;

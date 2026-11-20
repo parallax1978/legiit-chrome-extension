@@ -22,7 +22,8 @@ import { searchEntries } from '@/features/instant-brief/search';
 import { classifySentences, type NoiseReport } from '@/features/new-or-noise/classify';
 import { contentSentences, textSentences } from '@/features/new-or-noise/sentences';
 import { buildGapRows, sortGapRows } from '@/features/why-not-me/gap';
-import { buildSerpPresence, summarisePresence } from '@/features/why-not-me/presence';
+import { answerFromPastedText } from '@/answers/read';
+import { buildAnswerPresence, buildSerpPresence, summarisePresence } from '@/features/why-not-me/presence';
 import { analysePage, pickSerpTargets } from '@/features/why-not-me/scan';
 import { extractMainContent } from '@/extract/main-content';
 import { competitorPayload, contentEditorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
@@ -96,6 +97,10 @@ export async function buildExampleRequests(): Promise<Record<string, unknown>> {
 
   const brief = buildExampleBrief();
   const explanation = explainClickPotential(cp, matcher);
+  // A site that gave the extension almost nothing: one page without contact details, services or structured data.
+  const sparseDoc = new DOMParser().parseFromString('<!doctype html><html><head><title>Welcome</title></head><body><main><h1>Welcome</h1><p>Our new website is coming soon.</p></main></body></html>', 'text/html');
+  const sparsePage: SitePage = { url: 'https://plain-site.example/', kind: 'home', doc: sparseDoc };
+  const sparse = composeBrief({ id: 'brief-little-found', now: EXAMPLE_NOW, facts: extractBusinessFacts([sparsePage]), issues: [], competitors: [] });
 
   const noise = await buildExampleNoiseReport();
   // Text the user pasted, compared with a single page: several values are empty and all of them are valid.
@@ -105,14 +110,31 @@ export async function buildExampleRequests(): Promise<Record<string, unknown>> {
     new LexicalEngine(),
   );
 
+  // A results page whose visible results are all inside other blocks (AI Overview, ads, map pack): no organic
+  // result, so several values are null or empty. Saved by a user who tracks one competitor by its domain only.
+  const blocksOnly = { ...serp, organic: [], locationText: null };
+  const domainOnly = { mine: [], competitors: [{ id: 'c', name: '', domains: ['lakesidesmiles.example'], aliases: [] }] };
+  const bare = toSnapshot(blocksOnly, computeClickPotential(blocksOnly, new BrandMatcher(domainOnly)));
+  // An answer the user pasted into the extension: there is no question, so the subject is empty.
+  const pastedAnswer = buildAnswerPresence(
+    answerFromPastedText(
+      'For a family dentist in South Austin, Lakeside Smiles and Capitol Dental Care are the names that come up most often.\n\nLakeside Smiles is known for same-week appointments. Sources: https://www.austinfamilyguide.example/best-dentists-south-austin',
+      EXAMPLE_NOW,
+    ),
+    matcher,
+  );
+
   return {
     'saveVisibilitySnapshot.request.json': snapshotPayload(snapshot, scenarioBrands),
+    'saveVisibilitySnapshot.no-organic-results.request.json': snapshotPayload(bare, domainOnly),
     'saveGapList.request.json': gapPayload(presence, rows),
+    'saveGapList.pasted-answer.request.json': gapPayload(pastedAnswer, buildGapRows(pastedAnswer)),
     'addCompetitor.request.json': competitorPayload({ name: 'Riverbend Dental', domains: ['riverbenddental.example'] }),
     'addCompetitor.name-only.request.json': competitorPayload({ name: 'Dr. Okafor’s Practice', domains: [] }),
     'sendToContentEditor.request.json': contentEditorPayload({ targetKeyword: 'how often should you get your teeth cleaned', source: 'page', pageUrl: ARTICLE_URL, pageTitle: noise.title, capturedAt: EXAMPLE_NOW, report: noise.report }),
     'sendToContentEditor.pasted-text.request.json': contentEditorPayload({ targetKeyword: '', source: 'pasted', pageUrl: null, pageTitle: '', capturedAt: EXAMPLE_NOW, report: pasted }),
     'createWorkspaceFromBrief.request.json': workspacePayload(brief, briefToMarkdown(brief, { name: 'North Star SEO', logoDataUrl: null })),
+    'createWorkspaceFromBrief.little-found.request.json': workspacePayload(sparse, briefToMarkdown(sparse, { name: '', logoDataUrl: null })),
     'completeAI.request.json': legiitAiPayload({ task: 'click-potential', instruction: SUMMARY_INSTRUCTIONS['click-potential'], facts: explanation, fallback: explanation }),
     'completeAI.brief.request.json': legiitAiPayload(briefRewriteRequest(brief)),
   };

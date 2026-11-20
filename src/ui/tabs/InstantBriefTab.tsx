@@ -5,18 +5,18 @@ import { legiitAiPayload } from '@/ai/provider';
 import { parseHtml } from '@/extract/html';
 import { extractPageFacts } from '@/extract/page-facts';
 import { composeBrief, withRewrites, type Brief, type BriefCompetitor } from '@/features/instant-brief/compose';
-import { classifyPage, pickSitePages } from '@/features/instant-brief/crawl';
-import { extractBusinessFacts, type SitePage } from '@/features/instant-brief/extract';
+import { assembleSitePages, linksToRead, pickSitePages } from '@/features/instant-brief/crawl';
+import { extractBusinessFacts } from '@/features/instant-brief/extract';
 import { findIssues } from '@/features/instant-brief/issues';
 import { briefToMarkdown } from '@/features/instant-brief/markdown';
 import { searchEntries } from '@/features/instant-brief/search';
 import { recordRun } from '@/features/shared/gating';
+import { markUnavailable } from '@/legiit/connection';
 import { workspacePayload } from '@/legiit/payloads';
 import { downloadText } from '@/lib/csv';
 import { randomId } from '@/lib/hash';
 import { normalizeDomainInput, slugify, stripWww } from '@/lib/sanitize';
 import { pluralize } from '@/lib/text';
-import { urlKey } from '@/lib/url';
 import { BrandStyleSchema, PageSnapshotSchema, SameOriginFetchReplySchema, type BrandStyle } from '@/model/schemas';
 import { findResultsPages, sendToTab } from '@/panel/tabs';
 import { deleteBrief, listBriefs, listKeywords, saveBrief } from '@/storage/db';
@@ -32,7 +32,7 @@ interface Candidate extends BriefCompetitor {
 export function InstantBriefTab() {
   const { access } = useTarget();
   const { settings, matcher } = useSettings();
-  const { connection } = useConnection();
+  const { connection, refreshCapabilities } = useConnection();
   const provider = useAiProvider();
   const [brief, setBrief] = useState<Brief | null>(null);
   const [saved, setSaved] = useState<Brief[]>([]);
@@ -79,25 +79,11 @@ export function InstantBriefTab() {
         const snapshot = await sendToTab(tabId, { type: 'lens:get-page' }, PageSnapshotSchema);
         const currentDoc = parseHtml(snapshot.html);
         const links = pickSitePages(currentDoc, snapshot.url);
-        const others = links.filter((l) => urlKey(l.url) !== urlKey(snapshot.url));
+        const others = linksToRead(links, snapshot.url);
         progress(1, links.length, 'Reading site pages');
         // The other pages are fetched from inside the tab: same site, no extra permission, no cookies.
         const fetched = others.length > 0 ? await sendToTab(tabId, { type: 'lens:fetch-same-origin', urls: others.map((l) => l.url) }, SameOriginFetchReplySchema) : { pages: [] };
-        const pages: SitePage[] = [];
-        const skipped: string[] = [];
-        for (const link of links) {
-          if (urlKey(link.url) === urlKey(snapshot.url)) {
-            pages.push({ url: snapshot.url, kind: link.kind, doc: currentDoc });
-          } else {
-            const page = fetched.pages.find((p) => p.url === link.url);
-            if (page?.ok) pages.push({ url: page.finalUrl ?? link.url, kind: link.kind, doc: parseHtml(page.html) });
-            else skipped.push(link.url);
-          }
-        }
-        // The open page is always part of the brief, even when it is not among the picked links (an address with a query string, say).
-        if (!pages.some((p) => urlKey(p.url) === urlKey(snapshot.url))) {
-          pages.unshift({ url: snapshot.url, kind: classifyPage(new URL(snapshot.url).pathname, ''), doc: currentDoc });
-        }
+        const { pages, unread: skipped } = assembleSitePages<Document>({ url: snapshot.url, doc: currentDoc }, links, fetched.pages, parseHtml);
         progress(links.length, links.length, 'Reading brand styling');
         let style: BrandStyle | null = null;
         try {
@@ -168,7 +154,11 @@ export function InstantBriefTab() {
     setAiNote(null);
     try {
       const outcome = await rewriteBrief(brief, provider);
-      if (outcome.keptTemplateBecause) setAiNote(`${provider.label} could not be used (${outcome.keptTemplateBecause}). The draft text is unchanged.`);
+      if (outcome.endpointMissing) {
+        markUnavailable('completeAI');
+        refreshCapabilities();
+        setAiNote('Legiit AI is not available yet. The draft text is unchanged.');
+      } else if (outcome.keptTemplateBecause) setAiNote(`${provider.label} could not be used (${outcome.keptTemplateBecause}). The draft text is unchanged.`);
       else {
         await saveBrief(outcome.brief);
         setBrief(outcome.brief);

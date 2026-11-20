@@ -99,6 +99,12 @@ export function App() {
               <Chip tone="ok">Legiit connected</Chip>
             </span>
           )}
+          {!connected && connection.error && (
+            // A token is stored but Legiit could not be reached or refused it: say so here, not only in Settings.
+            <button type="button" className="chip-button" onClick={() => choose('settings')} title={`${connection.error} Open Settings.`} data-testid="connection-problem">
+              <Chip tone="warn">Legiit not connected</Chip>
+            </button>
+          )}
         </div>
         <TargetLine />
         <div className="tabs" role="tablist" aria-label={`${PRODUCT_NAME} features`}>

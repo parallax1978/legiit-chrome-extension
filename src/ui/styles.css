@@ -125,6 +125,8 @@ label.check input { margin-top: 3px; }
 
 /* ---------- Chips, notices, progress ---------- */
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); white-space: nowrap; }
+.chip-button { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 999px; }
+.chip-button:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 .chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }

@@ -18,6 +18,8 @@ function event() {
 export interface ChromeMock {
   store: Map<string, unknown>;
   granted: Set<string>;
+  /** Required hosts the user switched off under the extension's "Site access" in Chrome. */
+  withheld: Set<string>;
   /** What chrome.permissions.request resolves to (the user's answer to Chrome's prompt). */
   requestAnswer: boolean;
   requested: string[][];
@@ -30,14 +32,17 @@ export function installChromeMock(): ChromeMock {
   const storageChanged = event();
   const permissionsAdded = event();
   const permissionsRemoved = event();
+  const withheld = new Set<string>();
   const state: ChromeMock = {
     store,
     granted,
+    withheld,
     requestAnswer: true,
     requested: [],
     reset() {
       store.clear();
       granted.clear();
+      withheld.clear();
       state.requestAnswer = true;
       state.requested = [];
     },
@@ -93,11 +98,17 @@ export function installChromeMock(): ChromeMock {
     storage: { local, onChanged: storageChanged },
     permissions: {
       async contains(query: { origins?: string[] }) {
-        return (query.origins ?? []).every((o) => granted.has(o));
+        // Hosts of the manifest are granted at install, unless the user withheld them afterwards.
+        return (query.origins ?? []).every((o) => granted.has(o) || (manifest.host_permissions.includes(o) && !withheld.has(o)));
       },
       async request(query: { origins?: string[] }) {
         state.requested.push([...(query.origins ?? [])]);
-        if (state.requestAnswer) for (const o of query.origins ?? []) granted.add(o);
+        if (state.requestAnswer) {
+          for (const o of query.origins ?? []) {
+            granted.add(o);
+            withheld.delete(o);
+          }
+        }
         return state.requestAnswer;
       },
       async remove(query: { origins?: string[] }) {

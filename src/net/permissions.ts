@@ -3,8 +3,35 @@
  * API host is granted at install; a site is requested by name, from a user
  * gesture, at the moment a feature needs to read it.
  */
+import { LEGIIT_ORIGIN } from '@/config/runtime';
 import { stripWww } from '@/lib/sanitize';
 import { originPatternFor, siteOfPattern } from '@/lib/url';
+
+const LEGIIT_PATTERN = `${LEGIIT_ORIGIN}/*`;
+
+/**
+ * The Legiit API host is granted at install, but Chrome lets a user withhold
+ * it afterwards (the extension's "Site access" setting). Requests then only
+ * work if the API answers with CORS headers, so the extension checks and can
+ * ask for the access again.
+ */
+export async function hasLegiitAccess(): Promise<boolean> {
+  try {
+    return await chrome.permissions.contains({ origins: [LEGIIT_PATTERN] });
+  } catch {
+    return true;
+  }
+}
+
+/** Asks Chrome to give the Legiit host back. Must be called from a click handler. Resolves false if the user declines. */
+export async function requestLegiitAccess(): Promise<boolean> {
+  if (await hasLegiitAccess()) return true;
+  try {
+    return await chrome.permissions.request({ origins: [LEGIIT_PATTERN] });
+  } catch {
+    return false;
+  }
+}
 
 /** Unique host-permission patterns covering the given URLs. */
 export function patternsFor(urls: readonly string[]): string[] {

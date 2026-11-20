@@ -15,13 +15,14 @@ export interface MockState {
   session: { capabilities: string[] } & Record<string, unknown>;
   businesses: unknown;
   details: Record<string, { competitors: { name: string; domains?: string[] }[] } & Record<string, unknown>>;
+  competitorIds: Record<string, string[]>;
   pulse: unknown;
   saved: {
     visibilitySnapshots: { id: string; businessId: string; payload: Record<string, unknown> }[];
     gapLists: { id: string; businessId: string; payload: Record<string, unknown> }[];
     competitors: { id: string; businessId: string; payload: Record<string, unknown> }[];
     contentDocuments: { id: string; businessId: string; payload: Record<string, unknown> }[];
-    workspaces: { id: string; payload: Record<string, unknown> }[];
+    workspaces: { id: string; account: string; payload: Record<string, unknown> }[];
   };
   aiRequests: Record<string, unknown>[];
   requests: { method: string; path: string; idempotencyKey: string | null }[];

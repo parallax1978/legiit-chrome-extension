@@ -6,7 +6,7 @@ import { LEGIIT_API_BASE_URL } from '@/config/runtime';
 import { isUnavailable, LegiitError } from '@/legiit/client';
 import { noteFailure } from '@/legiit/connection';
 import { competitorPayload } from '@/legiit/payloads';
-import { applyBusinessDetails, clearBusinessDetails } from '@/legiit/prefill';
+import { applyBusinessDetails, applyConnectedUser, clearBusinessDetails } from '@/legiit/prefill';
 import type { LegiitBusiness } from '@/legiit/types';
 import { errorMessage } from '@/lib/async';
 import { randomId } from '@/lib/hash';
@@ -191,7 +191,7 @@ function AgencySection() {
 }
 
 function LegiitSection() {
-  const { connection, loading, connect, disconnect, can, refreshCapabilities } = useConnection();
+  const { connection, loading, connect, retry, disconnect, can, refreshCapabilities } = useConnection();
   const { settings, update } = useSettings();
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -211,7 +211,7 @@ function LegiitSection() {
       (list) => alive && setBusinesses(list),
       (e: unknown) => {
         if (!alive) return;
-        setBusinesses([]);
+        // The list stays "not known": an account whose list could not be read is not an account without businesses.
         if (isUnavailable(e)) {
           // Legiit does not offer the list (yet): the drop-down goes away, like any other feature that is not there.
           noteFailure('listBusinesses', e);
@@ -230,8 +230,11 @@ function LegiitSection() {
     setBusy(true);
     setError(null);
     try {
-      await connect(token);
+      const next = await connect(token);
       setToken('');
+      setNote(null);
+      const userId = next.session?.user.id;
+      if (userId) await update((draft) => applyConnectedUser(draft, userId));
     } catch (e) {
       setError(e instanceof LegiitError ? e.message : errorMessage(e));
     } finally {
@@ -263,6 +266,11 @@ function LegiitSection() {
     }
   };
 
+  const stored = settings.legiit.businessId;
+  /** The list was read and the chosen business is not in it (also when the list is empty). */
+  const gone = businesses !== null && stored !== null && !businesses.some((b) => b.id === stored);
+  const user = connection.session?.user;
+
   return (
     <Card title="Legiit account (optional)" testId="settings-legiit">
       <p className="small muted">
@@ -275,14 +283,16 @@ function LegiitSection() {
           <div className="row" data-testid="legiit-connected">
             <Chip tone="ok">Connected</Chip>
             <span>
-              {connection.session.user.name || connection.session.user.email || 'Legiit account'}
+              {user?.name.trim() || user?.email?.trim() || 'Legiit account'}
               {connection.session.plan ? ` · ${connection.session.plan}` : ''}
             </span>
           </div>
           {canList && (
             <Field label="Business" hint="Saves go to this business, and its brand names and competitors are pre-filled.">
-              <select value={settings.legiit.businessId ?? ''} onChange={(e) => void chooseBusiness(e.target.value)} data-testid="legiit-business">
+              <select value={gone ? '' : (stored ?? '')} onChange={(e) => void chooseBusiness(e.target.value)} data-testid="legiit-business">
                 <option value="">Choose a business…</option>
+                {/* While the list is loading, or could not be loaded, the chosen business still shows as chosen. */}
+                {stored !== null && businesses === null && <option value={stored}>{settings.legiit.businessName || stored}</option>}
                 {(businesses ?? []).map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name || b.domain || b.id}
@@ -296,9 +306,10 @@ function LegiitSection() {
               {listError}
             </Notice>
           )}
-          {businesses !== null && businesses.length > 0 && settings.legiit.businessId && !businesses.some((b) => b.id === settings.legiit.businessId) && (
+          {gone && (
             <Notice tone="warn" testId="legiit-business-gone">
-              {settings.legiit.businessName ?? 'The business you chose'} is no longer in this Legiit account. Choose a business again.
+              {settings.legiit.businessName || 'The business you chose'} is no longer in this Legiit account.{' '}
+              {businesses.length > 0 ? 'Choose a business again.' : 'Saves cannot reach it any more.'}
             </Notice>
           )}
           {canList && !listError && businesses !== null && businesses.length === 0 && (
@@ -338,6 +349,15 @@ function LegiitSection() {
             <Notice tone="error" testId="legiit-error">
               {error ?? connection.error}
             </Notice>
+          )}
+          {connection.tokenKept && !busy && (
+            // The token is still stored: nothing has to be pasted again to try once more.
+            <div className="row">
+              <Button small onClick={() => { setError(null); void retry(); }} data-testid="legiit-retry">
+                Try again
+              </Button>
+              <span className="small muted">Your token is still stored on this device.</span>
+            </div>
           )}
         </>
       )}

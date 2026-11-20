@@ -1,0 +1,42 @@
+{
+  "briefId": "brief-little-found",
+  "businessName": "plain-site.example",
+  "siteUrl": "https://plain-site.example/",
+  "createdAt": "2026-11-20T12:00:00.000Z",
+  "contact": {
+    "phones": [],
+    "emails": [],
+    "addresses": []
+  },
+  "serviceAreas": [],
+  "services": [],
+  "competitors": [],
+  "focusKeywords": [],
+  "avatars": [
+    {
+      "name": "The urgent need",
+      "description": "Someone who needs its main service now and has not chosen a business yet. Wants: To be seen quickly, to know the price before committing, and to reach a person on the first try. Worries about: Being kept waiting, surprise costs, and picking the wrong provider under pressure.",
+      "draft": true
+    },
+    {
+      "name": "The careful researcher",
+      "description": "Someone comparing two or three providers before booking its main service. Wants: Evidence: reviews, real results, clear pricing, and a sense of who they will be dealing with. Worries about: Paying too much, being upsold, and not being able to tell providers apart.",
+      "draft": true
+    },
+    {
+      "name": "The regular",
+      "description": "An existing customer or a household that wants one dependable business for its main service and everything after. Wants: Convenience, continuity, reminders, and fair prices for coming back. Worries about: Being treated like a stranger each visit, and awkward booking.",
+      "draft": true
+    }
+  ],
+  "issues": [],
+  "nextSteps": [
+    "No customer testimonials were found on the site. Add a few, with names and locations.",
+    "Add LocalBusiness or Organization structured data with name, address, phone and opening hours.",
+    "State the areas served in plain text so people and search engines can see them.",
+    "Consider publishing prices or price ranges; no pricing page was found in the navigation.",
+    "Name two or three competitors so their visibility can be compared with this site.",
+    "Review Google results for the focus keywords to record where the site and its competitors appear."
+  ],
+  "markdown": "# Client brief: plain-site.example\n\nPrepared 2026-11-20\n\nSource: https://plain-site.example/\n\n## Business\n\n- **Name:** plain-site.example\n- **Website:** plain-site.example\n\n## Offer\n\nNo services or products could be read from the navigation or the services page.\n\n## Customers\n\n_Draft avatars. Starting points written from the site, not research. Confirm with the client._\n\n### Draft — The urgent need\n\n- Someone who needs its main service now and has not chosen a business yet.\n- Wants: To be seen quickly, to know the price before committing, and to reach a person on the first try.\n- Worries about: Being kept waiting, surprise costs, and picking the wrong provider under pressure.\n- Searches for: its main service near me · business open now · same day business\n- The site has little to reassure this person yet.\n\n### Draft — The careful researcher\n\n- Someone comparing two or three providers before booking its main service.\n- Wants: Evidence: reviews, real results, clear pricing, and a sense of who they will be dealing with.\n- Worries about: Paying too much, being upsold, and not being able to tell providers apart.\n- Searches for: best business · its main service cost · plain-site.example reviews\n- The site has little to reassure this person yet.\n\n### Draft — The regular\n\n- An existing customer or a household that wants one dependable business for its main service and everything after.\n- Wants: Convenience, continuity, reminders, and fair prices for coming back.\n- Worries about: Being treated like a stranger each visit, and awkward booking.\n- Searches for: plain-site.example · business its main service · plain-site.example hours\n- The site has little to reassure this person yet.\n\n## Competitors\n\nNo competitors have been added yet.\n\n## Search presence\n\nNo search data yet. Open a Google results page for a focus keyword and it will appear here.\n\n## Issues\n\n_1 page read: /_\n\nNo basic on-page issues were found on the pages that were read.\n\n## Next steps\n\n### Recommended\n\n- No customer testimonials were found on the site. Add a few, with names and locations.\n- Add LocalBusiness or Organization structured data with name, address, phone and opening hours.\n- State the areas served in plain text so people and search engines can see them.\n- Consider publishing prices or price ranges; no pricing page was found in the navigation.\n- Name two or three competitors so their visibility can be compared with this site.\n- Review Google results for the focus keywords to record where the site and its competitors appear.\n"
+}
