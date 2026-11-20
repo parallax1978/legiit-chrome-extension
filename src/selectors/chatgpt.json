@@ -1,0 +1,40 @@
+{
+  "site": "chatgpt",
+  "version": "2026.11.20-1",
+  "updated": "2026-11-20",
+  "description": "chatgpt.com conversation pages. The reader takes the LAST match of 'answer' as the latest answer, and collects citation links from the turn that contains it plus any open sources panel.",
+  "slots": {
+    "answer": {
+      "description": "An assistant message body.",
+      "required": true,
+      "candidates": [
+        { "css": "[data-message-author-role='assistant']" },
+        { "css": "article[data-testid^='conversation-turn'] .markdown" },
+        { "css": "[data-testid^='conversation-turn'] .markdown" },
+        { "css": "main .markdown.prose, main [class*='markdown']" }
+      ]
+    },
+    "question": {
+      "description": "A user message.",
+      "candidates": [
+        { "css": "[data-message-author-role='user']" },
+        { "css": "article[data-testid^='conversation-turn'] .whitespace-pre-wrap" }
+      ]
+    },
+    "turn": {
+      "description": "The conversation turn wrapping one message, including source pills and footnotes.",
+      "candidates": [
+        { "css": "article[data-testid^='conversation-turn']" },
+        { "css": "[data-testid^='conversation-turn']" },
+        { "css": "main article" }
+      ]
+    },
+    "sources": {
+      "description": "A separate sources list or side panel, when open.",
+      "candidates": [
+        { "css": "[data-testid='sources-panel'], [data-testid*='citation-panel']" },
+        { "css": "aside[aria-label*='source' i], section[aria-label*='source' i], [role='dialog'][aria-label*='source' i]" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "site": "gemini",
+  "version": "2026.11.20-1",
+  "updated": "2026-11-20",
+  "description": "gemini.google.com conversation pages. Gemini renders custom elements (model-response, user-query).",
+  "slots": {
+    "answer": {
+      "description": "A model response body.",
+      "required": true,
+      "candidates": [
+        { "css": "model-response message-content" },
+        { "css": "model-response .markdown, .model-response-text" },
+        { "css": "model-response" },
+        { "css": "[data-response-id] .markdown, main [class*='markdown']" }
+      ]
+    },
+    "question": {
+      "description": "A user query.",
+      "candidates": [
+        { "css": "user-query .query-text" },
+        { "css": "user-query" },
+        { "css": "[data-test-id='user-query'], .user-query-container" }
+      ]
+    },
+    "turn": {
+      "description": "The response container, including source chips and the sources list.",
+      "candidates": [
+        { "css": "model-response" },
+        { "css": ".conversation-container" },
+        { "css": "[data-response-id]" }
+      ]
+    },
+    "sources": {
+      "description": "Sources list or carousel shown with a response.",
+      "candidates": [
+        { "css": "sources-list, sources-carousel-inline, source-footnote" },
+        { "css": "[data-test-id*='source' i], [aria-label*='sources' i]" }
+      ]
+    }
+  }
+}

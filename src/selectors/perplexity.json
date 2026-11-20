@@ -1,0 +1,41 @@
+{
+  "site": "perplexity",
+  "version": "2026.11.20-1",
+  "updated": "2026-11-20",
+  "description": "perplexity.ai answer pages.",
+  "slots": {
+    "answer": {
+      "description": "An answer body.",
+      "required": true,
+      "candidates": [
+        { "css": "[id^='markdown-content']" },
+        { "css": "[data-testid='answer'], [data-testid*='answer-content']" },
+        { "css": "main .prose" },
+        { "css": "main [class*='prose'], main [class*='markdown']" }
+      ]
+    },
+    "question": {
+      "description": "The query text.",
+      "candidates": [
+        { "css": "[data-testid='query-text'], [data-testid*='thread-title']" },
+        { "css": "main h1" },
+        { "css": "main [class*='query']" }
+      ]
+    },
+    "turn": {
+      "description": "One question-and-answer block, including its source cards.",
+      "candidates": [
+        { "css": "[data-testid='thread-turn'], [data-testid*='answer-block']" },
+        { "css": "main section" },
+        { "css": "main > div" }
+      ]
+    },
+    "sources": {
+      "description": "Source cards or the sources tab.",
+      "candidates": [
+        { "css": "[data-testid='sources'], [data-testid*='source-list']" },
+        { "css": "[aria-label*='sources' i], [class*='citation-list']" }
+      ]
+    }
+  }
+}

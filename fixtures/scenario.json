@@ -1,0 +1,38 @@
+{
+  "about": "One synthetic scenario shared by every fixture. All companies, people and domains are invented; every host uses the reserved .example TLD so nothing can reach a real site.",
+  "me": {
+    "name": "BrightPath Dental",
+    "domain": "brightpathdental.example",
+    "aliases": ["Bright Path Dental", "BrightPath"]
+  },
+  "competitors": [
+    { "name": "Lakeside Smiles", "domain": "lakesidesmiles.example", "aliases": ["Lakeside Smiles Dentistry"] },
+    { "name": "Capitol Dental Care", "domain": "capitoldentalcare.example", "aliases": ["Capitol Dental"] },
+    { "name": "Zilker Family Dentistry", "domain": "zilkerfamilydentistry.example", "aliases": ["Zilker Family Dental"] }
+  ],
+  "keywords": {
+    "full": "best dentist in austin",
+    "plain": "how often should you get your teeth cleaned",
+    "featured": "how long does teeth whitening last",
+    "local": "emergency dentist austin"
+  },
+  "urls": {
+    "serpFull": "https://www.google.com/search?q=best+dentist+in+austin",
+    "serpPlain": "https://www.google.com/search?q=how+often+should+you+get+your+teeth+cleaned",
+    "serpFeatured": "https://www.google.com/search?q=how+long+does+teeth+whitening+last",
+    "serpLocal": "https://www.google.com/search?q=emergency+dentist+austin",
+    "serpChurn": "https://www.google.co.uk/search?q=best+dentist+in+austin",
+    "serpAiMode": "https://www.google.com/search?q=best+dentist+in+austin&udm=50",
+    "serpUnrecognised": "https://www.google.com/search?q=blocked+query",
+    "chatgpt": "https://chatgpt.com/c/6f1c2a9e-fixture",
+    "chatgptUnrecognised": "https://chatgpt.com/c/unrecognised-fixture",
+    "gemini": "https://gemini.google.com/app/3b7d51fixture",
+    "perplexity": "https://www.perplexity.ai/search/best-dentists-in-austin-fixture",
+    "copilot": "https://copilot.microsoft.com/chats/fixture",
+    "site": "https://www.brightpathdental.example/",
+    "rewindPage": "https://www.brightpathdental.example/services/teeth-whitening",
+    "noCapturesPage": "https://www.brightpathdental.example/new-page",
+    "targetArticle": "https://www.brightpathdental.example/blog/how-often-teeth-cleaning",
+    "plainPage": "https://plain.example/hello"
+  }
+}

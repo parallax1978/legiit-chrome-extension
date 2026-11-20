@@ -1,0 +1,41 @@
+{
+  "site": "copilot",
+  "version": "2026.11.20-1",
+  "updated": "2026-11-20",
+  "description": "copilot.microsoft.com conversation pages.",
+  "slots": {
+    "answer": {
+      "description": "An AI message body.",
+      "required": true,
+      "candidates": [
+        { "css": "[data-content='ai-message']" },
+        { "css": "[data-testid='ai-message'], [data-testid*='copilot-message']" },
+        { "css": "[role='article'][aria-label*='Copilot' i]" },
+        { "css": "main [class*='markdown'], main [class*='prose']" }
+      ]
+    },
+    "question": {
+      "description": "A user message.",
+      "candidates": [
+        { "css": "[data-content='user-message']" },
+        { "css": "[data-testid='user-message']" },
+        { "css": "[role='article'][aria-label*='you' i]" }
+      ]
+    },
+    "turn": {
+      "description": "The message group around one AI message, including citation chips.",
+      "candidates": [
+        { "css": "[data-testid='message-group'], [data-content='ai-message-group']" },
+        { "css": "[role='article']" },
+        { "css": "main > div > div" }
+      ]
+    },
+    "sources": {
+      "description": "Citation list shown under or beside an answer.",
+      "candidates": [
+        { "css": "[data-testid='citation-list'], [data-testid*='sources']" },
+        { "css": "[aria-label*='sources' i], [aria-label*='citations' i]" }
+      ]
+    }
+  }
+}

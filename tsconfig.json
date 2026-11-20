@@ -1,0 +1,12 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["chrome", "node"]
+  },
+  "exclude": ["node_modules", ".output", "dist", "public", "fixtures", "store", "playwright-report", "test-results"]
+}
