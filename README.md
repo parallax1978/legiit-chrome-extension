@@ -55,6 +55,7 @@ Then open `chrome://extensions`, switch on Developer mode, choose **Load unpacke
 | `npm run check` | Type check, lint, unit tests |
 | `npm run mock` | Local mock of the Legiit API on `http://localhost:8787` |
 | `npm run screenshots` | Regenerates the store screenshots in `store/screenshots/` |
+| `npm run screenshots:kit` | Regenerates the screenshots of the API guide in `docs/legiit-api/images/` (uses `dist/` as it is built) |
 | `npm run fixtures` | Regenerates the test fixtures |
 | `npm run icons` | Regenerates the placeholder icons and promo tiles |
 | `npm run model:fetch` | Downloads the embedding model named in `models.lock.json` (already in the repository) |

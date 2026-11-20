@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "forbidden",
+    "message": "Your role in this business may not add competitors: ask the owner of the business to change your role."
+  }
+}

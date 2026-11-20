@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.4, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "title": "Request body of POST /v1/businesses/{businessId}/competitors",
+  "type": "object",
+  "description": "A competitor as the user tracks it in the extension. The same shape is used when one is added to a business, listed in a brief, and returned in Business Details.",
+  "required": [
+    "name",
+    "domains"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "description": "Display name, as the user typed it. \"Acme\" and \"ACME\" are the same name."
+    },
+    "domains": {
+      "type": "array",
+      "maxItems": 30,
+      "description": "The competitor's sites as host names: lower case, no \"www.\", no path. Can be empty when the competitor is tracked by name only. A value is any text the user typed that can be read as a host: it can be a subdomain, and it is not checked against a list of public suffixes.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+# Every text file has LF line ends in every checkout, also where Git would write CRLF (Git for Windows does that
+# by default). The generated files of the API kit (docs/legiit-api/reference.md, openapi.examples.json, examples/)
+# are compared byte for byte with what the generators write, in "npm test" and in
+# "node scripts/build-api-reference.mjs --check". With CRLF they would count as out of date.
+# Git still finds out by itself which files are binary (images, the model files) and leaves them as they are.
+* text=auto eol=lf

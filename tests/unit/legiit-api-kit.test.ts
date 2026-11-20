@@ -1,7 +1,8 @@
 /**
  * The developer handoff kit in docs/legiit-api: the examples are what the
  * extension really sends, they match the contract, the mock server and the
- * real client agree with them, and the generated reference is current.
+ * real client agree with them, and the generated files (the reference, the
+ * contract with examples, the JSON Schema files) are current.
  *
  * To refresh the example files after a deliberate change to a payload:
  *   npm run api:examples
@@ -10,16 +11,20 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020';
+import addFormats from 'ajv-formats';
 import { describe, expect, it } from 'vitest';
 import { problemWith } from '@@/mock-server/contract.mjs';
 import { CORS_HEADERS, createMockState, handleMockRequest, MOCK_TOKENS } from '@@/mock-server/handlers.mjs';
-import { METHOD_CAPABILITY, type LegiitMethod } from '@/legiit/client';
+import { StaticAuthProvider } from '@/legiit/auth';
+import { LegiitError, METHOD_CAPABILITY, type LegiitMethod } from '@/legiit/client';
+import { HttpLegiitClient } from '@/legiit/http-client';
 import { LIMITS, MAX_REQUEST_BYTES } from '@/legiit/limits';
 import { ALL_CAPABILITIES } from '@/legiit/types';
 import { parseBriefRewrite } from '@/ai/brief-rewrite';
 import { toLines } from '@/ai/provider';
+import { EMBEDDING_SAME_THRESHOLD, LEXICAL_SAME_THRESHOLD } from '@/similarity/engine';
 import { contractValidators, EXAMPLES_DIR, KIT_DIR, loadContract, requestExamples } from '../api/suite';
-import { buildExampleRequests, EXAMPLE_BUSINESS_ID, toExampleJson } from '../helpers/api-examples';
+import { buildExampleReplies, buildExampleRequests, EXAMPLE_BUSINESS_ID, toExampleJson, WEB_TITLES } from '../helpers/api-examples';
 import { httpClient } from '../helpers/legiit';
 
 const ROOT = resolve(__dirname, '../..');
@@ -61,6 +66,12 @@ const validators = contractValidators(contract as unknown as Record<string, unkn
 if (!existsSync(EXAMPLES_DIR)) mkdirSync(EXAMPLES_DIR, { recursive: true });
 // Built by the extension's own code. The files are compared with it below, and written when missing.
 const built = await buildExampleRequests();
+/** Replies for cases that the mock server does not have: file name → status, schema and body. */
+const replies = buildExampleReplies();
+/** One more reply of the mock server: the session of its second user, who is on a smaller plan. */
+const SMALL_PLAN_SESSION = 'getSession.small-plan.response.json';
+/** The error replies that are answers of the mock server (the other error examples are in "replies"). */
+const MOCK_ERRORS = ['error.401-bad-token.json', 'error.404-business-not-found.json', 'error.404-feature-not-available.json', 'error.422-invalid-body.json'];
 const exampleFiles = () => readdirSync(EXAMPLES_DIR).filter((f) => f.endsWith('.json')).sort();
 const requestFilesOf = (op: Operation) => Object.keys(built).filter((f) => f.startsWith(`${op.operationId}.`)).sort((a, b) => a.length - b.length || a.localeCompare(b));
 const responseFileFor = (requestFile: string) => requestFile.replace(/\.request\.json$/, '.response.json');
@@ -81,6 +92,58 @@ describe('example requests are what the extension really sends', () => {
       expect(requestFilesOf(op).length, op.operationId).toBeGreaterThan(0);
       expect(requestExamples(op.operationId)).toEqual(requestFilesOf(op));
     }
+  });
+
+  it('carry an emoji (4 bytes in UTF-8) and a title in a non-Latin script, unchanged', () => {
+    const titles = (name: string, list: 'organic' | 'rows'): string[] => (read<Record<string, { title: string }[]>>(name)[list] ?? []).map((entry) => entry.title);
+    // Both were put into the results page that the extension read; its payload code did not touch them.
+    expect(titles('saveVisibilitySnapshot.request.json', 'organic')).toContain(WEB_TITLES.emoji.to);
+    expect(titles('saveGapList.request.json', 'rows')).toContain(WEB_TITLES.emoji.to);
+    expect(titles('saveGapList.request.json', 'rows')).toContain(WEB_TITLES.nonLatin.to);
+    expect([...WEB_TITLES.emoji.to].some((character) => character.codePointAt(0)! > 0xffff)).toBe(true);
+    expect(WEB_TITLES.nonLatin.to).toMatch(/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u);
+    // In the file the emoji is 4 bytes, not an escape: a database that stores 3 bytes per character fails on it.
+    for (const name of ['saveVisibilitySnapshot.request.json', 'saveGapList.request.json']) expect(readFileSync(file(name)).includes(Buffer.from([0xf0, 0x9f, 0xa6, 0xb7])), name).toBe(true);
+  });
+
+  it('show both engines of a content analysis, each with its threshold', () => {
+    const method = (name: string) => read<{ method: { engine: string; threshold: number; pagesCompared: number } }>(name).method;
+    // The normal case, with the sentence model that is bundled in the extension; and the fallback when it cannot run.
+    expect(method('sendToContentEditor.request.json')).toEqual({ engine: 'embedding', threshold: EMBEDDING_SAME_THRESHOLD, pagesCompared: 5 });
+    expect(method('sendToContentEditor.pasted-text.request.json')).toEqual({ engine: 'lexical', threshold: LEXICAL_SAME_THRESHOLD, pagesCompared: 1 });
+    // The contract quotes the two thresholds.
+    const threshold = (contract.components.schemas['ContentEditorDocument'] as { properties: { method: { properties: { threshold: { description: string } } } } }).properties.method.properties.threshold;
+    expect(threshold.description).toContain(`${EMBEDDING_SAME_THRESHOLD} for embedding and ${LEXICAL_SAME_THRESHOLD} for lexical`);
+    // The model's answers behind the first example were recorded with the settings of the extension's worker
+    // (tests/helpers/api-examples.ts): the same model, the same batches, the same pooling.
+    const worker = readFileSync(resolve(ROOT, 'src/similarity/embed.worker.ts'), 'utf8');
+    const recorder = readFileSync(resolve(ROOT, 'tests/helpers/embed-texts.mjs'), 'utf8');
+    for (const setting of ["MODEL_ID = 'Xenova/all-MiniLM-L6-v2'", 'BATCH_SIZE = 16', "dtype: 'q8'", "pooling: 'mean', normalize: true"]) {
+      expect(worker, `src/similarity/embed.worker.ts: ${setting}`).toContain(setting);
+      expect(recorder, `tests/helpers/embed-texts.mjs: ${setting}`).toContain(setting);
+    }
+  });
+
+  it('write every date and time as UTC with milliseconds, as the reference says', () => {
+    // The fields with "format: date-time" of the request schemas, found by walking schema and example together.
+    type Node = { properties?: Record<string, Node>; items?: Node; format?: string };
+    const found: string[] = [];
+    const walk = (schema: Node | undefined, value: unknown, path: string): void => {
+      if (!schema) return;
+      if (schema.format === 'date-time') {
+        found.push(path);
+        expect(value, path).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      }
+      if (Array.isArray(value)) value.forEach((item, index) => walk(schema.items, item, `${path}[${index}]`));
+      else if (value !== null && typeof value === 'object') for (const [key, child] of Object.entries(value)) walk(schema.properties?.[key], child, `${path}.${key}`);
+    };
+    for (const op of operations.filter((o) => o.requestSchema)) {
+      for (const requestFile of requestFilesOf(op)) walk(contract.components.schemas[op.requestSchema!] as Node, read(requestFile), requestFile);
+    }
+    expect(found.length).toBeGreaterThanOrEqual(8);
+    // No reply has a date and time that must have a certain form: the extension reads none.
+    const replySchemas = JSON.stringify(Object.fromEntries(Object.entries(contract.components.schemas).filter(([name]) => !operations.some((op) => op.requestSchema === name) && name !== 'Competitor')));
+    expect(replySchemas).not.toContain('date-time');
   });
 
   it('no example comes near the size limit, and the mock refuses a body over it', () => {
@@ -109,6 +172,9 @@ describe('example responses are what the mock server answers', () => {
       expect(reply.status, op.operationId).toBe(op.successStatus);
       await expect(toExampleJson(JSON.parse(reply.body))).toMatchFileSnapshot(file(`${op.operationId}.response.json`));
     }
+    // The same endpoint for a user whose plan has fewer features: the session lists only those.
+    const smallPlan = handleMockRequest(state, { method: 'GET', path: '/v1/session', headers: { authorization: `Bearer ${MOCK_TOKENS.limited}` } });
+    await expect(toExampleJson(JSON.parse(smallPlan.body))).toMatchFileSnapshot(file(SMALL_PLAN_SESSION));
   });
 
   it('for the error cases the guide describes', async () => {
@@ -119,6 +185,7 @@ describe('example responses are what the mock server answers', () => {
       ['error.404-feature-not-available.json', { method: 'POST', path: '/v1/ai/completions', headers: { authorization: `Bearer ${MOCK_TOKENS.limited}` }, body: readFileSync(file('completeAI.request.json'), 'utf8') }, 404],
       ['error.422-invalid-body.json', { method: 'POST', path: `/v1/businesses/${EXAMPLE_BUSINESS_ID}/visibility-snapshots`, headers: auth, body: '{}' }, 422],
     ];
+    expect(cases.map(([name]) => name)).toEqual(MOCK_ERRORS);
     for (const [name, request, status] of cases) {
       const reply = handleMockRequest(state, request);
       expect(reply.status, name).toBe(status);
@@ -149,7 +216,7 @@ describe('every example matches the contract', () => {
 
   it('error bodies match the Error schema', () => {
     const errors = exampleFiles().filter((f) => f.startsWith('error.'));
-    expect(errors).toHaveLength(4);
+    expect(errors).toEqual([...MOCK_ERRORS, ...Object.keys(replies).filter((f) => f.startsWith('error.'))].sort());
     for (const name of errors) {
       const validate = validators('Error');
       expect(validate(read(name)), `${name}: ${JSON.stringify(validate.errors)}`).toBe(true);
@@ -175,7 +242,7 @@ describe('every example matches the contract', () => {
     // A reply may be longer than what the extension uses: that is not a contract violation.
     expect(validators('BusinessList')({ businesses: [{ id: 1, name: 'n'.repeat(500) }] })).toBe(true);
     expect(validators('Error')({ error: { code: 'invalid', message: 'm'.repeat(900) } })).toBe(true);
-    // Addresses a strict URI validator refuses are valid: browsers write them this way.
+    // URLs that a strict URI validator refuses are valid: browsers write them this way.
     const withOddUrl = { ...snapshot, organic: [{ position: 1, url: 'https://example.com/a|b?x=[1]', domain: 'example.com', title: 'T', topPx: 1, fold: 'above' }] };
     expect(validators('VisibilitySnapshot')(withOddUrl)).toBe(true);
     // The mock names the first problem in words.
@@ -188,12 +255,136 @@ describe('every example matches the contract', () => {
   });
 
   it('there are no stray example files', () => {
-    const expected = new Set<string>();
+    const expected = new Set<string>([SMALL_PLAN_SESSION, ...MOCK_ERRORS, ...Object.keys(replies)]);
     for (const op of operations) {
       if (op.requestSchema) for (const f of requestFilesOf(op)) expected.add(f).add(responseFileFor(f));
       else expected.add(`${op.operationId}.response.json`);
     }
-    expect(exampleFiles().filter((f) => !expected.has(f) && !f.startsWith('error.'))).toEqual([]);
+    expect(exampleFiles().filter((f) => !expected.has(f))).toEqual([]);
+    expect([...expected].filter((f) => !exampleFiles().includes(f))).toEqual([]);
+  });
+});
+
+/**
+ * Replies that the mock server does not give: integer ids, a session without capabilities, a save without a page
+ * to link to, and errors with a message that a user can act on. Nothing produces them, so they are checked twice:
+ * against the contract, and against the parsing of the extension's own client (src/legiit/http-client.ts).
+ */
+describe('example replies that the mock server does not give', () => {
+  /** The extension's client, answered with one fixed reply: what it returns or throws is what its parsers make of that reply. */
+  const answeredWith = (status: number, body: unknown) => {
+    const urls: string[] = [];
+    const client = new HttpLegiitClient({
+      baseUrl: 'https://api.legiit.com',
+      auth: new StaticAuthProvider(MOCK_TOKENS.valid),
+      fetch: async (url) => {
+        urls.push(url);
+        return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      },
+    });
+    return { client, urls };
+  };
+  const answeredWithExample = (name: string) => answeredWith(replies[name]!.status, replies[name]!.body);
+  const messageOf = (name: string): string => read<{ error: { message: string } }>(name).error.message;
+
+  for (const [name, reply] of Object.entries(replies)) {
+    it(`${name} is written from its source and matches the contract`, async () => {
+      await expect(toExampleJson(reply.body)).toMatchFileSnapshot(file(name));
+      const validate = validators(reply.schema);
+      expect(validate(reply.body), `${name}: ${JSON.stringify(validate.errors)}`).toBe(true);
+    });
+  }
+
+  it('the session of a user on a smaller plan matches the contract, and the extension shows only the features it lists', async () => {
+    const example = read<{ user: { id: string }; plan: string; capabilities: string[] }>(SMALL_PLAN_SESSION);
+    expect(validators('Session')(example)).toBe(true);
+    const session = await httpClient(MOCK_TOKENS.limited).client.getSession();
+    expect(session).toMatchObject(example);
+    expect(session.capabilities.length).toBeGreaterThan(0);
+    expect(session.capabilities.length).toBeLessThan(ALL_CAPABILITIES.length);
+    expect(session.user.id).not.toBe(read<{ user: { id: string } }>('getSession.response.json').user.id);
+  });
+
+  it('a session without capabilities connects the user, with no feature', async () => {
+    const session = await answeredWithExample('getSession.no-capabilities.response.json').client.getSession();
+    expect(session.capabilities).toEqual([]);
+    expect(session.user.id).toBe(read<{ user: { id: string } }>('getSession.response.json').user.id);
+  });
+
+  it('integer ids are read as text and sent back as their digits', async () => {
+    const session = await answeredWithExample('getSession.integer-ids.response.json').client.getSession();
+    expect(session.user.id).toBe('4127');
+    expect(session.capabilities).toEqual([...ALL_CAPABILITIES]);
+    const businesses = await answeredWithExample('listBusinesses.integer-ids.response.json').client.listBusinesses();
+    expect(businesses.map((b) => b.id)).toEqual(['31', '58']);
+    expect(businesses.map((b) => b.name)).toEqual(read<{ businesses: { name: string }[] }>('listBusinesses.response.json').businesses.map((b) => b.name));
+    // The id the list gave is the id in the path of the next request, and the id of the details.
+    const one = answeredWithExample('getBusinessDetails.integer-ids.response.json');
+    const details = await one.client.getBusinessDetails(businesses[0]!.id);
+    expect(one.urls).toEqual(['https://api.legiit.com/v1/businesses/31']);
+    expect(details).toEqual({ ...read<Record<string, unknown>>('getBusinessDetails.response.json'), id: '31' });
+    const save = answeredWithExample('anySave.integer-id.response.json');
+    expect(await save.client.addCompetitor(businesses[0]!.id, read('addCompetitor.request.json'))).toEqual({ id: '9041', url: 'https://app.legiit.example/command-center/competitors/9041' });
+    expect(save.urls).toEqual(['https://api.legiit.com/v1/businesses/31/competitors']);
+  });
+
+  it('a save reply with "url": null is a complete save, for each of the five saves', async () => {
+    const { client } = answeredWithExample('anySave.url-null.response.json');
+    const saved = { id: (replies['anySave.url-null.response.json']!.body as { id: string }).id, url: null };
+    expect(await client.saveVisibilitySnapshot(EXAMPLE_BUSINESS_ID, read('saveVisibilitySnapshot.request.json'))).toEqual(saved);
+    expect(await client.saveGapList(EXAMPLE_BUSINESS_ID, read('saveGapList.request.json'))).toEqual(saved);
+    expect(await client.addCompetitor(EXAMPLE_BUSINESS_ID, read('addCompetitor.request.json'))).toEqual(saved);
+    expect(await client.sendToContentEditor(EXAMPLE_BUSINESS_ID, read('sendToContentEditor.request.json'))).toEqual(saved);
+    expect(await client.createWorkspaceFromBrief(read('createWorkspaceFromBrief.request.json'))).toEqual(saved);
+  });
+
+  it('the extension treats every error example as the reference says', async () => {
+    type Call = (client: HttpLegiitClient) => Promise<unknown>;
+    const save: Call = (client) => client.addCompetitor(EXAMPLE_BUSINESS_ID, read('addCompetitor.request.json'));
+    const session: Call = (client) => client.getSession();
+    const ai: Call = (client) => client.completeAI(read('completeAI.request.json'));
+    const shown = (status: number, name: string): string => `Legiit rejected the request (${status}): ${messageOf(name)}`;
+    /** File → the call that gets this reply, the kind of failure the extension sees, and the text it shows. */
+    const expected: Record<string, [Call, LegiitError['code'], string]> = {
+      'error.400-unreadable-body.json': [save, 'rejected', shown(400, 'error.400-unreadable-body.json')],
+      // On the session check this reply makes the extension delete the token; its message is not shown.
+      'error.401-bad-token.json': [session, 'unauthorised', 'Legiit did not accept the token'],
+      'error.403-role-may-not-save.json': [save, 'rejected', shown(403, 'error.403-role-may-not-save.json')],
+      'error.404-business-not-found.json': [save, 'rejected', `Legiit could not find it (404): ${messageOf('error.404-business-not-found.json')}`],
+      // No message: the extension says that Legiit cannot receive this yet, and hides the button.
+      'error.404-feature-not-available.json': [save, 'unavailable', 'This Legiit feature is not available'],
+      'error.409-save-still-running.json': [save, 'rejected', shown(409, 'error.409-save-still-running.json')],
+      'error.413-body-too-large.json': [save, 'rejected', shown(413, 'error.413-body-too-large.json')],
+      'error.422-invalid-body.json': [save, 'rejected', shown(422, 'error.422-invalid-body.json')],
+      'error.429-allowance-used-up.json': [ai, 'rejected', shown(429, 'error.429-allowance-used-up.json')],
+      'error.429-too-many-requests.json': [save, 'rejected', shown(429, 'error.429-too-many-requests.json')],
+    };
+    expect(Object.keys(expected)).toEqual(exampleFiles().filter((f) => f.startsWith('error.')));
+    for (const [name, [call, code, message]] of Object.entries(expected)) {
+      const status = Number(name.slice(6, 9));
+      const failure = await call(answeredWith(status, read(name)).client).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(failure, name).toBeInstanceOf(LegiitError);
+      expect([(failure as LegiitError).code, (failure as LegiitError).status, (failure as LegiitError).message], name).toEqual([code, status, message]);
+      // An error with the agreed body is the API's own verdict: for a 401 on the session check that deletes the token.
+      expect((failure as LegiitError).definite, name).toBe(true);
+    }
+  });
+
+  it('every error message is one plain sentence that fits on the screen, and says what the user can do', () => {
+    for (const name of exampleFiles().filter((f) => f.startsWith('error.'))) {
+      expect(messageOf(name).length, name).toBeLessThanOrEqual(200);
+      expect(messageOf(name), name).not.toMatch(/[<>\n]/);
+    }
+    // The hand-written ones: what is wrong and, where the user can do something about it, a colon and what to do.
+    // A body that is not JSON or is too large is not the user's to repair, so those two say only what is wrong.
+    for (const name of Object.keys(replies).filter((f) => f.startsWith('error.'))) expect(messageOf(name), name).toMatch(/^[A-Z][^.:]+(: [a-z][^.:]+)?\.$/);
+    for (const name of Object.keys(replies).filter((f) => /^error\.(403|409|429)-/.test(f))) expect(messageOf(name), name).toMatch(/: [a-z]/);
+    // An allowance that is used up says when to try again; a refusal names its reason.
+    for (const name of exampleFiles().filter((f) => f.startsWith('error.429-'))) expect(messageOf(name), name).toMatch(/try again in \d/);
+    expect(messageOf('error.403-role-may-not-save.json')).toMatch(/^Your role /);
   });
 });
 
@@ -263,6 +454,14 @@ describe('the mock server behaves as the guide asks of the real one', () => {
     expect(read().competitors.find((c) => c.name === 'Capitol Dental Care')!.domains).toEqual(['capitoldentalcare.example', 'capitol-second.example']);
     expect(read().competitors.filter((c) => (c.domains ?? []).includes('lakesidesmiles.example')).map((c) => c.name)).toEqual(['Lakeside Smiles']);
     expect(post(state, competitors, { name: 'Lakeside Blog', domains: ['blog.lakesidesmiles.example'] }).status).toBe(201);
+    // No name matches and the domains belong to two competitors: the first domain of the request decides.
+    const matched = (domains: string[]): [number, string] => {
+      const reply = post(state, competitors, { name: 'A name nobody has', domains });
+      return [reply.status, JSON.parse(reply.body).id as string];
+    };
+    expect(matched(['capitoldentalcare.example', 'lakesidesmiles.example'])).toEqual([200, 'com_seed_2']);
+    expect(matched(['lakesidesmiles.example', 'capitoldentalcare.example'])).toEqual([200, 'com_seed_1']);
+    expect(matched(['not-known-yet.example', 'capitoldentalcare.example'])).toEqual([200, 'com_seed_2']);
   });
 
   it('gives a remembered reply before it looks at the fields, and after the business was checked', () => {
@@ -545,6 +744,81 @@ describe('limits: what the code enforces is what the contract promises', () => {
   });
 });
 
+/**
+ * docs/legiit-api/schemas: every request body as a standalone JSON Schema file, for a team that validates with a
+ * JSON Schema library and not with an OpenAPI tool. That the files are current is checked with the reference
+ * ("contract hygiene" below).
+ */
+describe('the standalone JSON Schema files', () => {
+  const SCHEMAS_DIR = join(KIT_DIR, 'schemas');
+  const withBody = operations.filter((op) => op.requestSchema);
+  const schemaFile = (op: Operation): string => `${op.operationId}.request.schema.json`;
+  const schemaOf = (op: Operation) => JSON.parse(readFileSync(join(SCHEMAS_DIR, schemaFile(op)), 'utf8')) as Record<string, unknown>;
+  // Strict: a keyword that is not JSON Schema 2020-12 ("x-values", a typing mistake) fails the compilation.
+  const compile = (schema: Record<string, unknown>) => {
+    const ajv = new Ajv2020({ strict: true, allErrors: true, allowUnionTypes: true });
+    addFormats(ajv);
+    return ajv.compile(schema);
+  };
+
+  it('there is one for every endpoint that takes a body, and nothing else in the folder', () => {
+    expect(readdirSync(SCHEMAS_DIR).sort()).toEqual(withBody.map(schemaFile).sort());
+  });
+
+  it('each is JSON Schema 2020-12 with standard keywords only, and without a reference to another file', () => {
+    for (const op of withBody) {
+      const schema = schemaOf(op);
+      expect(schema['$schema'], schemaFile(op)).toBe('https://json-schema.org/draft/2020-12/schema');
+      expect(String(schema['$comment']), schemaFile(op)).toContain(contract.info.version);
+      expect(JSON.stringify(schema), schemaFile(op)).not.toMatch(/"\$ref"|"x-/);
+      expect(() => compile(schema), schemaFile(op)).not.toThrow();
+    }
+  });
+
+  it('each accepts every example of its endpoint and refuses {}', () => {
+    for (const op of withBody) {
+      const validate = compile(schemaOf(op));
+      for (const requestFile of requestFilesOf(op)) expect(validate(read(requestFile)), `${requestFile}: ${JSON.stringify(validate.errors)}`).toBe(true);
+      expect(validate({}), schemaFile(op)).toBe(false);
+    }
+  });
+
+  it('they accept what a later extension version may send, and refuse what the contract refuses', () => {
+    const snapshots = compile(schemaOf(operations.find((op) => op.operationId === 'saveVisibilitySnapshot')!));
+    const snapshot = read<Record<string, unknown>>('saveVisibilitySnapshot.request.json');
+    // A field that is not known, and a value that is not in an open list ("Values in this version"): accepted.
+    expect(snapshots({ ...snapshot, addedByALaterExtensionVersion: { anything: true } })).toBe(true);
+    expect(snapshots({ ...snapshot, mode: 'a-mode-added-later' })).toBe(true);
+    // A closed list, a missing field, a wrong type, a text over its limit: refused.
+    expect(snapshots({ ...snapshot, firstOrganicFold: 'middle' })).toBe(false);
+    expect(snapshots({ ...snapshot, keyword: undefined })).toBe(false);
+    expect(snapshots({ ...snapshot, keyword: 42 })).toBe(false);
+    expect(snapshots({ ...snapshot, keyword: 'k'.repeat(LIMITS.snapshot.keyword + 1) })).toBe(false);
+    // maxLength counts characters, the contract counts UTF-16 units: a text of emoji at the limit of the contract is inside both.
+    const emoji = '🦷'.repeat(LIMITS.snapshot.keyword / 2);
+    expect(emoji).toHaveLength(LIMITS.snapshot.keyword);
+    expect(snapshots({ ...snapshot, keyword: emoji })).toBe(true);
+    expect(validators('VisibilitySnapshot')({ ...snapshot, keyword: emoji })).toBe(true);
+    // A URL that a strict URI validator refuses, and a contact that is an e-mail link.
+    const gaps = compile(schemaOf(operations.find((op) => op.operationId === 'saveGapList')!));
+    const list = read<{ rows: Record<string, unknown>[] }>('saveGapList.request.json');
+    const row = { ...list.rows[0], url: 'https://example.com/a|b?x=[1]', contacts: [{ kind: 'contact', label: 'Write to us', url: 'mailto:hello@example.com' }] };
+    expect(gaps({ ...list, rows: [row] })).toBe(true);
+    expect(gaps({ ...list, rows: [{ ...row, pageType: 'a-type-added-later' }] })).toBe(true);
+    expect(gaps({ ...list, rows: [] })).toBe(false);
+  });
+
+  it('they give the same verdict as the schemas inside openapi.yaml, also on bodies with one field missing or of the wrong type', () => {
+    for (const op of withBody) {
+      const standalone = compile(schemaOf(op));
+      const inContract = validators(op.requestSchema!);
+      const first = read<Record<string, unknown>>(requestFilesOf(op)[0]!);
+      const bodies: unknown[] = [first, {}, [], null, 'text', ...Object.keys(first).map((key) => ({ ...first, [key]: undefined })), ...Object.keys(first).map((key) => ({ ...first, [key]: { not: 'expected' } }))];
+      for (const body of bodies) expect(standalone(body), `${schemaFile(op)} with ${JSON.stringify(body)?.slice(0, 80)}`).toBe(inContract(body));
+    }
+  });
+});
+
 describe('contract hygiene', () => {
   it('is a well-formed OpenAPI 3.1 document: every reference resolves and no schema keyword is misspelt', () => {
     expect((contract as unknown as { openapi: string }).openapi).toMatch(/^3\.1\./);
@@ -585,6 +859,28 @@ describe('contract hygiene', () => {
     }
   });
 
+  it('no line of a description starts with a number and a full stop by accident (some Markdown readers start a list there)', () => {
+    // "…answer\n502. Both tries…" is one paragraph on GitHub, and a numbered list that loses the 502 in other readers.
+    const accidents: string[] = [];
+    const visit = (node: unknown, path: string): void => {
+      if (Array.isArray(node)) return node.forEach((item, index) => visit(item, `${path}[${index}]`));
+      if (node === null || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'description' && typeof value === 'string') {
+          const lines = value.split('\n');
+          lines.forEach((line, index) => {
+            const before = lines[index - 1] ?? '';
+            const startsList = /^\s{0,3}\d{1,9}[.)] /.test(line);
+            const listGoesOn = before.trim() === '' || /^\s*(\d{1,9}[.)]|[-*+]) /.test(before) || /^\s{2,}\S/.test(before);
+            if (index > 0 && startsList && !listGoesOn) accidents.push(`${path}.description: "${line.trim().slice(0, 40)}"`);
+          });
+        } else visit(value, `${path}.${key}`);
+      }
+    };
+    visit(contract, '');
+    expect(accidents).toEqual([]);
+  });
+
   it('has one operation per client method, in the documented order', () => {
     expect(operations.map((o) => o.operationId).sort()).toEqual((Object.keys(METHOD_CAPABILITY) as LegiitMethod[]).sort());
   });
@@ -608,10 +904,63 @@ describe('contract hygiene', () => {
     expect(missing).toEqual([]);
   });
 
-  it('the generated reference is up to date', () => {
+  it('the generated files are up to date: the reference, the contract with examples, the JSON Schema files', () => {
     execFileSync(process.execPath, ['scripts/build-api-reference.mjs', '--check'], { cwd: ROOT, stdio: 'pipe' });
     const reference = readFileSync(join(KIT_DIR, 'reference.md'), 'utf8');
     for (const op of operations) expect(reference).toContain(`${op.method} ${op.path}`);
+  });
+
+  it('the reference keeps the sections that are copied into other documents, and each of its links leads somewhere', () => {
+    const reference = readFileSync(join(KIT_DIR, 'reference.md'), 'utf8').replace(/```[\s\S]*?```/g, '');
+    const headings = [...reference.matchAll(/^(#{1,6}) (.+)$/gm)].map((match) => ({ level: match[1]!.length, text: match[2]! }));
+    // One "##" section per endpoint, then the shared parts, the shared types and the errors.
+    expect(headings.filter((h) => h.level === 2).map((h) => h.text)).toEqual([...operations.map((op, index) => `${index + 1}. ${op.method} ${op.path}`), 'Shared parameters and responses', 'Shared types', 'Errors']);
+    // A link inside the file points at a heading, by the id that GitHub gives it; that heading exists once.
+    const slug = (heading: string): string => heading.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '').replace(/ /g, '-');
+    const ids = headings.map((h) => slug(h.text));
+    const targets = [...reference.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1]!);
+    expect(targets.length).toBeGreaterThan(40);
+    for (const target of targets) {
+      if (target.startsWith('#')) expect(ids.filter((id) => `#${id}` === target), target).toHaveLength(1);
+      else expect(existsSync(join(KIT_DIR, target)), target).toBe(true);
+    }
+    // The endpoint table at the top links to every endpoint.
+    for (const [index, op] of operations.entries()) expect(reference).toContain(`| ${index + 1} | [\`${op.method} ${op.path}\`](#${slug(`${index + 1}. ${op.method} ${op.path}`)}) |`);
+    // No two-column table without a header row: some converters drop it.
+    expect(reference).not.toMatch(/^\| \| \|$/m);
+    // Every row of a table has as many cells as its header, and no code span holds a "|" that would split a cell.
+    const cells = (line: string): number => line.split(/(?<!\\)\|/).length - 2;
+    let header = 0;
+    for (const line of reference.split('\n')) {
+      if (!line.startsWith('|')) header = 0;
+      else {
+        if (header === 0) header = cells(line);
+        expect(cells(line), line.slice(0, 80)).toBe(header);
+        expect((line.match(/`[^`]*`/g) ?? []).filter((span) => span.includes('|')), line.slice(0, 80)).toEqual([]);
+      }
+    }
+  });
+
+  it('every example file is shown in the reference and built into openapi.examples.json', () => {
+    const reference = readFileSync(join(KIT_DIR, 'reference.md'), 'utf8');
+    const inBundle: string[] = [];
+    const collect = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(collect);
+      if (node === null || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'examples' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          for (const example of Object.values(value as Record<string, { value?: unknown }>)) if (example && typeof example === 'object' && 'value' in example) inBundle.push(JSON.stringify(example.value));
+        } else collect(value);
+      }
+    };
+    collect(JSON.parse(readFileSync(join(KIT_DIR, 'openapi.examples.json'), 'utf8')));
+    expect(exampleFiles().length).toBeGreaterThan(40);
+    for (const name of exampleFiles()) {
+      expect(reference, name).toContain(`\`examples/${name}\``);
+      expect(inBundle, name).toContain(JSON.stringify(read(name)));
+    }
+    // A request example says how large it is as sent, so that nobody has to keep such a number by hand.
+    for (const name of Object.keys(built)) expect(reference, name).toContain(`\`examples/${name}\`. As sent, without white space: ${new TextEncoder().encode(JSON.stringify(read(name))).length.toLocaleString('en-US')} bytes.`);
   });
 
   it('the reference carries every "what the extension does" note of the contract', () => {
@@ -629,6 +978,16 @@ describe('contract hygiene', () => {
     for (const note of notes) expect(reference, note).toContain(note);
   });
 
+  it('shows every screenshot of the kit in the guide, and the guide names no image that is not there', () => {
+    const guide = readFileSync(join(KIT_DIR, 'README.md'), 'utf8');
+    const shown = [...guide.matchAll(/<img src="images\/([a-z-]+\.png)" width="(\d+)" alt="([^"<>]+)">/g)].map((match) => match[1]!);
+    const files = readdirSync(join(KIT_DIR, 'images')).sort();
+    expect([...shown].sort()).toEqual(files);
+    expect(files.length).toBe(5);
+    // Each image has a line under it that says what the reader sees.
+    for (const name of shown) expect(guide, name).toMatch(new RegExp(`<img src="images/${name}"[^\\n]*>\\n\\n\\*[^\\n]+\\*\\n`));
+  });
+
   it('writes no placeholder in angle brackets where a Markdown renderer would swallow it', () => {
     // "<token>" outside a code span is read as an HTML tag and vanishes on GitHub, in Swagger UI and in Postman.
     const tag = /<\/?[A-Za-z][^<>]*>/;
@@ -642,8 +1001,10 @@ describe('contract hygiene', () => {
       }
     };
     walk(contract, '');
-    for (const file of ['README.md', 'reference.md', 'captured-requests.md']) {
-      const text = outsideCode(readFileSync(join(KIT_DIR, file), 'utf8')).replace(/<!--[\s\S]*?-->/g, ' ');
+    // The one real tag of the kit is an image of the guide, written with its width because the files have 2 pixels per CSS pixel.
+    const image = /<img src="images\/[a-z-]+\.png" width="\d+" alt="[^"<>]+">/g;
+    for (const file of ['README.md', 'reference.md', 'captured-requests.md', 'decisions.md']) {
+      const text = outsideCode(readFileSync(join(KIT_DIR, file), 'utf8').replace(image, ' ')).replace(/<!--[\s\S]*?-->/g, ' ');
       for (const line of text.split('\n')) if (tag.test(line)) offending.push(`${file}: ${tag.exec(line)![0]} in "${line.trim().slice(0, 80)}"`);
     }
     expect(offending).toEqual([]);

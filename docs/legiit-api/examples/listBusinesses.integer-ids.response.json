@@ -1,0 +1,14 @@
+{
+  "businesses": [
+    {
+      "id": 31,
+      "name": "BrightPath Dental",
+      "domain": "brightpathdental.example"
+    },
+    {
+      "id": 58,
+      "name": "Oakline Roofing",
+      "domain": "oaklineroofing.example"
+    }
+  ]
+}

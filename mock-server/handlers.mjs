@@ -15,6 +15,7 @@
  *   401 is for the token and nothing else (section 3)             → "The token"
  *   a feature that is off answers 404, not "not_found" (4, 5)      → off()
  *   a missing business answers 404 "not_found" (5)                 → businessOf()
+ *   a business of another user gets the same answer (5)            → businessOf(), MOCK_OTHER_BUSINESS_ID
  *   a body over 1 MB answers 413, one that is not JSON 400 (3, 5)  → "The body"
  *   a body the contract does not allow answers 422 (3)             → problemWith()
  *   a repeated Idempotency-Key gets the first reply (3)            → remembered(), save()
@@ -45,6 +46,13 @@ export const MOCK_TOKENS = {
 };
 
 /**
+ * A business of the second user alone. The token of the first user cannot reach it: the mock answers 404
+ * "not_found", exactly as for a business that does not exist. Every other business of the mock is shared by both
+ * users. Use this id to try the option --other-business of the conformance check against the mock.
+ */
+export const MOCK_OTHER_BUSINESS_ID = 'biz_harborview';
+
+/**
  * Sent with every reply, errors and the answer to a preflight included (guide, section 3, "CORS"). The extension
  * normally needs none of them, because the API host is one of its host permissions. They are a safety net: a user
  * can switch that access off in Chrome, and then every request is preflighted like a web page's. Allowing any
@@ -63,13 +71,21 @@ export function createMockState() {
   const competitorIds = {};
   let seeded = 0;
   for (const [businessId, business] of Object.entries(details)) competitorIds[businessId] = business.competitors.map(() => `com_seed_${++seeded}`);
+  competitorIds[MOCK_OTHER_BUSINESS_ID] = [];
   return {
     /** The user of "demo-token". */
     session: load('session.json'),
-    /** The user of "limited-token": a colleague in the same agency, so both can save into the same businesses. */
+    /** The user of "limited-token": a colleague in the same agency. Both can save into the shared businesses; this user also has one alone. */
     limitedSession: { user: { id: 'usr_demo_2', name: 'Sam Rivera', email: 'sam@northstarseo.example' }, plan: 'starter', capabilities: ['businesses', 'visibilitySnapshots', 'industryPulse'] },
+    /** The businesses that both users can read and save into. */
     businesses: load('businesses.json'),
     details,
+    /** Business Details of the businesses that belong to one user alone, by user id. */
+    ownDetails: {
+      usr_demo_2: {
+        [MOCK_OTHER_BUSINESS_ID]: { id: MOCK_OTHER_BUSINESS_ID, name: 'Harborview Physio', brandNames: ['Harborview Physio'], domains: ['harborviewphysio.example'], competitors: [], focusKeywords: [], avatars: [] },
+      },
+    },
     competitorIds,
     pulse: load('industry-pulse.json'),
     /** Everything that was saved, for assertions and for inspection in the server log. */
@@ -91,9 +107,12 @@ function header(headers, name) {
   return found ? String(headers[found] ?? '') : '';
 }
 
+/**
+ * The token of a request, or null. The header is "Authorization: Bearer <token>": the word Bearer (case-insensitive,
+ * as HTTP asks), exactly one space, the token. Anything else is no token, and is answered with 401.
+ */
 function tokenOf(headers) {
-  // The scheme is matched without regard to case, as HTTP asks.
-  const match = /^Bearer\s+(\S+)$/i.exec(header(headers, 'authorization').trim());
+  const match = /^Bearer (\S+)$/i.exec(header(headers, 'authorization'));
   return match ? match[1] : null;
 }
 
@@ -106,7 +125,7 @@ function sessionFor(state, token) {
 
 /** A domain as it is compared: lower case, without scheme, "www." and path. A subdomain is a different domain. */
 const host = (value) => String(value).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/?#].*$/, '').replace(/^www\./, '');
-/** A name as it is compared: without regard to case and surrounding spaces. */
+/** A name as it is compared: case-insensitive, without surrounding spaces. */
 const nameKey = (value) => String(value).trim().toLowerCase();
 
 /** The four saves into a business: what the body is checked against and where it is kept. */
@@ -149,7 +168,12 @@ function answer(state, request) {
   /** A feature that is off answers like an endpoint that does not exist: 404, and never with the code "not_found". */
   const off = (capability) => (capabilities.includes(capability) ? null : error(404, 'not_available', `${capability} is not enabled for this account`));
 
-  /** The business a path names, or null. "not_found" is reserved for this case. An id that cannot exist is simply not found. */
+  /** The businesses of this user alone. They come after the shared ones in the list. */
+  const own = state.ownDetails[userId] ?? {};
+  /**
+   * The business a path names, or null. "not_found" is reserved for this case. An id that cannot exist is simply
+   * not found, and so is a business of another user: the reply does not reveal that it exists.
+   */
   const businessOf = (encoded) => {
     let id;
     try {
@@ -157,7 +181,8 @@ function answer(state, request) {
     } catch {
       return null;
     }
-    return Object.hasOwn(state.details, id) ? { id, details: state.details[id] } : null;
+    if (Object.hasOwn(state.details, id)) return { id, details: state.details[id] };
+    return Object.hasOwn(own, id) ? { id, details: own[id] } : null;
   };
   const noSuchBusiness = () => error(404, 'not_found', 'No such business');
 
@@ -183,7 +208,7 @@ function answer(state, request) {
    */
   const replyKey = idempotencyKey ? `${userId} ${method} ${path} ${idempotencyKey}` : null;
   const remembered = () => (replyKey ? (state.replies.get(replyKey) ?? null) : null);
-  /** Stores one item and answers with its id and address. */
+  /** Stores one item and answers with its id and its URL. */
   const save = (page, store) => {
     const { id, created } = store();
     const reply = json(created ? 201 : 200, { id, url: `https://app.legiit.example/command-center/${page}/${id}` });
@@ -194,7 +219,10 @@ function answer(state, request) {
 
   if (method === 'GET' && path === '/v1/session') return json(200, session);
 
-  if (method === 'GET' && path === '/v1/businesses') return off('businesses') ?? json(200, state.businesses);
+  if (method === 'GET' && path === '/v1/businesses') {
+    const mine = Object.values(own).map((b) => ({ id: b.id, name: b.name, domain: b.domains[0] ?? null }));
+    return off('businesses') ?? json(200, mine.length > 0 ? { ...state.businesses, businesses: [...state.businesses.businesses, ...mine] } : state.businesses);
+  }
 
   let match = /^\/v1\/businesses\/([^/]+)$/.exec(path);
   if (method === 'GET' && match) {
@@ -250,17 +278,21 @@ function answer(state, request) {
 }
 
 /**
- * Adds a competitor to a business, once. A competitor the business already has (the same name without regard to
- * case, or one of the same domains; a name match wins) keeps its name, gains the domains it did not have, and its
- * id is returned with 200. A domain that another competitor of the business already has stays with that one: no
- * two competitors of a business share a domain. A new competitor is listed in Business Details at once.
+ * Adds a competitor to a business, once. A competitor the business already has keeps its name, gains the domains
+ * it did not have, and its id is returned with 200. "Already has" means: the same name (case-insensitive), or else
+ * one of the same domains. A name match wins over a domain match. When no name matches and the domains of the
+ * request belong to different competitors, the first domain of the request that a competitor already has decides.
+ * A domain that another competitor of the business already has stays with that one: no two competitors of a
+ * business share a domain. A new competitor is listed in Business Details at once.
  */
 function addCompetitor(state, business, body) {
   const list = business.details.competitors;
   const ids = state.competitorIds[business.id];
   const domains = [...new Set(body.domains.map(host).filter(Boolean))];
+  const ownerOf = (domain) => list.findIndex((c) => (c.domains ?? []).map(host).includes(domain));
   let index = list.findIndex((c) => nameKey(c.name) === nameKey(body.name));
-  if (index < 0) index = list.findIndex((c) => (c.domains ?? []).map(host).some((d) => domains.includes(d)));
+  // The domains are tried in the order of the request, not in the order of the stored competitors.
+  for (let i = 0; index < 0 && i < domains.length; i += 1) index = ownerOf(domains[i]);
   if (index >= 0) {
     const known = list[index];
     const taken = new Set(list.flatMap((c, i) => (i === index ? [] : (c.domains ?? []).map(host))));

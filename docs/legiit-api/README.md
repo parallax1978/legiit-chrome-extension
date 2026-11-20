@@ -15,8 +15,10 @@ For the Legiit backend team. The Legiit Lens Chrome extension is finished and al
 | [`reference.md`](reference.md) | Every endpoint: fields, limits, meanings, examples. Generated from the contract |
 | [`openapi.yaml`](openapi.yaml) | The contract (OpenAPI 3.1) |
 | [`openapi.examples.json`](openapi.examples.json) | The same contract with the examples built in. Import this one into Postman, Insomnia or Swagger UI. It is OpenAPI 3.1: use tools that read 3.1 (Swagger UI 5 or later) |
-| [`examples/`](examples) | Real request bodies built by the extension's code, and matching responses |
+| [`examples/`](examples) | 45 files. 12 request bodies built by the extension's code. 23 replies: the answers of the mock server, and replies for cases that the mock server does not have (integer ids, a session without capabilities, a save without a `url`). 10 error bodies |
+| [`schemas/`](schemas) | The body of every POST as a standalone JSON Schema file (draft 2020-12), named `<operationId>.request.schema.json`. Generated from the contract, for teams that validate with a JSON Schema library |
 | [`captured-requests.md`](captured-requests.md) | The raw requests Chrome sent in our tests: evidence for the header and CORS statements of section 3 |
+| [`images/`](images) | Five screenshots of the extension, used in this guide. Made from the real extension by `npm run screenshots:kit` |
 | `mock-server/` in the repository | A working reference implementation in Node (`npm run mock`) |
 | `tests/api/` in the repository | The check you run against your API (`npm run api:check`) |
 
@@ -32,7 +34,7 @@ This folder is the specification. The mock server and the check are tools in the
 
 ### What the extension does
 
-Legiit Lens adds a side panel to Chrome: a panel that opens next to the page. It measures the page that is open and shows the result in five tabs. Everything works without a Legiit account. With a token, the tabs get buttons that send a result to Legiit:
+Legiit Lens adds a side panel to Chrome: a panel that opens next to the page. It measures the page that is open and shows the result in five tabs. A sixth tab holds the settings. Everything works without a Legiit account. With a token, the tabs get buttons that send a result to Legiit:
 
 | Tab | What the user sees | What it sends to Legiit |
 | --- | --- | --- |
@@ -42,7 +44,11 @@ Legiit Lens adds a side panel to Chrome: a panel that opens next to the page. It
 | New or Noise | Which sentences of a text say something that competing pages do not say | A content analysis (endpoint 7) |
 | Instant Brief | A client brief, written from the website of a business | A workspace (endpoint 8) |
 
-The settings page holds the token, the chosen business, the user's own brands and their competitors (endpoints 1, 2, 3 and 6). Each tab can also ask Legiit's AI to rewrite its text (endpoint 10). Words such as "business", "snapshot" and "gap" are explained in [section 14](#14-words-used-in-this-kit).
+The Settings tab, which also opens as a page of its own, holds the token, the chosen business, the user's own brands and their competitors (endpoints 1, 2, 3 and 6). Each tab can also ask Legiit's AI to rewrite its text (endpoint 10). Words such as "business", "snapshot" and "gap" are explained in [section 14](#14-words-used-in-this-kit).
+
+<img src="images/side-panel-tabs.png" width="420" alt="The side panel on a Google results page, with its six tabs and the button Save to Command Center">
+
+*The side panel while a Google results page is open: the five feature tabs and Settings. On the Click Potential tab, the button "Save to Command Center" starts the save of a visibility snapshot (endpoint 4).*
 
 ## 1. What to build
 
@@ -80,7 +86,7 @@ The ten endpoints are the smaller part of the work.
 | Personal data | Find and remove one person's details; delete everything with the account | Section 7, decisions 8 and 13 |
 | Operations | The API host, a staging host, exceptions in the firewall and the rate limits, no logging of bodies | Sections 3, 7 and 8 |
 
-The kit was tested by three test builds. Automated agents that had only this folder each built the API layer, one in Node, one in Python and one in PHP, and each passed the check of section 9 on its first run. They did not build the pages in Command Center, a real data model, a real AI model or the operations part. So the kit is complete enough to build the API layer from it. The test builds say nothing about the size of the whole job.
+The kit was tested by three test builds. Automated agents that had only this folder each built the API layer, one in Node, one in Python and one in PHP, and each passed the check of section 9, as it was on that day, on its first run. What they had to guess is now written in this guide. They did not build the pages in Command Center, a real data model, a real AI model or the operations part. So the kit is complete enough to build the API layer from it. The test builds say nothing about the size of the whole job.
 
 ### Before you start
 
@@ -109,7 +115,7 @@ Run `npm run api:check` after every step. Checks for a capability that you do no
 
 ### Two levels of done
 
-**API done:** `npm run api:check` with the option `--other-business` passes against your API with all eight capabilities on: 31 checks pass and none is skipped ([section 9](#9-how-to-test)). The field `url` of a save reply may still be `null`.
+**API done:** `npm run api:check` with the option `--other-business` passes against your API with all eight capabilities on: 34 checks pass and none is skipped ([section 9](#9-how-to-test)). The field `url` of a save reply may still be `null`.
 
 **Launch done** is this list. The product owner signs it off.
 
@@ -156,6 +162,18 @@ sequenceDiagram
 - **The extension only writes.** It never reads a saved item back, never edits one and never deletes one.
 - Only `GET` and `POST` are used. There are no query strings.
 
+<img src="images/settings-connected.png" width="834" alt="The settings of the extension after Connect, with a business chosen and its brands and competitors filled in">
+
+*The settings after Connect. The name and the plan come from `GET /v1/session`, the list of businesses from `GET /v1/businesses`, and everything marked "From Command Center" from `GET /v1/businesses/{businessId}`.*
+
+<img src="images/save-dialog.png" width="560" alt="The dialog before a save: the JSON body, and the buttons Cancel and Send to Legiit">
+
+*Before a save (here endpoint 6, a competitor) the extension shows the exact JSON body. It sends that body only when the user clicks "Send to Legiit".*
+
+<img src="images/saved-with-link.png" width="834" alt="After the save: the chip Saved and the link Open in Command Center next to the competitor">
+
+*After a save the extension shows "Saved" next to the button. "Open in Command Center" is a link to the `url` of your reply.*
+
 What causes a request:
 
 | The user… | Requests |
@@ -187,6 +205,7 @@ So a normal user causes a few requests per minute at most.
 - A token is printable ASCII without spaces, at most 4,096 characters. The extension refuses to store anything else.
 - **Answer `401` only when the token itself is bad, as JSON with the error body.** A `401` with the error body on `GET /v1/session` makes the extension delete the token. Nothing in front of the API (a gateway, a proxy, HTTP Basic auth on a staging site) may answer `401` for a valid token, and it must never use that JSON shape. When the token cannot be checked because something of yours is down (the database, a login service), answer `503`.
 - For a valid token `GET /v1/session` answers `200`. Say what the user's plan includes through `capabilities`, not through `403`. Use `403` on the session only when the account may not use the API at all (it is suspended, for example): the extension then shows your message and keeps a token that is already stored.
+- The check sends every endpoint one request without a token and one with an unknown token. Each must answer `401` with the error body. An endpoint whose capability is off for the user may answer `404`, `405` or `501`.
 
 ### What arrives at the server
 
@@ -197,7 +216,7 @@ Captured from Chrome with a production build of the extension. The raw requests 
 | `Authorization` | `Bearer <token>` |
 | `Accept` | `application/json` |
 | `Content-Type` | `application/json` (POST only) |
-| `X-Legiit-Client` | `legiit-lens/<extension version>`, for example `legiit-lens/0.1.0`. For your logs: do not require it |
+| `X-Legiit-Client` | `legiit-lens/<extension version>`, for example `legiit-lens/0.1.0`. For your logs: do not require it. The check sends one request without it |
 | `Idempotency-Key` | A random UUID. On the five saves only, not on reads and not on AI. Do not require it. See [Saving the same thing twice](#saving-the-same-thing-twice) |
 | `Cache-Control`, `Pragma` | `no-cache`. Chrome adds them, because the extension never uses a cached reply |
 | `Origin` | `chrome-extension://<32 letters>` on POST. On GET only when the user has switched off the extension's access to the API host (see CORS below) |
@@ -233,23 +252,24 @@ The check warns when this safety net is missing. It sends two preflights and one
 
 - JSON, UTF-8, always one object.
 - **Accept bodies of up to 1 MB** (1,048,576 bytes) on every POST. The extension never sends more. Raise the limit of your framework or proxy if it is lower (Express accepts 100 KB by default). You may answer `413` to anything larger.
-- As sent (JSON without white space) the examples in this kit are 0.1 KB (a competitor), 1 to 3 KB (an AI request), 0.5 to 2.5 KB (a snapshot), 0.5 to 2 KB (a content analysis), 4 to 9 KB (a brief) and 0.5 to 11 KB (a gap list). The files in `examples/` are indented and therefore larger. Real bodies are often several times larger.
+- As sent (JSON without white space) the examples in this kit are 0.1 KB (a competitor), 1 to 3 KB (an AI request), 0.5 to 2.5 KB (a snapshot), 0.5 to 2 KB (a content analysis), 4 to 9 KB (a brief) and 0.5 to 11 KB (a gap list). The files in `examples/` are indented and therefore larger; the reference prints the size of each one as sent. Real bodies are often several times larger.
 - **Any save can come close to 1 MB.** A gap list of 1,000 rows is about 0.5 MB, more with long titles or non-Latin text; the Markdown of a brief alone can be 600 KB. A body that would exceed 1 MB is not sent: the user is told that it is too large.
 - Every required field is in every request. A field with no value is sent as `null`, `""` or `[]`, as its row in the reference says. **These are valid values: do not reject them as "missing".** One field can be absent: `responseSchema` of the AI request.
 - Every text and every list has a maximum, stated in [`reference.md`](reference.md). The extension enforces them before sending, so you can size columns from them. It shortens what is too long instead of refusing it: text is cut and ends with "…", a list keeps its first entries. Every integer fits a signed 32-bit column.
 - Lengths are counted in UTF-16 code units. If you check lengths, count characters (PHP `mb_strlen`, Laravel `max:`, Python `len`): a text within its limit in UTF-16 units is always within it in characters. Never count bytes (PHP `strlen`).
 - All text is valid Unicode. It can contain any language, emoji and typographic quotes. An emoji is 4 bytes in UTF-8: a MySQL database needs `utf8mb4` for it (section 8).
 - **Ignore fields you do not know.** A later extension version may add fields. Do not validate with "no additional properties".
-- **Accept values you do not know** where the reference says "Values in this version": store the value as text. A later extension version may add values. Where the reference says "One of", the list is closed.
+- **Accept values you do not know** where the reference says "Values in this version": store the value as text. A later extension version may add values. Where the "Limits" column of the reference says "one of", the list is closed.
 - Dates are ISO 8601 in UTC with milliseconds: `2026-11-20T12:00:00.000Z`. They come from the user's clock and say when something was measured, not when it was saved. Do not refuse a date for being in the past or in the future (the user's clock can be wrong), and record your own time of receipt. Store it in a column that holds any date with milliseconds (section 8 names the MySQL type).
 - URLs are written the way browsers write them. They can contain characters that strict URI validators refuse (`|`, `[`, `]`). Check that a URL starts with `http://` or `https://` and is at most 2,048 characters long, and nothing more. One field, `rows[].contacts[].url` of a gap list, can also start with `mailto:`.
 - **Before your server requests a URL from a request body, block private and internal hosts and IP ranges.** The URLs were read from web pages. Nothing in this API needs your server to request one.
+- The check tests these rules on every save: it sends every value that can be empty as an empty value, a value that this version does not list in every open list, the URL `https://example.com/a|b?x=[1]`, and an emoji in a page title and in the Markdown of a brief.
 
 What to validate:
 
 | Level | What to check |
 | --- | --- |
-| Must | The body is one JSON object with the required keys in the right types. Otherwise answer `422` with the error body, or `400` for a body that is not JSON or not a JSON object; the extension treats the two alike. The check sends `{}` and a body that is cut off |
+| Must | The body is one JSON object with the required keys in the right types. Otherwise answer `422` with the error body, or `400` for a body that is not JSON or not a JSON object; the extension treats the two alike. The check sends `{}`, an example with a text where a list must be, and a body that is cut off, to each of the five saves |
 | Should | Everything in the "Limits" column of the reference: lengths, list sizes, number ranges, fixed values and closed lists ("one of") |
 | Not needed | Rules that the reference writes as a sentence in the "Meaning" column, such as "null exactly when…" or "always the number of…". They describe what the extension sends. Do not reject a request because of them |
 
@@ -282,7 +302,7 @@ The extension accepts more than this. A list entry that it cannot read (a busine
 - A starting point: 120 reads and 60 saves per minute for a user, and an AI allowance per day (decision 6). A `GET` is a read and a `POST` is a save. Count calls to the AI endpoint separately.
 - Keep `GET /v1/session` out of tight limits. Every page of the extension calls it when it opens.
 - Answer `429` with the error body, and say in the message when to try again. The extension does not read `Retry-After` and does not retry. An allowance that is used up is `429` too.
-- The check in section 9 sends about 60 requests in a few seconds (about 20 reads, 35 saves and 3 calls to the AI endpoint). Exempt the test account, or allow for it.
+- The check in section 9 sends about 100 requests in a few seconds. With the token of the test account these are about 20 reads, 55 saves and 4 calls to the AI endpoint, of which 3 reach your model. The other 20 requests carry no valid token: you answer them with `401`. Exempt the test account from the rate limits and from the AI allowance, or allow for the check.
 
 ### Saving the same thing twice
 
@@ -300,11 +320,11 @@ The column "The same `Idempotency-Key` again" is the `Idempotency-Key` rule. It 
 
 - Remember the reply of a **successful** save under (user, method, path, key) for 24 hours. Answer the same key with that reply again: same status, same body.
 - Check the token, the capability and the business first. The remembered reply then takes the place of validating and storing the body.
-- **Never remember an error.** After a `422`, `429` or `5xx` the dialog stays open, and the next click sends the same key with the same body. Handle that attempt as a new request.
+- **Never remember an error.** After a `422`, `429` or `5xx` the dialog stays open, and the next click sends the same key with the same body. Handle that attempt as a new request. The check sends `{}` with a key and then a valid body with the same key, and warns when the valid body is not stored.
 - Do not compare bodies. If the first request with a key is still running, wait for it or answer `409`; the extension shows a `409` like any other `4xx`. If you mark a key as running, let the mark end by itself after about 30 seconds: a request that died must not block the key for 24 hours.
 - Do not require the header and do not check its format. The extension always sends a UUID (36 characters); `curl` and the check also send saves without it. An empty value means "no key". A key longer than 255 characters may be treated as no key, and you may store a hash of the key in place of the key.
 
-The column "The same content under a new key" needs no key. Never de-duplicate snapshots, gap lists or content analyses by their content: the same reading saved twice is two items, and both carry the same `capturedAt`.
+The column "The same content under a new key" needs no key. Never de-duplicate snapshots, gap lists or content analyses by their content: the same reading saved twice is two items, and both carry the same `capturedAt`. The check fails when one of these three comes back with an id that an earlier save of the run got.
 
 ## 4. Capabilities: launching endpoint by endpoint
 
@@ -325,7 +345,7 @@ The column "The same content under a new key" needs no key. Never de-duplicate s
 - Capabilities belong to the user: every token of a user gets the same list. Use them for plans too: leave out what the user's plan does not include.
 - List `businesses` whenever you list one of the four capabilities below it in the table. Without it the user cannot choose a business, and those four saves stay disabled.
 - Send the names exactly as written, in a JSON array. They are case-sensitive. The extension ignores a name it does not know, so a misspelt name hides its feature without any error. `npm run api:check` warns about unknown names.
-- An endpoint whose capability is not in the user's session answers `404`, like an endpoint that does not exist.
+- An endpoint whose capability is not in the user's session answers `404`, like an endpoint that does not exist. When you run the check with the token of an account on a smaller plan, it sends one request to each such endpoint. It fails when the answer is `403`, or `404` with the code `not_found`.
 - The extension reads the capabilities when the side panel or the settings page opens. A page that stays open keeps the list it read: after a plan change the user sees the new features when they open the panel again.
 - Safety net: if a save answers `404`, `405` or `501` although its capability is listed, the extension tells the user, then hides the buttons for it in that page until the page is opened again or the user connects again.
 
@@ -343,12 +363,16 @@ Exceptions:
 - A `413` from a proxy in front of your application can be the proxy's own page (nginx sends HTML). The extension never sends more than 1 MB.
 - The body of a `5xx` is not read.
 
-`message` is one sentence the user can act on. It is shown after the status code, as plain text, up to 200 characters, for every `4xx` except `401` and except a `404` or `405` that means "not built". On screen it reads, for example, "Legiit rejected the request (422): keyword is required".
+`message` is one sentence the user can act on. It is shown after the status code, as plain text, up to 200 characters, for every `4xx` except `401` and except a `404` or `405` that means "not available". On screen it reads, for example, "Legiit rejected the request (422): keyword is required".
+
+<img src="images/save-rejected.png" width="560" alt="The dialog after a 422: a red line with the status and the message of the API">
+
+*When your API answers `422`, the dialog stays open and shows your `error.message` after "Legiit rejected the request (422):". The message in this image is an example.*
 
 | Status | Use it when | What the extension does |
 | --- | --- | --- |
 | `401` | The token is missing, unknown, expired or revoked. Nothing else | On `GET /v1/session`, when it carries the error body: deletes the token and asks for a new one. Elsewhere: shows "Legiit did not accept the token" |
-| `403` | The token is valid, but the account may not use the API now (it is suspended, for example), or another rule of yours refuses this one request. Not for a feature the user does not have (leave the capability out), not for a used-up allowance (`429`), not for a business that is not the user's (`404` `not_found`) | Shows "Legiit rejected the request (403)" and your message. Keeps the token |
+| `403` | The token is valid and the user has the feature, but another rule of yours refuses this one request: the user's role in this business does not allow this kind of save, or the account may not use the API now (it is suspended, for example). Not for a feature the user does not have (leave the capability out), not for a business that the user may not save into at all (`404` `not_found`), not for an allowance that is used up (`429`) | Shows "Legiit rejected the request (403)" and your message. Keeps the token |
 | `404` with `error.code` `"not_found"` | The business in the path does not exist or is not this user's | Shows "Legiit could not find it (404)" and your message. The feature stays |
 | any other `404`, `405`, `501` | The endpoint is not built, or its capability is not enabled for this user | Says that Legiit cannot receive this yet, then hides that button |
 | `422`, `400`, `413`, any other `4xx` | The body cannot be accepted | Keeps the dialog open, shows "Legiit rejected the request (422)" and your message |
@@ -439,7 +463,7 @@ Defaults of common frameworks that break this API. The check in section 9 catche
 | --- | --- |
 | The framework answers an unknown route, a failed validation, a rate limit or a missing record in its own shape | Convert every error for `/v1/*` to the error body of section 5, in one place: a render callback in Laravel's exception handler, a final error middleware in Express, a custom exception handler in Django REST Framework |
 | The framework's own "not found" is used for a missing business | Look the business up yourself, among the businesses of the token's user, and answer `404` with the code `not_found` yourself. Every `404` that the framework makes by itself then gets another code |
-| An integer route parameter (`whereNumber`, `<int:id>`) makes the framework answer its own 404 for an id of another form | Take the id as text and check it in your business lookup. The check reports a `4xx` other than `404` `not_found` as a warning, and a `401`, a `5xx` or anything that is not an error as a failure |
+| An integer route parameter (`whereNumber`, `<int:id>`) makes the framework answer its own 404 for an id of another form | Take the id as text and check it in your business lookup. When your ids are numbers, the check sends three ids of another form: a text, your business id followed by letters (`101abc`), and a number of 20 digits. A `4xx` other than `404` `not_found` is a warning; a `401`, a `5xx` or a success is a failure |
 | CSRF middleware, a CORS allow-list by origin | Exempt these routes from CSRF; allow every origin (section 3) |
 | A body limit below 1 MB | Accept 1 MB on every POST. `express.json()` accepts 100 KB. The default of nginx (`client_max_body_size 1m`) is exactly enough: do not lower it. PHP accepts 8 MB |
 | A staging site behind HTTP Basic auth | It cannot work: the `Authorization` header carries the token, so Basic auth answers `401` to every call and the extension can never connect |
@@ -456,7 +480,7 @@ Defaults of common frameworks that break this API. The check in section 9 catche
 | The `required` rule refuses `""` and `[]` | Use `present`, with `nullable` where the reference allows `null` |
 | The global middleware `ConvertEmptyStringsToNull` turns `""` into `null`, and `TrimStrings` removes white space at both ends of `markdown`, `prompt` and `system` | Switch both off for these routes. From Laravel 11, in `bootstrap/app.php`: `$middleware->convertEmptyStringsToNull(except: [fn ($request) => $request->is('v1/*')])`, and the same with `trimStrings`. In Laravel 8 to 10, in a service provider: `ConvertEmptyStringsToNull::skipWhen(fn ($request) => $request->is('v1/*'))`, and the same with `TrimStrings`. `withoutMiddleware()` on a route does nothing here, because both are global |
 | `JsonResource` and resource collections wrap the reply in `"data"`, and model arrays have keys in snake_case (`brand_names`) | Call `JsonResource::withoutWrapping()`, return no paginated collection, and name every key in camelCase yourself |
-| The `api` middleware group limits all routes together to 60 requests a minute (`throttle:api`: a default up to Laravel 10, optional later) | Define your own limits with `RateLimiter::for` (section 3, "Rate limits"). The check alone sends about 60 requests in a few seconds |
+| The `api` middleware group limits all routes together to 60 requests a minute (`throttle:api`: a default up to Laravel 10, optional later) | Define your own limits with `RateLimiter::for` (section 3, "Rate limits"). The check alone sends about 100 requests in a few seconds |
 | `config/cors.php` covers only `api/*` | Add `v1/*` to `paths`, allow every origin and set `max_age` |
 | `auth:sanctum` answers a bad token with `{"message": "Unauthenticated."}`, and sends a request without `Accept: application/json` to the login route | Convert it to the error body (example below): without the error body the extension does not delete a revoked token. Sanctum's personal access tokens fit section 6: they are stored as SHA-256, have a last-used time, can have a prefix (`token_prefix`), and do not expire by default |
 | `Str::markdown()` passes raw HTML and unsafe links through | `Str::markdown($md, ['html_input' => 'escape', 'allow_unsafe_links' => false])` |
@@ -500,7 +524,7 @@ return response()->json(['error' => ['code' => 'not_found', 'message' => 'No suc
 | A `TEXT` column holds 64 KB | `markdown` of a brief can be 600 KB, and any save stored as one JSON value can be close to 1 MB: use `MEDIUMTEXT` or a JSON column |
 | The character set `utf8` holds 3 bytes per character | An emoji in a page title then causes a `500` or cut text. Use `utf8mb4` for the tables and for the connection |
 | A `TIMESTAMP` column ends in January 2038 and has no milliseconds | Use `DATETIME(3)` for the dates of a request (`capturedAt`, `createdAt`). A wrong clock on the user's device must not cause a `500` |
-| MySQL reads the text `'12abc'` as the number 12 when it compares it with an integer key | Check that an id from the path has only digits before you query. If not, answer `404` `not_found` |
+| MySQL reads the text `'12abc'` as the number 12 when it compares it with an integer key | Check that an id from the path has only digits before you query. If not, answer `404` `not_found`. The check sends your business id followed by `abc`: a `200` fails it |
 
 ### Express
 
@@ -536,7 +560,7 @@ This installs the extension's whole toolchain: about 1 GB and a few minutes.
 npm run mock
 ```
 
-This starts the mock API on `http://localhost:8787` (for another port: `PORT=8788 npm run mock`, in PowerShell `$env:PORT=8788; npm run mock`). It implements the contract with an in-memory store and checks every request body against the contract. Tokens: `demo-token` (a user with every capability), `limited-token` (a second user with three). Any other token is refused with `401`.
+This starts the mock API on `http://localhost:8787` (for another port: `PORT=8788 npm run mock`, in PowerShell `$env:PORT=8788; npm run mock`). It implements the contract with an in-memory store and checks every request body against the contract. Tokens: `demo-token` (a user with every capability), `limited-token` (a second user with three). The business `biz_harborview` belongs to the second user alone: the token of the first user gets `404` `not_found` for it. Any other token is refused with `401`.
 
 ```bash
 curl -s http://localhost:8787/v1/session -H "Authorization: Bearer demo-token"
@@ -548,7 +572,7 @@ curl -s -X POST http://localhost:8787/v1/businesses/biz_brightpath/gap-lists -H 
 
 In PowerShell write `curl.exe` instead of `curl`, and put the `@…` argument in quotes.
 
-The code is in `mock-server/handlers.mjs`, about 300 lines. Its header lists where the main rules of this guide are implemented. Read it when the prose is unclear. Its health page (`/health`) and its tolerance for a trailing slash are conveniences, not part of the contract.
+The code is in `mock-server/handlers.mjs`, about 350 lines. Its header lists where the main rules of this guide are implemented. Read it when the prose is unclear. Its health page (`/health`) and its tolerance for a trailing slash are conveniences, not part of the contract.
 
 ### Check your API
 
@@ -556,9 +580,9 @@ The code is in `mock-server/handlers.mjs`, about 300 lines. Its header lists whe
 npm run api:check -- https://your-staging-host your-test-token
 ```
 
-The command is the same in bash, PowerShell and cmd. The first line of the summary says whether the run was read-only, so you can see that the options were read.
+The command is the same in bash, PowerShell and cmd. Write the `--` before the arguments: without it npm keeps the options for itself. The first line of the summary says whether the run was read-only, so you can see that the options were read.
 
-The token can come from the environment instead. Then it does not stay in the history of your shell:
+The token can come from the environment variable `LEGIIT_API_TOKEN` instead. Use this form in a build pipeline and wherever the output is kept, because npm prints the command line, the token included. The check itself never prints the token.
 
 ```bash
 LEGIIT_API_TOKEN=your-test-token npm run api:check -- https://your-staging-host
@@ -566,14 +590,14 @@ LEGIIT_API_TOKEN=your-test-token npm run api:check -- https://your-staging-host
 
 In PowerShell: `$env:LEGIIT_API_TOKEN='your-test-token'; npm run api:check -- https://your-staging-host`.
 
-- It sends the example requests with the extension's own client code, and checks every reply against the contract and against what the extension accepts. 31 checks, a few seconds, about 60 requests.
-- **It creates data** in the account, about 20 items in a full run: 5 snapshots and 4 gap lists (most for the keyword "best dentist in austin"; one gap list is about 1 MB, one comes from a pasted answer and has an empty subject), 3 content analyses, 4 competitors and 4 workspaces (one with 600 KB of Markdown). Competitors and workspaces are named "Conformance Check: …". The summary lists every id. Use a test account with at least one business.
+- It sends the example requests with the extension's own client code, and checks every reply against the contract and against what the extension accepts. 34 checks, a few seconds, about 100 requests.
+- **It creates data** in the account, 28 items in a full run: 7 snapshots and 6 gap lists (most for the keyword "best dentist in austin"; one gap list is about 1 MB, one comes from a pasted answer and has an empty subject), 5 content analyses, 4 competitors and 6 workspaces (one with 600 KB of Markdown). Competitors and workspaces are named "Conformance Check: …". The summary lists every id. It also lists an item that a wrong server stored by mistake, with the reason in capital letters. Use a test account with at least one business.
 - Add `--business=<id>` to choose the business. Without it the first business of the list is used.
-- Add `--read-only` for a run that sends no save at all. It still calls the AI endpoint three times.
-- Add `--other-business=<id>`, with the id of a business of **another** user, to check that this token cannot reach it. Without it that check is skipped; "API done" needs it. In a full run it also tries four saves into that business, which a correct server refuses. If one goes through, the check fails and the summary names the item, so that it can be removed.
+- Add `--read-only` for a run that sends no save at all. It still calls the AI endpoint six times: four times with the token (three of these calls reach your model) and two times without a valid token.
+- Add `--other-business=<id>`, with the id of a business of **another** user, to check that this token cannot reach it. Without it that check is skipped; "API done" needs it. In a full run it also tries four saves into that business, which a correct server refuses. If one goes through, the check fails and the summary names the item, so that it can be removed. To try it against the mock, use `--other-business=biz_harborview`.
 - Checks for a capability that the session does not list are skipped, so you can run it from the first endpoint on. A run with skipped checks proves only the checks that ran.
-- It ends with a summary: the requests it sent, what it created, where the returned links point, and warnings. A failure means the reply breaks the contract; most failures would show an error to a user. A warning is a recommendation, for example a missing `url`.
-- The exit code is `0` when no check failed (warnings do not change it), `1` when a check failed, and `2` when the check could not start. So the check can run in your build pipeline.
+- It ends with a summary. Its first line is the mode. Then come the account and its capabilities, the requests it sent, how long the two largest saves took, what it created, where the returned links point, the warnings, and every check that was skipped, with the reason. Its last line is the result. A failure means the reply breaks the contract; most failures would show an error to a user. A warning is a recommendation, for example a missing `url`.
+- The exit code is `0` when no check failed (warnings and skipped checks do not change it), `1` when at least one check failed, and `2` when the check could not start or ended without a result. So `0` always means that the checks ran and none failed, and the check can run in your build pipeline.
 - **It has no clean-up**, because the API has no call that deletes. Run it in a business that exists only for testing, and remove that business or the items on your side afterwards.
 
 To see it pass, run it against the mock in a second terminal:
@@ -582,7 +606,7 @@ To see it pass, run it against the mock in a second terminal:
 npm run api:check -- http://localhost:8787 demo-token
 ```
 
-The check does not cover everything. Test these yourself: rate limiting; a body larger than 1 MB; the same `Idempotency-Key` after an error; an endpoint whose capability is off for the user (expect `404` with a code other than `not_found`; try it with a second test account on a smaller plan); whether the links you return open a real page; what the AI endpoint does when the model is slow or returns broken JSON; and everything in section 7.
+The check does not cover everything. Test these yourself: rate limiting; a body larger than 1 MB; a body near 1 MB on the snapshot, competitor, content-analysis and AI endpoints (the check sends its large bodies to the gap-list and the workspace endpoint only); the same `Idempotency-Key` after a `429` or a `5xx` (the check tries it after a `422` only); a token that was revoked or has expired (the check uses a token that never existed); an endpoint whose capability is off, if you did not run the check with an account on a smaller plan; whether a save is really stored and shown (the check reads back competitors only); whether the links you return open a real page; what the AI endpoint does when the model is slow or returns broken JSON; and everything in section 7.
 
 ### Check with the real extension
 
@@ -632,12 +656,12 @@ Every question here came up in one of the test builds.
 | A date without milliseconds, or with an offset? | The extension always sends UTC with milliseconds and `Z`. Accept at least that form; a parser that accepts more is fine |
 | Is `10.0` an integer? | Accept it or refuse it, as your framework does. The extension never sends a fraction |
 | Does a save into a business also need the `businesses` capability on the server? | No. Each endpoint checks its own capability |
-| When would I use `403`? | Perhaps never. It is for an account that may not use the API now (it is suspended, for example), or for another rule of yours that refuses one request. For a feature the user does not have, leave the capability out. An allowance that is used up is `429`. A business that is not the user's is `404` `not_found` |
+| When would I use `403`? | Perhaps never. It is for one request that another rule of yours refuses: the user's role in this business does not allow this kind of save, or the account may not use the API now (it is suspended, for example). For a feature the user does not have, leave the capability out. An allowance that is used up is `429`. A business that the user may not save into at all is `404` `not_found` |
 | A business the user can see but not save into? | Do not list it in `GET /v1/businesses`. A save into it is `404` `not_found`, like any business that is not theirs to save into |
-| How do I compare competitor names and domains? | With simple rules. Names: lower case, without surrounding spaces. Domains: lower case, without scheme, `www.` and path. The extension sends plain host names, so ports and other special cases do not occur. A domain that another competitor of the business already has stays with that one: no two competitors of a business share a domain. When no name matches and the domains of the request belong to different competitors, the first domain of the request that a competitor already has decides which competitor you return |
+| How do I compare competitor names and domains? | With simple rules. Names: lower case, without surrounding spaces. Domains: lower case, without scheme, `www.` and path. The extension sends plain host names, so ports and other special cases do not occur. A domain that another competitor of the business already has stays with that one: no two competitors of a business share a domain. When no name matches, go through the domains of the request in their order: the first domain that a competitor of the business already has decides, and you return that competitor |
 | Do the competitors of a brief become competitors of a business? | No. They stay inside the brief |
 | A business has 200 competitors and the user adds another? | Your decision. If you refuse, answer `422` with a message |
-| Must a competitor that was added appear in Business Details at once? | Yes, among the first 200: the extension reads no more |
+| Must a competitor that was added appear in Business Details at once? | Yes, among the first 200: the extension reads no more. The check fails when the competitor is not listed, or is listed with damaged text. It warns when the business has 200 competitors or more |
 | Does a workspace have to appear in `GET /v1/businesses`? | Not for the extension. It is decision 3 |
 | Which keys of `responseSchema` must I support? | `type`, `properties`, `required`, `items`, `minItems`, `maxItems`, `additionalProperties`. Pass the schema to the model's structured-output option, or put it into the prompt |
 | A `responseSchema` with a task other than "brief"? | The schema decides: return JSON whenever it is present |
@@ -704,9 +728,22 @@ This is contract version `1.0.0-draft.4` of 20 November 2026.
 
 **You can build on it.** It describes what the finished extension sends and accepts, and that cannot change without a new release of the extension. "Draft" means that wording, examples and advice can still improve when a reader finds a gap. The contract becomes `1.0.0` when your API passes the check with it.
 
-Changes in `1.0.0-draft.4`:
+Changes in `1.0.0-draft.4`. No field, no type and no limit of a request changed: an API that was built from `1.0.0-draft.3` stays valid.
 
-CHANGES_PLACEHOLDER
+1. `409` is now listed among the replies of the five saves. It has one use: the first request with the same `Idempotency-Key` is still running and you do not wait for it. Never answer `409` for a competitor or a workspace that already exists: answer `200` with its id.
+2. `Idempotency-Key`: the header has no minimum length any more, because an empty value means "no key". New advice: a key longer than 255 characters may be treated as no key, you may store a hash of the key, and a mark for a running request must end by itself after about 30 seconds.
+3. One rule for an allowance that is used up: `429`, also for the daily AI allowance, with a message that says when to try again. `403` is for one request that another rule of yours refuses.
+4. The two meanings of `404` are two rows in the reference now: `404` with the code `not_found`, and any other `404`, `405` or `501`. What the extension does is unchanged.
+5. Competitors: when no name matches, go through the domains of the request in their order. The first domain that a competitor of the business already has decides: return that competitor.
+6. AI endpoint: the first call to the model and the one repeat must both end within the 60 seconds that the extension waits. Give each call about 25 seconds.
+7. `updatedAt` of the Industry Pulse reply is plain text now, because the extension does not read this value.
+8. The error body has two stated exceptions: a `404` or `405` for an endpoint that is not available, and a `413` that a proxy sends by itself.
+9. Two rules of this guide are now also in the contract: send `Cache-Control: no-store` with every reply, and send `"url": null` until the page of a saved item exists.
+10. New: the folder `schemas/`, and 13 example files: replies with integer ids, the session of a small plan, a session without capabilities, a save reply with `"url": null`, and error bodies for `400`, `403`, `409`, `413` and `429`.
+11. Changed examples: the first snapshot and the first gap list carry a title with an emoji, and the gap list also a title in Japanese. The first content analysis uses the engine `embedding`.
+12. The reference: closed lists are in the "Limits" column ("one of"); what several endpoints share is printed once, under "Shared parameters and responses"; every request example states its size as sent.
+13. This guide: how to get the tools, what the extension does, the whole job, a build order and the launch list (section 1); rate limits in one place (section 3); notes per framework (section 8); a default for every decision, decision 13 and the page for the product owner (section 11).
+14. Wording: "URL" for a web address, "case-insensitive", and about thirty idioms replaced. No rule changed its meaning.
 
 ### Changing the contract later
 
@@ -716,7 +753,7 @@ CHANGES_PLACEHOLDER
 - **Needs a new extension release first:** new required fields in requests.
 - **Never without a `/v2`:** removing or renaming a field or a path, changing a type, changing what a status code means.
 - `X-Legiit-Client` tells you which extension version sent a request.
-- For the people who maintain this kit: change `openapi.yaml` first. `npm run api:examples` then regenerates the examples, `reference.md` and `openapi.examples.json`, and `npm test` fails until the extension, the mock server and the contract agree again.
+- For the people who maintain this kit: change `openapi.yaml` first. `npm run api:examples` then regenerates the examples, `reference.md`, `openapi.examples.json` and the files in `schemas/`, and `npm test` fails until the extension, the mock server and the contract agree again.
 
 ## 14. Words used in this kit
 
@@ -737,8 +774,8 @@ CHANGES_PLACEHOLDER
 | Brief | A client brief the extension writes from a business's website |
 | Avatar | A short description of a typical customer |
 | Capability | A feature of the API that can be switched on per user |
-| Side panel | The panel that Chrome opens next to a page. The extension shows its five tabs there |
-| Tab | One of the five parts of the side panel: Click Potential, Why Not Me, Rewind, New or Noise, Instant Brief ("What the extension does" at the top of this guide) |
+| Side panel | The panel that Chrome opens next to a page. The extension shows its tabs there |
+| Tab | One part of the side panel: Click Potential, Why Not Me, Rewind, New or Noise, Instant Brief, and Settings ("What the extension does" at the top of this guide) |
 | Scan sources | A button on the Why Not Me tab. The extension then reads the pages that a results page or an AI answer cites, to see which competitors each page names and who to contact |
 | Industry Pulse | Legiit's list of dated events in the search industry, for example Google updates (endpoint 9) |
 | Token | The secret text that a user creates in Command Center and pastes into the extension. It is sent with every request |

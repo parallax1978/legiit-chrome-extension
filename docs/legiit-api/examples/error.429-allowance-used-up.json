@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "allowance_used_up",
+    "message": "Your AI allowance for today is used up: try again in 6 hours."
+  }
+}

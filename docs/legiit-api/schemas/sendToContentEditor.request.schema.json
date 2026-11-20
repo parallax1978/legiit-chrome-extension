@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.4, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "title": "Request body of POST /v1/businesses/{businessId}/content-editor/documents",
+  "type": "object",
+  "description": "The result of comparing one text with competing pages, sentence by sentence. Two sentences \"make the same point\" when their similarity reaches method.threshold. The text itself is not sent: only its sentences that nobody else makes, and the points it lacks.",
+  "required": [
+    "targetKeyword",
+    "source",
+    "pageUrl",
+    "pageTitle",
+    "capturedAt",
+    "method",
+    "wordShare",
+    "onlyHere",
+    "missingPoints",
+    "comparedUrls"
+  ],
+  "properties": {
+    "targetKeyword": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "A free-text label from the \"Target keyword\" box. The user can type a search phrase; when they do not, it is pre-filled with the first part of the page title, so it is often a headline. Can be an empty string. Do not use it as a key."
+    },
+    "source": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "What was checked. page: the main content of the page at pageUrl. selection: only the text the user had selected on that page. pasted: text the user pasted into the extension; there is no page. Values in this version: page, selection, pasted. A later version may add values: accept a value that is not in this list."
+    },
+    "pageUrl": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2048,
+      "pattern": "^https?://",
+      "description": "URL of the page, as open in the user's browser (query string and fragment included). null exactly when source is \"pasted\"."
+    },
+    "pageTitle": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Title of the page. An empty string when source is \"pasted\" or the page has no title."
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the comparison was made, on the user's clock, as UTC with milliseconds. It is not the time of the save, and it is the same when the same comparison is sent again."
+    },
+    "method": {
+      "type": "object",
+      "description": "How the comparison was made, so that two documents can be compared fairly.",
+      "required": [
+        "engine",
+        "threshold",
+        "pagesCompared"
+      ],
+      "properties": {
+        "engine": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "embedding: sentence meanings compared with a language model that runs in the browser (the normal case). lexical: sentences compared by the words they share, used when that model cannot run; it does not find two sentences that say the same thing in different words. Values in this version: embedding, lexical. A later version may add values: accept a value that is not in this list."
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Similarity (0 to 1) from which two sentences count as making the same point. In this version 0.72 for embedding and 0.5 for lexical."
+        },
+        "pagesCompared": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "How many competing pages the text was compared with. Always the number of comparedUrls. \"Most\" below means more than half of this number."
+        }
+      }
+    },
+    "wordShare": {
+      "type": "object",
+      "description": "How the words of the checked text divide by how common their sentence is: fractions of 1 (not percentages), counted in words (not sentences), rounded to 4 decimals. The three add up to 1 within rounding.",
+      "required": [
+        "saidByMost",
+        "saidBySome",
+        "onlyHere"
+      ],
+      "properties": {
+        "saidByMost": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "In sentences that more than half of the compared pages also make."
+        },
+        "saidBySome": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "In sentences that at least one compared page makes, but not more than half. Always 0 when one page was compared."
+        },
+        "onlyHere": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "In sentences that no compared page makes. The sentences themselves are in the onlyHere list."
+        }
+      }
+    },
+    "onlyHere": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The sentences of the checked text that no compared page makes, in the order they appear. This is what is new in the text. Empty when every sentence has a match. Sentences shorter than five words are never checked.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600
+      }
+    },
+    "missingPoints": {
+      "type": "array",
+      "maxItems": 12,
+      "description": "Points that more than half of the compared pages make and the checked text does not. The point that the most pages make comes first. Points that are almost the same are merged into one. Always empty when fewer than two pages were compared.",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "pages",
+          "urls"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600,
+            "description": "One sentence that makes the point, quoted from one of the pages in urls."
+          },
+          "pages": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 8,
+            "description": "How many compared pages make the point. Always the number of urls."
+          },
+          "urls": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 8,
+            "description": "The compared pages that make the point. Each one is also in comparedUrls.",
+            "items": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^https?://",
+              "description": "An absolute http or https URL, written the way the browser writes it. It can contain characters that strict URI validators reject (for example [ ] and | in a query string): check the scheme and the length, nothing more."
+            }
+          }
+        }
+      }
+    },
+    "comparedUrls": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "description": "The competing pages the text was compared with, in comparison order: the URLs that were requested, before any redirect. Pages that could not be read or had no text are left out.",
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https?://",
+        "description": "An absolute http or https URL, written the way the browser writes it. It can contain characters that strict URI validators reject (for example [ ] and | in a query string): check the scheme and the length, nothing more."
+      }
+    }
+  }
+}

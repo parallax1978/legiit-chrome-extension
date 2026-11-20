@@ -17,6 +17,7 @@
     "e2e": "npm run build && playwright test",
     "e2e:only": "playwright test",
     "screenshots": "npm run build && playwright test --config playwright.store.config.ts",
+    "screenshots:kit": "playwright test --config playwright.kit.config.ts --trace off",
     "mock": "node mock-server/server.mjs",
     "model:fetch": "node scripts/fetch-model.mjs",
     "model:verify": "node scripts/fetch-model.mjs --verify-only",

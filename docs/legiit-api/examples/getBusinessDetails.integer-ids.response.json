@@ -1,0 +1,43 @@
+{
+  "id": 31,
+  "name": "BrightPath Dental",
+  "brandNames": [
+    "BrightPath Dental",
+    "Bright Path Dental",
+    "BrightPath"
+  ],
+  "domains": [
+    "brightpathdental.example"
+  ],
+  "competitors": [
+    {
+      "name": "Lakeside Smiles",
+      "domains": [
+        "lakesidesmiles.example"
+      ]
+    },
+    {
+      "name": "Capitol Dental Care",
+      "domains": [
+        "capitoldentalcare.example"
+      ]
+    },
+    {
+      "name": "Zilker Family Dentistry",
+      "domains": [
+        "zilkerfamilydentistry.example"
+      ]
+    }
+  ],
+  "focusKeywords": [
+    "best dentist in austin",
+    "emergency dentist austin",
+    "teeth whitening austin"
+  ],
+  "avatars": [
+    {
+      "name": "Busy parent",
+      "description": "Books for the whole family and values early appointments."
+    }
+  ]
+}

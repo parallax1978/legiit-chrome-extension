@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.4, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "title": "Request body of POST /v1/businesses/{businessId}/visibility-snapshots",
+  "type": "object",
+  "description": "One measurement of one Google results page, exactly as the user's Chrome displayed it (their window size, location and personalisation). Pixel values are CSS pixels from the top of the document, so they do not depend on how far the user had scrolled.",
+  "required": [
+    "keyword",
+    "capturedAt",
+    "googleHost",
+    "mode",
+    "resultsOffset",
+    "viewport",
+    "location",
+    "firstOrganicTopPx",
+    "firstOrganicFold",
+    "organicShare",
+    "grade",
+    "firstScreenShares",
+    "organic",
+    "tracked"
+  ],
+  "properties": {
+    "keyword": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "The search query as typed (the q parameter of the page), with whitespace collapsed."
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the page was measured, on the user's clock, as UTC with milliseconds (2026-11-20T12:00:00.000Z). It is not the time of the save. It can be a little later than the time on your server, and it is the same when the user saves the same measurement twice."
+    },
+    "googleHost": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^www\\.google\\.[a-z.]+$",
+      "description": "Host of the results page. Always starts with \"www.google.\" and can be a country site.",
+      "examples": [
+        "www.google.com",
+        "www.google.co.uk"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "Kind of results page. Always \"web\" in this version; AI Mode pages are not saved. Values in this version: web. A later version may add values: accept a value that is not in this list."
+    },
+    "resultsOffset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000,
+      "description": "How many results come before this page (Google's start parameter): 0 on the first results page, 10 on the second. Positions in this body are relative to the page; add this number for an approximate absolute rank."
+    },
+    "viewport": {
+      "type": "object",
+      "description": "Size of the page area of the browser window when the page was measured, in CSS pixels.",
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "description": "Width of the first screen."
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "description": "Height of the first screen. This is the fold."
+        }
+      }
+    },
+    "location": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 160,
+      "description": "The place name Google printed on the page (for example \"Austin, Texas\"), in the language of Google's interface. null when the page shows none."
+    },
+    "firstOrganicTopPx": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 10000000,
+      "description": "Top edge of the topmost organic result. null when no organic result could be measured."
+    },
+    "firstOrganicFold": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "above",
+        "partly",
+        "below",
+        null
+      ],
+      "description": "Where the topmost organic result is, relative to the fold (the bottom edge of the first screen, y = viewport.height). above: it ends at or above the fold. partly: the fold cuts through it. below: it starts at or below the fold. null exactly when firstOrganicTopPx is null."
+    },
+    "organicShare": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Part of the first screen covered by organic results (0.25 means 25 %), rounded to 4 decimals. Equal to the \"organic\" entry of firstScreenShares, or 0 when there is none."
+    },
+    "grade": {
+      "type": "object",
+      "description": "The extension's \"organic click potential\" for this page. It is a layout score, not a measured click-through rate.",
+      "required": [
+        "letter",
+        "score",
+        "estimate"
+      ],
+      "properties": {
+        "letter": {
+          "type": "string",
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "F"
+          ],
+          "description": "The letter for the score: A is 85 to 100, B 70 to 84, C 50 to 69, D 30 to 49, F 0 to 29."
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "100, minus up to 60 points for how far down the first screen the first organic result starts, minus up to 40 points for the part of the first screen's result area that is not organic."
+        },
+        "estimate": {
+          "type": "boolean",
+          "const": true,
+          "description": "Always true. Label the grade as an estimate wherever it is shown."
+        }
+      }
+    },
+    "firstScreenShares": {
+      "type": "array",
+      "maxItems": 12,
+      "description": "What fills the first screen: one entry per kind of result that is visible there, largest first. A kind that is missing covers nothing. Kinds are measured separately, so the shares can overlap and need not add up to 1.",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "share"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Kind of result. paa is \"People also ask\", forum is \"Discussions and forums\", top_stories is the news block. Values in this version: organic, ai_overview, ad, local_pack, featured_snippet, paa, video, image, shopping, forum, top_stories, knowledge_panel. A later version may add values: accept a value that is not in this list."
+          },
+          "share": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Part of the first screen this kind covers, rounded to 4 decimals. A very small part can round to 0."
+          }
+        }
+      }
+    },
+    "organic": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "The organic results of this page, in page order. Links inside other blocks (featured snippet, People also ask, videos) are not organic results. The array can be empty.",
+      "items": {
+        "type": "object",
+        "required": [
+          "position",
+          "url",
+          "domain",
+          "title",
+          "topPx",
+          "fold"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "1-based order among the organic results of this page, without gaps."
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^https?://",
+            "description": "Where the result leads, with Google's redirect and tracking parameters removed."
+          },
+          "domain": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Host of url, in lower case, without a leading \"www.\" (other subdomains are kept)."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "description": "The result's title as shown on the page."
+          },
+          "topPx": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000000,
+            "description": "Top edge of the result. null when it could not be measured."
+          },
+          "fold": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "above",
+              "partly",
+              "below",
+              null
+            ],
+            "description": "Fold position of the result, with the same three values as firstOrganicFold. null exactly when topPx is null."
+          }
+        }
+      }
+    },
+    "tracked": {
+      "type": "array",
+      "maxItems": 250,
+      "description": "Every brand the user tracks in the extension, their own and competitors: brands found among the organic results first, in result order, then the brands that were not found. The names come from the extension's settings (typed by the user, or pre-filled from Business Details). They are labels, not ids, and need not match the competitors stored for the business.",
+      "items": {
+        "type": "object",
+        "required": [
+          "owner",
+          "name",
+          "position",
+          "topPx",
+          "fold"
+        ],
+        "properties": {
+          "owner": {
+            "type": "string",
+            "enum": [
+              "mine",
+              "competitor"
+            ],
+            "description": "mine is one of the user's own brands, competitor one of their competitors."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "The brand's display name. When the user gave it no name, its first domain, or else its first other spelling."
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "organic[].position of the brand's first organic result on this page. null means the brand has no organic result on this page. A brand matches a result by domain, never by its name."
+          },
+          "topPx": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000000,
+            "description": "Top edge of that result. null when position is null or the result could not be measured."
+          },
+          "fold": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "above",
+              "partly",
+              "below",
+              null
+            ],
+            "description": "Fold position of that result. null when topPx is null."
+          }
+        }
+      }
+    }
+  }
+}

@@ -16,8 +16,11 @@ export interface MockState {
   session: { capabilities: string[] } & Record<string, unknown>;
   /** The user of "limited-token". */
   limitedSession: { user: { id: string; name: string; email: string }; plan: string; capabilities: string[] };
+  /** The businesses that both users can read and save into. */
   businesses: unknown;
   details: Record<string, { competitors: { name: string; domains?: string[] }[] } & Record<string, unknown>>;
+  /** Business Details of the businesses that belong to one user alone, by user id. */
+  ownDetails: Record<string, Record<string, { id: string; name: string; domains: string[]; competitors: { name: string; domains?: string[] }[] } & Record<string, unknown>>>;
   competitorIds: Record<string, string[]>;
   pulse: unknown;
   saved: {
@@ -34,6 +37,8 @@ export interface MockState {
 }
 
 export const MOCK_TOKENS: { valid: string; invalid: string; limited: string };
+/** A business of the second user alone ("limited-token"): the first user's token cannot reach it. */
+export const MOCK_OTHER_BUSINESS_ID: string;
 export const CORS_HEADERS: Record<string, string>;
 export function createMockState(): MockState;
 export function handleMockRequest(state: MockState, request: MockRequest): MockResponse;

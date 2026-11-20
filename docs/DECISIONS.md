@@ -281,6 +281,21 @@ D-59 compared pages by path, which made "/?page_id=2" on a site that routes by q
 **D-75 · An AI rewrite of a brief is applied to the brief as it is now.**
 The model can take a minute. Its reply was applied to the brief as it was at the click: a brief deleted meanwhile came back, and competitors changed meanwhile were overwritten. The rewrite now goes onto the stored brief, is dropped when that brief is gone, and changes the screen only if it still shows that brief. A rewrite without searches or proof no longer prints an empty line, and a competitor known by its domain only is listed under that domain in the brief as well.
 
+**D-76 · The guide starts with what a first reader needs, not with the endpoints.**
+A Laravel developer who read the kit cold could not reach "API done" from the folder alone, did not know who "we" is, and did not see that most open decisions are not theirs. The guide now opens with how to get the repository ("this folder does not work alone"), what the extension does (five tabs, one line each), the whole job (the endpoints are the smaller part), a build order with the decision each step needs, and "Launch done" as a list that the product owner signs off. No package with only the mock and the check was made: the repository is the package, and one `npm install` is the whole setup.
+
+**D-77 · The decisions have a page for the person who decides.**
+Nine of the decisions are for Product or Legal, and they sat in section 11 of a developer guide. `docs/legiit-api/decisions.md` puts them in plain words for the product owner, grouped by when they are needed, with the recommended answer and room for the real one. Every recommendation in the guide can now be built without asking (a free plan gets no capability; AI and Industry Pulse stay off until someone owns them). Decision 13 is new: who at Legiit may open saved items. It was a promise in the privacy text without an owner.
+
+**D-78 · One status per reason.**
+An allowance that is used up is `429`, also the daily AI allowance. `403` is for one request that another rule refuses (a role that does not allow this kind of save, a suspended account). A business that the user may not save into at all is `404` `not_found`, and a missing feature is a capability left out. Before, a quota was `403` in two places and `429` in a third.
+
+**D-79 · Framework notes are split by framework, and the Laravel sketch is not run.**
+Section 8 has one part for every framework and one each for Laravel and PHP, MySQL, Express and Django. The Laravel part names the exact calls (the two global input middlewares, the `/api` prefix, `JsonResource` wrapping, `throttle:api`, the CORS paths, Sanctum's 401) and shows one error handler as a sketch. Laravel is not installed here and nothing may be installed, so that sketch and the Express and Django rows come from the frameworks' documented behaviour and a second reader's review, not from a run. The PHP facts were run on PHP 8.3.
+
+**D-80 · "URL" in everything a developer reads.**
+The kit said "address" for a web address, which in one sentence also meant an IP address and elsewhere a postal or e-mail address. Developer-facing text now says URL. The page for the product owner keeps "web address".
+
 ---
 
 ## 3. Assumptions that a person must confirm

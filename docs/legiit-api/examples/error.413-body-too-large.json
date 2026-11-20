@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "too_large",
+    "message": "The request body is larger than 1 MB."
+  }
+}

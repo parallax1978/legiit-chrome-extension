@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.4, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "title": "Request body of POST /v1/workspaces/from-brief",
+  "type": "object",
+  "description": "A client brief the extension wrote from a business's public website (it reads up to 8 pages of the site). Nothing in it was typed or confirmed by the user except the list of competitors. Every list except avatars can be empty: the extension sends what it found.",
+  "required": [
+    "briefId",
+    "businessName",
+    "siteUrl",
+    "createdAt",
+    "contact",
+    "serviceAreas",
+    "services",
+    "competitors",
+    "focusKeywords",
+    "avatars",
+    "issues",
+    "nextSteps",
+    "markdown"
+  ],
+  "properties": {
+    "briefId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The extension's own id of the brief, random and unique on the user's device only: look it up per user, never across users. The same brief sent again (after the user edited its competitors, or days later from \"Saved briefs\") carries the same briefId and the same createdAt.",
+      "examples": [
+        "brief_3f9c2a7d41b06e58aa"
+      ]
+    },
+    "businessName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "description": "Name of the business as read from its site: structured data, the site-name tag, or the part of the page titles that repeats. When none is found it is the host name without \"www.\" (\"brightpathdental.example\"), so a name equal to the host of siteUrl means \"no name found\"."
+    },
+    "siteUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https?://",
+      "description": "The site the brief is about, as its origin with a trailing slash and nothing after it (https://www.example.com/)."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the brief was built on the user's device, on the user's clock, as UTC with milliseconds. It is not the time of the save and can be days in the past. Record your own time of receipt."
+    },
+    "contact": {
+      "type": "object",
+      "description": "Contact details the business publishes on its own site. Text as published: store and show it, do not validate or normalise it.",
+      "required": [
+        "phones",
+        "emails",
+        "addresses"
+      ],
+      "properties": {
+        "phones": {
+          "type": "array",
+          "maxItems": 6,
+          "description": "Phone numbers the way the site writes them. An entry can be the text of a phone link, such as \"Call (512) 555-0142\".",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          }
+        },
+        "emails": {
+          "type": "array",
+          "maxItems": 6,
+          "description": "E-mail addresses in the site's own letter case. A link with several recipients arrives as one comma-separated entry.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 320
+          }
+        },
+        "addresses": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "Postal addresses, each on one line.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
+        }
+      }
+    },
+    "serviceAreas": {
+      "type": "array",
+      "maxItems": 16,
+      "description": "Places the business says it serves, in the site's wording.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+      }
+    },
+    "services": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "Services or products named on the site, in the site's wording.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    },
+    "competitors": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The competitors the user ticked for this brief: ones they track in the extension, ones they typed, and sites picked from an open Google results page. Names are labels, not ids. No two entries share a name or a domain. Each entry carries at most one domain here: the competitor's first one, or the host of the result it was picked from, which is then also its name.",
+      "items": {
+        "type": "object",
+        "description": "A competitor as the user tracks it in the extension. The same shape is used when one is added to a business, listed in a brief, and returned in Business Details.",
+        "required": [
+          "name",
+          "domains"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "Display name, as the user typed it. \"Acme\" and \"ACME\" are the same name."
+          },
+          "domains": {
+            "type": "array",
+            "maxItems": 30,
+            "description": "The competitor's sites as host names: lower case, no \"www.\", no path. Can be empty when the competitor is tracked by name only. A value is any text the user typed that can be read as a host: it can be a subdomain, and it is not checked against a list of public suffixes.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        }
+      }
+    },
+    "focusKeywords": {
+      "type": "array",
+      "maxItems": 30,
+      "description": "Search phrases suggested by the site's own page titles and headings, in lower case. The phrases found on the most pages come first, approximately. They are candidates: nobody researched or confirmed them.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "avatars": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "Exactly three draft customer avatars, written from the site's content by a template or, when the user asked for it, by AI. The body does not say which.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "draft"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "Short label of the avatar."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "One paragraph in a fixed form: who they are, then \"Wants:\" and what they want, then \"Worries about:\" and what they worry about."
+          },
+          "draft": {
+            "type": "boolean",
+            "const": true,
+            "description": "Always true. Show the avatar as a draft for the user to review."
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "Basic on-page SEO findings for the pages that were read, most severe first. At most one entry per kind of finding.",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "title",
+          "detail",
+          "pages"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "The kind of finding. Use this, not the title, to recognise a finding. Values in this version: not-https, noindex, missing-title, duplicate-title, short-title, long-title, missing-description, missing-h1, multiple-h1, canonical-elsewhere, missing-canonical, missing-viewport, missing-alt, no-structured-data, thin-content. A later version may add values: accept a value that is not in this list."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "description": "How much the finding matters for search. Fixed per code."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "The finding in a few English words, for display (\"Missing meta description\")."
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "One English sentence that names the affected pages by path. For display."
+          },
+          "pages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "description": "URLs of the pages the finding applies to, as they were read (after redirects; the open page with its query string).",
+            "items": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^https?://",
+              "description": "An absolute http or https URL, written the way the browser writes it. It can contain characters that strict URI validators reject (for example [ ] and | in a query string): check the scheme and the length, nothing more."
+            }
+          }
+        }
+      }
+    },
+    "nextSteps": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "Recommended first actions, most important first: one or two English sentences each, written by a template or, when the user asked for it, by AI. They can quote a keyword the user searched for.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600
+      }
+    },
+    "markdown": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200000,
+      "description": "The whole brief as one Markdown document (CommonMark: headings, paragraphs, emphasis and bullet lists), the same text the user can export. It holds more than the fields above: the search findings, the site's tone of voice and testimonials, and \"Prepared by\" with the agency's name when the user set one. Store it and show it as the brief; do not parse it. It quotes web pages: render it with raw HTML and unsafe links switched off. A column for it must hold 600 KB: the limit of 200,000 is counted in UTF-16 code units, and one unit is up to 3 bytes of UTF-8. A MySQL TEXT column ends at 64 KB and is too small. The Markdown repeats the contact details and quotes the site's testimonials with the names of its customers."
+    }
+  }
+}

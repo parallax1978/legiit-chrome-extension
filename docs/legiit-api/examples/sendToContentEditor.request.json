@@ -5,8 +5,8 @@
   "pageTitle": "How Often Should You Get Your Teeth Cleaned? | BrightPath Dental",
   "capturedAt": "2026-11-20T12:00:00.000Z",
   "method": {
-    "engine": "lexical",
-    "threshold": 0.5,
+    "engine": "embedding",
+    "threshold": 0.72,
     "pagesCompared": 5
   },
   "wordShare": {
@@ -22,30 +22,32 @@
   ],
   "missingPoints": [
     {
-      "text": "A routine cleaning takes about 30 to 60 minutes.",
-      "pages": 3,
-      "urls": [
-        "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
-        "https://www.lakesidesmiles.example/blog/dental-cleaning-schedule",
-        "https://www.nationaloralhealth.example/cleanings"
-      ]
-    },
-    {
       "text": "Dental X-rays are usually taken once a year during a cleaning visit.",
+      "pages": 4,
+      "urls": [
+        "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
+        "https://www.lakesidesmiles.example/blog/dental-cleaning-schedule",
+        "https://www.nationaloralhealth.example/cleanings",
+        "https://www.smilehealthdaily.example/teeth-cleaning-frequency"
+      ]
+    },
+    {
+      "text": "Children should have their first dental visit by their first birthday.",
+      "pages": 4,
+      "urls": [
+        "https://www.familydentalfacts.example/how-often-dental-cleaning",
+        "https://www.lakesidesmiles.example/blog/dental-cleaning-schedule",
+        "https://www.nationaloralhealth.example/cleanings",
+        "https://www.smilehealthdaily.example/teeth-cleaning-frequency"
+      ]
+    },
+    {
+      "text": "A routine cleaning usually takes 30 to 60 minutes.",
       "pages": 3,
       "urls": [
         "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
         "https://www.lakesidesmiles.example/blog/dental-cleaning-schedule",
         "https://www.nationaloralhealth.example/cleanings"
-      ]
-    },
-    {
-      "text": "A fluoride treatment is often applied at the end of the cleaning.",
-      "pages": 3,
-      "urls": [
-        "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
-        "https://www.familydentalfacts.example/how-often-dental-cleaning",
-        "https://www.smilehealthdaily.example/teeth-cleaning-frequency"
       ]
     }
   ],

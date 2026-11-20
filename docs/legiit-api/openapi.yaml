@@ -1,14 +1,17 @@
 openapi: 3.1.0
 info:
   title: Legiit Command Center API for Legiit Lens
-  version: 1.0.0-draft.3
+  version: 1.0.0-draft.4
   summary: The API the Legiit Lens Chrome extension calls. To be built by the Legiit backend team.
   description: |
     The extension is finished and calls exactly this API. The API does not exist yet.
     Read README.md first: it tells you what to build, in which order, and how to test it.
+    The changes from one version of this file to the next are listed in README.md, section
+    "Version and changes".
 
-    This file is the source of truth for field names, types and limits. reference.md
-    and the mock server are generated from it or checked against it.
+    This file decides field names, types and limits: if two files of the kit disagree, this
+    file is right. reference.md, openapi.examples.json and the files in schemas/ are generated
+    from it. The mock server and the conformance check read it when they run.
 
     Rules for every request (they are not repeated per endpoint)
     - Every request carries `Authorization: Bearer <token>`, `Accept: application/json` and
@@ -16,15 +19,19 @@ info:
       No cookies are sent. X-Legiit-Client is for your logs: do not require it.
     - Only GET and POST are used. There are no query strings.
     - A request body is one JSON object in UTF-8 of at most 1,048,576 bytes. Accept that much.
-    - Answer in JSON, on the address that was called. The extension never follows a redirect.
+    - Answer in JSON, on the URL that was called. The extension never follows a redirect.
+    - Send `Cache-Control: no-store` with every reply, so that no proxy and no cache keeps a
+      copy of a user's data.
     - The extension waits 20 seconds for a reply, 60 seconds for POST /v1/ai/completions,
-      and never retries on its own.
+      and never retries by itself.
 
     Conventions used in this file
+    - This is OpenAPI 3.1: every schema is JSON Schema 2020-12, and a type can be a list such
+      as [string, 'null']. Use tools that read OpenAPI 3.1.
     - Request schemas describe exactly what the extension sends. Every required field is in
-      every request. A field with no value is sent as null, "" or [], as its row says; these
-      are valid values. One field can be absent: responseSchema of the AI request.
-    - Response schemas describe what you must return. The extension ignores fields it
+      every request. A field with no value is sent as null, "" or [], as its description says;
+      these are valid values. One field can be absent: responseSchema of the AI request.
+    - Reply schemas describe what you must return. The extension ignores fields it
       does not know, so you may add fields.
     - Ignore request fields you do not know: a later extension version may add fields.
     - enum is a closed list. x-values lists the values this version uses for a field that a
@@ -35,17 +42,18 @@ info:
       string). A text within its limit in that count is also within it counted in
       characters, so a check that counts characters (not bytes) never refuses a valid request.
     - A value over its limit is shortened by the extension, not refused: text is cut and ends with "…",
-      a list keeps its first entries, an address is cut at 2,048 characters. So a value at exactly its
+      a list keeps its first entries, a URL is cut at 2,048 characters. So a value at exactly its
       maximum can be a shortened copy.
     - Every integer in a request fits a signed 32-bit column.
     - x-uses, in a response schema, is how much of a value the extension uses. More is
       allowed and is cut by the extension.
+    - x-examples: some values that a field can have. It is not a list of allowed values.
     - x-capability: the capability the extension needs before it shows this feature.
     - x-called-when: what the user does that causes the call.
-    - x-extension-reaction: what the extension does with that response.
+    - x-extension-reaction: what the extension does with that reply.
 servers:
   - url: https://api.legiit.com
-    description: Production. ASSUMED host, to be confirmed before the extension goes to the Chrome Web Store.
+    description: Production. This host is assumed. It must be confirmed before the extension is submitted to the Chrome Web Store.
   - url: http://localhost:8787
     description: The mock server in this repository (npm run mock).
 security:
@@ -63,21 +71,22 @@ paths:
       tags: [Account]
       summary: Checks the token. Returns who is connected and which features are switched on.
       description: |
-        This is the first call the extension makes and the one that decides whether it is connected.
-        Keep it cheap and fast, and keep it out of tight rate limits: it runs every time the user
-        opens the side panel.
+        This is the first call the extension makes, and the call that decides whether the extension
+        is connected. Make it fast, and do not give it a strict rate limit: it runs every time the
+        user opens the side panel.
 
         For a valid token answer 200, and say what the user's plan includes through `capabilities`,
         never through 403. Answer 403 here only when the account may not use the API at all (it is
         suspended, for example): the extension then shows your message and "Legiit not connected", and
         keeps a token that is already stored (at Connect nothing is stored). Answer 401 only when the
-        token itself is bad, and with the error body: that 401 makes the extension delete the token.
+        token itself is not valid, and with the error body: that 401 makes the extension delete the token.
 
         The extension shows a feature only when its capability is in `capabilities`. With an empty list
         the user is connected and sees no Legiit feature at all.
 
         If this call fails for another reason (a 5xx, a timeout), the extension keeps the token, shows
-        "Legiit not connected" with the reason, and offers "Try again". Nothing else is called meanwhile.
+        "Legiit not connected" with the reason, and offers "Try again". Until this call succeeds, the
+        extension calls no other endpoint.
       x-called-when: >-
         The user clicks Connect or "Try again". After that, once each time the side panel or the
         settings page opens while a token is stored, and again in every open extension page when the
@@ -103,8 +112,8 @@ paths:
         reply. A business the user can see but not save into does not belong in this list. There is
         no paging: the extension shows the first 500, in the order you return them, in a drop-down
         under Settings. Any stable order is fine; by name is a good default. With more than 500,
-        return only the 500 the user worked with most recently, by your own measure (last opened or
-        last saved into). Keep the reply under 5 MB: the extension does not read a larger one.
+        return only the 500 the user worked with most recently, by a measure that you choose (last
+        opened or last saved into). Keep the reply under 5 MB: the extension does not read a larger one.
       x-capability: businesses
       x-called-when: Each time the settings screen is shown while connected (the settings page, or the Settings tab of the side panel).
       responses:
@@ -125,12 +134,12 @@ paths:
       summary: Returns one business with its brand names, domains and competitors.
       description: |
         The extension copies these values once, into the user's tracked brands on their device. It does
-        not ask again until the user chooses the business again, so a later change in Command Center is
-        not picked up on its own. Disconnecting removes the copies.
+        not ask again until the user chooses the business again. Until then it does not see a later
+        change in Command Center. Disconnecting removes the copies.
 
-        The copy is a merge. Brands the user typed themselves are kept and win: a competitor with the same
-        name or domain as one of them is not added again. The device holds at most 50 own brands and 200
-        competitors.
+        The copy is a merge. Brands the user typed themselves are kept and have priority: a competitor
+        with the same name or domain as one of them is not added again. The device holds at most 50 own
+        brands and 200 competitors.
 
         When this call fails the extension shows the reason under the drop-down and keeps what it had.
       x-capability: businesses
@@ -157,9 +166,9 @@ paths:
         A snapshot records how one Google results page looked in the user's browser: where the organic
         results start, what fills the first screen, and where the tracked brands rank.
 
-        Store every snapshot as a new item: a point in time for the keyword. Do not merge or drop
-        snapshots that look alike. The same measurement can arrive twice (the user saved it twice); it
-        then carries the same `capturedAt`.
+        Store every snapshot as a new item: it is one point in time for the keyword. Do not merge
+        snapshots that are similar, and do not discard one. The same measurement can arrive twice (the
+        user saved it twice); it then carries the same `capturedAt`.
       x-capability: visibilitySnapshots
       x-called-when: The user clicks "Save to Command Center" on the Click Potential tab, reads the JSON and confirms.
       parameters:
@@ -177,6 +186,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorised' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/TooLarge' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -211,6 +221,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorised' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/TooLarge' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -223,12 +234,17 @@ paths:
       description: |
         The user typed this competitor into the extension's settings and wants it in Command Center too.
 
-        Recommended: never store the same competitor twice. Compare names without regard to case and
-        surrounding spaces. Compare domains as hosts: lower case, without scheme, "www." and path; a
-        subdomain is a different domain. When the business already has a competitor with this name or
-        one of these domains, answer 200 with the id of that competitor (a name match wins over a domain
-        match), and add the domains it did not have yet, except a domain that another competitor of the
-        business already has: that one stays where it is. Do not answer 409.
+        Recommended: never store the same competitor twice. Compare names case-insensitively, and
+        ignore spaces at both ends. Compare domains as hosts: lower case,
+        without scheme, "www." and path; a subdomain is a different domain.
+
+        When the business already has a competitor with this name or one of these domains, answer 200
+        with the id of that competitor, and add the domains it did not have yet. A name match has
+        priority over a domain match. When no name matches, go through the domains of the request in
+        their order: the first domain that a competitor of the business already has decides, and you
+        return that competitor. A domain that another competitor of the business already has is not
+        added: it stays with that competitor. Do not answer 409 for a
+        competitor that already exists.
 
         After a save, GET /v1/businesses/{businessId} lists the competitor.
       x-capability: competitors
@@ -248,6 +264,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorised' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/TooLarge' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -262,8 +279,8 @@ paths:
         of its sentences nobody else makes (worth keeping) and which points most competitors make that
         it lacks (worth adding). The text itself is not sent.
 
-        What the content editor makes of this is Legiit's decision (README, "Decisions"). Until it is
-        taken, this can be built: store the body as a new item of the business and show it as a note
+        What the content editor does with this is Legiit's decision (README, "Decisions"). Until
+        Legiit decides, build this: store the body as a new item of the business and show it as a note
         with two lists, "Only on this page" and "Missing points" with their source links. Store every
         analysis as a new item; the same analysis sent again carries the same `capturedAt`.
       x-capability: contentEditor
@@ -283,6 +300,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorised' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/TooLarge' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -296,11 +314,11 @@ paths:
         The extension read a prospect's website and wrote a client brief: what the business is, what it
         offers, where, who its competitors are, and what is wrong with the site.
 
-        This is the one save that is not tied to an existing business, so the path has no business id.
-        What a workspace is in Command Center is Legiit's decision (README, "Decisions"). The extension
-        needs only `id` and `url` back; it does not expect the workspace in GET /v1/businesses. Until
-        the decision is taken, this can be built: store the body as a brief of the user and return the
-        address of a page that shows its `markdown`.
+        This is the only save that does not go into an existing business, so the path has no business
+        id. What a workspace is in Command Center is Legiit's decision (README, "Decisions"). The
+        extension needs only `id` and `url` back; it does not expect the workspace in GET
+        /v1/businesses. Until Legiit decides, build this: store the body as a brief of the user, and
+        return the URL of a page that shows its `markdown`.
 
         Recommended: one workspace per brief. `briefId` identifies the brief; look it up per user, never
         across users. The first request with a briefId creates the workspace (201). A later one is the
@@ -328,6 +346,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorised' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/Unavailable' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/TooLarge' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -343,10 +362,10 @@ paths:
         the user can change the number). Only `date` and `title` are shown, and only once the user has
         looked up the history of a page.
 
-        The data is the same for every user, so the reply can be cached on your side. Return the
-        latest events only: 8 are shown, so 20 are plenty.
+        The data is the same for every user, so you can cache the reply on your server. Return only
+        the latest events: 8 are shown, so 20 are enough.
 
-        When this call fails, for whatever reason, the extension shows no shortcuts and no message.
+        When this call fails, for any reason, the extension shows no shortcuts and no message.
       x-capability: industryPulse
       x-called-when: Each time the Rewind tab is opened while connected.
       responses:
@@ -377,8 +396,8 @@ paths:
         1. A summary (no `responseSchema`; `task` is not "brief"). Return plain text: 3 to 6 short
            lines, one point per line. Required: `text` is a non-empty string. The rest is what the
            prompt asks of the model: the extension shows the first 8 lines as bullet points, removes a
-           leading "- " or "1." and Markdown emphasis marks, drops an introduction line that ends
-           with ":", and cuts a line at 600 characters.
+           leading "- " or "1." and Markdown emphasis marks, leaves out an introduction line that
+           ends with ":", and cuts a line at 600 characters.
         2. A brief (`task` is "brief", with `responseSchema`). Return in `text` one JSON document that
            matches that JSON Schema, as a string, with nothing before or after it (see
            examples/completeAI.brief.response.json). Pass the schema to your model's structured-output
@@ -386,20 +405,23 @@ paths:
            "who", "wants" and "worries", and at least one next step. It keeps up to 80 characters of a
            name, 400 of every other text, 6 searches of 120 characters and 8 next steps; longer text is
            cut, so ask the model for short entries. Check that the model's output parses as JSON
-           before you return it (you need not check it against the schema); if it does not, ask the
-           model once more, then answer 502.
+           before you return it (you need not check it against the schema). If it does not parse,
+           ask the model once more. If the second output does not parse either, answer 502.
 
-        If the model returns no text at all, also ask once more, then answer 502.
+        If the model returns no text at all, also ask once more. If there is still no text,
+        answer 502. Both tries together must end before the extension stops waiting (60 seconds):
+        give each call to the model a time limit of about 25 seconds.
 
-        `maxOutputTokens` is the room for the visible reply. The extension sends 700 for a summary and
-        2,000 for a brief. If your model spends tokens on reasoning, give it more than this. If the
-        number is above your own maximum, use your maximum; do not refuse the request for it.
+        `maxOutputTokens` is the largest size of the visible reply. The extension sends 700 for a
+        summary and 2,000 for a brief. If your model uses tokens for reasoning, give it more than
+        this. If the number is above your own maximum, use your maximum; do not refuse the request
+        for it.
 
         The reply is not streamed: answer with one JSON body within 60 seconds. If the model provider
-        is slow or down, answer 504 or 503 before that. If the account has used up its AI allowance,
-        answer 429 with a message that says when it resets.
+        is slow or not available, answer 504 or 503 before that. If the user's AI allowance is used
+        up, answer 429 with a message that says when to try again.
 
-        When this call fails, for whatever reason, the extension keeps its own text and shows one line
+        When this call fails, for any reason, the extension keeps its own text and shows one line
         with the reason. After a 404, 405 or 501 it stops offering the button until the page is
         reopened or the user connects again.
 
@@ -437,19 +459,23 @@ components:
       type: http
       scheme: bearer
       description: >-
-        An API token the user creates in Command Center and pastes into the extension. Opaque to the
-        extension. It travels in an HTTP header: printable ASCII without spaces, at most 4,096
-        characters (the extension refuses to store anything else). Match the word "Bearer" without
-        regard to case.
+        An API token that the user creates in Command Center and pastes into the extension. The
+        extension does not read what is in it. It is sent in an HTTP header: printable ASCII without
+        spaces, at most 4,096 characters (the extension refuses to store anything else). The word
+        "Bearer" is case-insensitive: accept "bearer" too.
+  # A parameter or a response that several endpoints share is printed once in reference.md, under
+  # "Shared parameters and responses". Each endpoint prints only the first paragraph of its
+  # description, with a link. So write a first paragraph that can be read alone.
   parameters:
     BusinessId:
       name: businessId
       in: path
       required: true
-      description: >-
-        The `id` of a business from GET /v1/businesses, percent-encoded (an integer id arrives as its
-        digits). Prefer ids made of letters, digits, "-" and "_": a "/" in an id arrives as %2F, which
-        some servers and proxies refuse. An id that cannot exist in your scheme (text where you use
+      description: |
+        The `id` of a business from GET /v1/businesses, percent-encoded (an integer id arrives as its digits).
+
+        Prefer ids made of letters, digits, "-" and "_": a "/" in an id arrives as %2F, which some
+        servers and proxies refuse. An id that cannot exist in your scheme (text where you use
         numbers) is best answered like an unknown business, 404 with the code "not_found"; it must
         never cause a 5xx.
       schema: { type: string, minLength: 1, maxLength: 120 }
@@ -457,24 +483,32 @@ components:
       name: Idempotency-Key
       in: header
       required: false
-      description: >-
-        A random UUID that identifies one save the user confirmed. The extension sends it on every
-        save, and repeats it when the user sends the same save again from the same dialog, which happens
-        after a timeout and also after an error. Recommended: remember the reply of a successful save
-        under (user, method, path, key) for 24 hours, and answer the same key with that reply again
-        (same status, same body) without storing anything. Check the token, the capability and the
-        business first; a remembered reply is given instead of validating and storing the body. Never
-        remember an error. Do not compare bodies. If the first request with a key is still running,
-        wait for it or answer 409 (the extension shows a 409 like any other 4xx). Do not require the
-        header and do not check its format: curl and the conformance check send saves without it. An
-        empty value means "no key".
-      schema: { type: string, minLength: 1, maxLength: 255 }
+      description: |
+        A random UUID that identifies one save the user confirmed. Do not require the header and do not check its format.
+
+        The extension sends it on every save, and repeats it when the user sends the same save again
+        from the same dialog, which happens after a timeout and also after an error.
+
+        Recommended: remember the reply of a successful save under (user, method, path, key) for 24
+        hours, and answer the same key with that reply again (same status, same body) without storing
+        anything. Check the token, the capability and the business first; a remembered reply is given
+        instead of validating and storing the body. Never remember an error. Do not compare bodies.
+
+        If the first request with a key is still running, wait for it or answer 409 (the extension
+        shows a 409 like any other 4xx). If you mark a key as running, let the mark end by itself after
+        about 30 seconds. A request that died must not block the key for 24 hours.
+
+        curl and the conformance check send saves without the header. An empty value means "no key".
+        The extension sends a UUID (36 characters). A key longer than 255 characters may be treated as
+        no key. You may store a hash of the key in place of the key.
+      schema: { type: string, maxLength: 255 }
   responses:
     Saved:
-      description: >-
-        The item was stored (201), or it already existed and its id is returned (200). The body is
-        required, with `id` at the top level: a 204, an empty body, or a body wrapped in another object
-        (such as "data") is treated as a failed save, and the user is likely to send it again.
+      description: |
+        The item was stored (201), or it already existed and its id is returned (200). The body is required, with `id` at the top level.
+
+        A 204, an empty body, or a body wrapped in another object (such as "data") is treated as a
+        failed save, and the user is likely to send it again.
       x-extension-reaction: Closes the dialog and shows "Saved", with an "Open in Command Center" link when `url` is present.
       content:
         application/json:
@@ -491,17 +525,20 @@ components:
         error body, and make sure nothing in front of the API (a gateway, a proxy, HTTP Basic auth on a
         staging site) answers 401 for a valid token.
       x-extension-reaction: >-
-        On GET /v1/session: deletes the stored token and asks the user to paste a new one, provided the
-        401 carries the error body; a 401 without it keeps the token and offers "Try again". On any other
-        request: shows "Legiit did not accept the token". Your `error.message` is not shown.
+        On GET /v1/session, when the 401 carries the error body: deletes the stored token and asks the
+        user to paste a new one. A 401 without the error body keeps the token and offers "Try again".
+        On any other request: shows "Legiit did not accept the token". Your `error.message` is not shown.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
       description: >-
-        The token is valid, the feature is in the user's session, but this one request is refused (a
-        role, a quota). Not for a feature the user does not have: leave its capability out of the
-        session, and answer a call to it with 404.
+        The token is valid and the user has the feature, but another rule of yours refuses this one
+        request: the user's role in this business does not allow this kind of save, or the account may
+        not use the API (it is suspended, for example). Name the reason in `error.message`. Not for a
+        feature the user does not have: leave its capability out of the session, and answer a call to
+        it with 404. Not for a business that the user may not save into at all: that is 404
+        "not_found". Not for an allowance that is used up: that is 429.
       x-extension-reaction: >-
         Shows "Legiit rejected the request (403)" followed by your `error.message`. A token that is
         already stored is kept. During Connect nothing is stored when the session check fails, for any
@@ -511,32 +548,44 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     NotFound:
       description: >-
-        Two cases share this status. (1) The business in the path does not exist or is not this
-        user's: answer with `error.code` "not_found". This is required on every path with a business
-        id, and "not_found" is reserved for it. (2) The endpoint is not built, or its capability is not
-        enabled for this user: any other 404 (also 405 or 501), with or without a body.
+        Only on a path with a business id: the business in the path does not exist or is not this
+        user's. Answer 404 with the error body and `error.code` "not_found". The code is required for
+        this case and reserved for it. A 404 with any other code, or without the error body, has
+        another meaning: the endpoint is not available.
       x-extension-reaction: >-
-        With `error.code` "not_found": shows "Legiit could not find it (404)" followed by your
-        `error.message`; the feature stays. Any other 404, 405 or 501 on a save: says "Legiit cannot
-        receive this yet", then hides that button in that page until the page is opened again or the
-        user reconnects. On GET /v1/businesses/{businessId}: shows a message and hides nothing.
+        Shows "Legiit could not find it (404)" followed by your `error.message`. The feature stays.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unavailable:
       description: >-
-        The endpoint is not built, or its capability is not enabled for this user. 405 and 501 mean the
-        same to the extension. Never use the code "not_found" here: it is reserved for a missing business.
+        The endpoint is not built, or its capability is not enabled for this user. Answer 404, 405 or
+        501, with any body or none: the three statuses mean the same to the extension. If you send the
+        error body, use any code except "not_found": that code is reserved for a missing business.
       x-extension-reaction: >-
         A save: says "Legiit cannot receive this yet", then hides that button in that page until the
-        page is opened again or the user reconnects. The business list: hides the drop-down. Industry
+        page is opened again or the user reconnects. The business list: hides the drop-down. One
+        business (GET /v1/businesses/{businessId}): shows a message and hides nothing. Industry
         pulse: shows no date shortcuts. AI: keeps the built-in text, says why, and stops offering the
         button. The session check: shows "The Legiit API is not available yet".
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: >-
+        Only for one case: the first request with the same Idempotency-Key is still running, and you
+        do not wait for it. Say in `error.message` that the save is still running and when to send it
+        again. Never for a competitor or a workspace that already exists: answer 200 with its id.
+      x-extension-reaction: The same as for 422.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     TooLarge:
-      description: The body is larger than you accept. The extension never sends more than 1,048,576 bytes, so accept that much.
+      description: >-
+        The body is larger than you accept. The extension never sends more than 1,048,576 bytes, so
+        accept that much. A proxy in front of your application can answer 413 by itself, with its own
+        page and not the error body (nginx sends HTML). That is acceptable: no request of the
+        extension is that large.
       x-extension-reaction: The same as for 422.
       content:
         application/json:
@@ -553,8 +602,10 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     RateLimited:
-      description: Too many requests from this user. The extension does not read Retry-After, so say in `error.message` when to try again.
-      x-extension-reaction: Shows "Legiit rejected the request (429)" followed by your `error.message`. Never retries on its own.
+      description: >-
+        The user sent too many requests, or the user's daily AI allowance is used up.
+        The extension does not read Retry-After, so say in `error.message` when to try again.
+      x-extension-reaction: Shows "Legiit rejected the request (429)" followed by your `error.message`. Never retries by itself.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -562,13 +613,15 @@ components:
       description: >-
         Something failed on your side: every 5xx except 501, which is read as "this endpoint is not
         built". A body is optional and is not shown.
-      x-extension-reaction: Shows "Legiit had a problem" with the status code. Never retries on its own; the user can click again.
+      x-extension-reaction: Shows "Legiit had a problem" with the status code. Never retries by itself; the user can click again.
   schemas:
     Error:
       type: object
       description: >-
         The JSON body of every 4xx reply, including the ones your framework produces by itself
-        (validation, throttling, authorisation, a missing record, a body that is too large).
+        (validation, throttling, authorisation, a missing record, a body that is too large). Two
+        exceptions: a 404 or 405 that means "this endpoint is not available" can have any body or
+        none, and a 413 that a proxy sends by itself can be the proxy's own page.
       required: [error]
       properties:
         error:
@@ -582,15 +635,15 @@ components:
                 A short machine-readable reason. The extension reads exactly one value: "not_found" on a
                 404 of a path with a business id means "this business does not exist". That value is
                 reserved for that case. Use your own values for everything else.
-              x-examples: [unauthorised, forbidden, not_found, not_available, invalid, rate_limited]
+              x-examples: [bad_request, unauthorised, forbidden, not_found, not_available, conflict, too_large, invalid, rate_limited]
             message:
               type: string
               minLength: 1
               description: >-
-                One plain sentence for the user, without HTML. Shown after the status code for a 404
-                "not_found" and for every other 4xx except 401; not shown for 401, for a 404, 405 or
-                501 that means "not built", or for a 5xx. A message over 200 characters is cut and ends
-                with "…".
+                One plain sentence for the user, without HTML: what is wrong and, if you know it,
+                what the user can do. Shown after the status code for a 404 "not_found" and for every
+                other 4xx except 401; not shown for 401, for a 404, 405 or 501 that means "not available",
+                or for a 5xx. A message over 200 characters is cut and ends with "…".
               x-uses: { chars: 200 }
     Id:
       type: [string, integer]
@@ -601,8 +654,8 @@ components:
       maximum: 9007199254740991
       description: >-
         An identifier: a string of 1 to 120 characters, or a non-negative integer of at most 2^53 - 1,
-        whichever your database uses. Send a larger integer as a string. The extension treats an id as
-        opaque text and sends it back as it came (an integer as its digits; spaces around a string id
+        whichever your database uses. Send a larger integer as a string. The extension does not
+        interpret an id: it sends it back as it came (an integer as its digits; spaces around a string id
         are removed). Return the same business with the same id everywhere. An id is never cut: a
         business whose id cannot be read is skipped, and a user id or a save id that cannot be read
         makes the whole reply unusable. A string id is valid Unicode with at least one character
@@ -650,7 +703,7 @@ components:
             The features this user may use, as a JSON array of names; every token of the user gets the
             same list. The extension shows a feature only when its capability is listed. Names are
             case-sensitive: a name the extension does not know, or a misspelt one, is ignored without an
-            error. To launch endpoint by endpoint, list only what is live.
+            error. To launch endpoint by endpoint, list only the capabilities whose endpoints are ready.
           items: { $ref: '#/components/schemas/Capability' }
     Business:
       type: object
@@ -679,8 +732,9 @@ components:
     BusinessDetails:
       type: object
       description: >-
-        What the extension pre-fills as "tracked brands". Brands are how it tells the user's own results
-        from competitors' results on a Google page: by domain for links, by name for text.
+        What the extension pre-fills as "tracked brands". The extension uses brands to separate the
+        user's own results from the results of competitors on a Google page: by domain for links, by
+        name for text.
       required: [id, name]
       properties:
         id:
@@ -694,8 +748,8 @@ components:
           type: [array, 'null']
           description: >-
             Other ways people write the business's name ("BrightPath", "Bright Path Dental"). Used to
-            find the brand in AI answers and page text. The name itself may be repeated here; that does
-            no harm. Absent or null means none.
+            find the brand in AI answers and page text. The name itself may be repeated here; that is
+            not a problem. Absent or null means none.
           x-uses: { items: 30 }
           items: { type: string, x-uses: { chars: 160 } }
         domains:
@@ -703,7 +757,7 @@ components:
           description: >-
             Domains the business owns, one per entry. A result on one of them counts as the user's own.
             "example.com", "www.example.com" and "https://www.example.com/page" are all read as
-            example.com: the path is dropped, and subdomains of a listed domain count too. So do not list
+            example.com: the path is removed, and subdomains of a listed domain count too. So do not list
             a profile on a shared site (facebook.com/yourbusiness, a marketplace listing): every result on
             that whole site would count as the business. Values that are not a domain (an e-mail address,
             a wildcard) are skipped.
@@ -733,7 +787,7 @@ components:
           items: { type: string, x-uses: { chars: 200 } }
         avatars:
           type: [array, 'null']
-          description: Customer avatars of the business. Stored on the device for a later version; not shown yet. Safe to leave out.
+          description: Customer avatars of the business. Stored on the device for a later version; not shown yet. You can leave it out.
           x-uses: { items: 20 }
           items:
             type: object
@@ -753,31 +807,31 @@ components:
           maxLength: 2048
           pattern: '^https?://'
           description: >-
-            Absolute address, without spaces, of a page in Command Center that shows the stored item:
+            Absolute URL, without spaces, of a page in Command Center that shows the stored item:
             https in production (http is accepted for a local test system). Never a relative path. The
             extension shows it as an "Open in Command Center" link next to "Saved"; a click opens it in a
             new tab without the token, so the page must work with the user's normal Command Center login.
-            null, absent, longer than 2,048 characters or not an address that can be opened (a relative
-            path, no scheme): "Saved" is shown without a link.
+            Send null until that page exists. When `url` is null, absent, longer than 2,048 characters,
+            or not a URL that can be opened (a relative path, no scheme), "Saved" is shown without a link.
     HttpUrl:
       type: string
       maxLength: 2048
       pattern: '^https?://'
       description: >-
-        An absolute http or https address, written the way the browser writes it. It can contain characters
+        An absolute http or https URL, written the way the browser writes it. It can contain characters
         that strict URI validators reject (for example [ ] and | in a query string): check the scheme and
         the length, nothing more.
     Fold:
       type: [string, 'null']
       enum: [above, partly, below, null]
       description: >-
-        Where a result sits relative to the fold, which is the bottom edge of the first screen (y = viewport.height).
+        Where a result is, relative to the fold. The fold is the bottom edge of the first screen (y = viewport.height).
         above: the result ends at or above the fold. partly: the fold cuts through it. below: it starts at or
         below the fold. null: it could not be measured.
     VisibilitySnapshot:
       type: object
       description: >-
-        One measurement of one Google results page, exactly as the user's Chrome laid it out (their window size,
+        One measurement of one Google results page, exactly as the user's Chrome displayed it (their window size,
         location and personalisation). Pixel values are CSS pixels from the top of the document, so they do not
         depend on how far the user had scrolled.
       required: [keyword, capturedAt, googleHost, mode, resultsOffset, viewport, location, firstOrganicTopPx, firstOrganicFold, organicShare, grade, firstScreenShares, organic, tracked]
@@ -792,8 +846,8 @@ components:
           format: date-time
           description: >-
             When the page was measured, on the user's clock, as UTC with milliseconds (2026-11-20T12:00:00.000Z).
-            It is not the time of the save. It can be slightly ahead of server time, and it repeats when the
-            user saves the same measurement twice.
+            It is not the time of the save. It can be a little later than the time on your server, and it
+            is the same when the user saves the same measurement twice.
         googleHost:
           type: string
           maxLength: 40
@@ -834,8 +888,8 @@ components:
         firstOrganicFold:
           $ref: '#/components/schemas/Fold'
           description: >-
-            Where the topmost organic result sits relative to the fold, the bottom edge of the first screen
-            (y = viewport.height). above: it ends at or above the fold. partly: the fold cuts through it.
+            Where the topmost organic result is, relative to the fold (the bottom edge of the first screen,
+            y = viewport.height). above: it ends at or above the fold. partly: the fold cuts through it.
             below: it starts at or below the fold. null exactly when firstOrganicTopPx is null.
         organicShare:
           type: number
@@ -854,7 +908,7 @@ components:
             letter:
               type: string
               enum: [A, B, C, D, F]
-              description: Band of the score. A is 85 to 100, B 70 to 84, C 50 to 69, D 30 to 49, F 0 to 29.
+              description: 'The letter for the score: A is 85 to 100, B 70 to 84, C 50 to 69, D 30 to 49, F 0 to 29.'
             score:
               type: integer
               minimum: 0
@@ -888,7 +942,7 @@ components:
                 type: number
                 minimum: 0
                 maximum: 1
-                description: Part of the first screen this kind covers, rounded to 4 decimals. A sliver can round to 0.
+                description: Part of the first screen this kind covers, rounded to 4 decimals. A very small part can round to 0.
         organic:
           type: array
           maxItems: 100
@@ -995,7 +1049,6 @@ components:
           maxItems: 1000
           description: >-
             One row per gap, in the order shown to the user (highest priority first unless they re-sorted).
-            The two examples of this kit have 20 rows and 1 row.
           items:
             type: object
             required: [surfaceId, surface, position, title, url, domain, competitors, evidence, pageType, actionable, scanned, contacts]
@@ -1008,7 +1061,7 @@ components:
                   Where the gap is, as a code. answer_text and citations belong to the answers of ChatGPT,
                   Gemini, Perplexity, Copilot and to pasted text. ai_overview is Google's own AI answer: the
                   AI Overview on a results page, and the whole answer of Google AI Mode. The others are blocks
-                  of a Google results page. scanned_page is a cited or list-style page that turned out to be
+                  of a Google results page. scanned_page is a cited or list-style page that was found to be
                   a gap only when "Scan sources" read it; `surface` says where it was linked from.
               surface:
                 type: string
@@ -1036,7 +1089,7 @@ components:
                   - $ref: '#/components/schemas/HttpUrl'
                   - type: 'null'
                 description: >-
-                  Address of the page the row is about, with tracking parameters removed. null for pageType
+                  URL of the page the row is about, with tracking parameters removed. null for pageType
                   "surface", and for some local-pack and ad rows that have no link.
               domain:
                 type: [string, 'null']
@@ -1069,8 +1122,8 @@ components:
               actionable:
                 type: boolean
                 description: >-
-                  true when the row is a page on someone else's site where the business could plausibly get
-                  included: not a competitor's own site, not an ad, not a local-pack listing. Store it as sent;
+                  true when the row is a page on another site, and the business could ask to be included
+                  there: not a competitor's own site, not an ad, not a local-pack listing. Store it as sent;
                   it cannot be derived from pageType.
               scanned:
                 type: boolean
@@ -1081,8 +1134,9 @@ components:
                 type: array
                 maxItems: 18
                 description: >-
-                  Ways to reach the people behind the page, found on the scanned page. Empty unless scanned is
-                  true. These are names and addresses read from third-party pages: handle them as personal data.
+                  Ways to contact the people who run the page, found on the scanned page. Empty unless scanned
+                  is true. These are names, URLs and e-mail addresses read from third-party pages: handle them
+                  as personal data.
                 items:
                   type: object
                   required: [kind, label, url]
@@ -1092,8 +1146,9 @@ components:
                       maxLength: 40
                       x-values: [contact, author, submission]
                       description: >-
-                        contact: a contact, about or team page, or an e-mail link. author: the author's page or
-                        byline. submission: a "submit", "write for us", "get listed" or "advertise" link.
+                        contact: a contact, about or team page, or an e-mail link. author: the author's page, or
+                        the line that names the author. submission: a "submit", "write for us", "get listed" or
+                        "advertise" link.
                     label:
                       type: string
                       minLength: 1
@@ -1104,8 +1159,8 @@ components:
                       maxLength: 2048
                       pattern: '^(https?://|mailto:)'
                       description: >-
-                        An absolute http or https address, or "mailto:" followed by an e-mail address. Render
-                        mailto values as e-mail links; never fetch them.
+                        An absolute http or https URL, or "mailto:" followed by an e-mail address. Show
+                        mailto values as e-mail links; never request them.
     Competitor:
       type: object
       description: >-
@@ -1117,14 +1172,14 @@ components:
           type: string
           minLength: 1
           maxLength: 160
-          description: Display name, as the user typed it. Compare names without regard to case.
+          description: Display name, as the user typed it. "Acme" and "ACME" are the same name.
         domains:
           type: array
           maxItems: 30
           description: >-
             The competitor's sites as host names: lower case, no "www.", no path. Can be empty when the
-            competitor is tracked by name only. A value is whatever the user typed that parses as a host:
-            it can be a subdomain, and it is not checked against a list of public suffixes.
+            competitor is tracked by name only. A value is any text the user typed that can be read as a
+            host: it can be a subdomain, and it is not checked against a list of public suffixes.
           items: { type: string, minLength: 1, maxLength: 255 }
     ContentEditorDocument:
       type: object
@@ -1153,7 +1208,7 @@ components:
             - $ref: '#/components/schemas/HttpUrl'
             - type: 'null'
           description: >-
-            Address of the page, as open in the user's browser (query string and fragment included). null
+            URL of the page, as open in the user's browser (query string and fragment included). null
             exactly when source is "pasted".
         pageTitle:
           type: string
@@ -1164,7 +1219,7 @@ components:
           format: date-time
           description: >-
             When the comparison was made, on the user's clock, as UTC with milliseconds. It is not the time
-            of the save, and it repeats when the same comparison is sent again.
+            of the save, and it is the same when the same comparison is sent again.
         method:
           type: object
           description: How the comparison was made, so that two documents can be compared fairly.
@@ -1176,7 +1231,8 @@ components:
               x-values: [embedding, lexical]
               description: >-
                 embedding: sentence meanings compared with a language model that runs in the browser (the
-                normal case). lexical: shared words, used when that model cannot run; it misses paraphrases.
+                normal case). lexical: sentences compared by the words they share, used when that model
+                cannot run; it does not find two sentences that say the same thing in different words.
             threshold:
               type: number
               minimum: 0
@@ -1214,8 +1270,9 @@ components:
           type: array
           maxItems: 12
           description: >-
-            Points that more than half of the compared pages make and the checked text does not, most
-            widespread first. Near-duplicates are merged. Always empty when fewer than two pages were compared.
+            Points that more than half of the compared pages make and the checked text does not. The
+            point that the most pages make comes first. Points that are almost the same are merged into
+            one. Always empty when fewer than two pages were compared.
           items:
             type: object
             required: [text, pages, urls]
@@ -1233,7 +1290,7 @@ components:
           minItems: 1
           maxItems: 8
           description: >-
-            The competing pages the text was compared with, in comparison order: the addresses that were
+            The competing pages the text was compared with, in comparison order: the URLs that were
             requested, before any redirect. Pages that could not be read or had no text are left out.
           items: { $ref: '#/components/schemas/HttpUrl' }
     WorkspaceFromBrief:
@@ -1315,8 +1372,9 @@ components:
           type: array
           maxItems: 30
           description: >-
-            Search phrases suggested by the site's own page titles and headings, in lower case, roughly
-            most widespread first. They are candidates: nobody researched or confirmed them.
+            Search phrases suggested by the site's own page titles and headings, in lower case. The
+            phrases found on the most pages come first, approximately. They are candidates: nobody
+            researched or confirmed them.
           items: { type: string, minLength: 1, maxLength: 200 }
         avatars:
           type: array
@@ -1359,7 +1417,7 @@ components:
                 type: array
                 minItems: 1
                 maxItems: 8
-                description: Addresses of the pages the finding applies to, as they were read (after redirects; the open page with its query string).
+                description: URLs of the pages the finding applies to, as they were read (after redirects; the open page with its query string).
                 items: { $ref: '#/components/schemas/HttpUrl' }
         nextSteps:
           type: array
@@ -1377,18 +1435,19 @@ components:
             lists), the same text the user can export. It holds more than the fields above: the search
             findings, the site's tone of voice and testimonials, and "Prepared by" with the agency's name when the
             user set one. Store it and show it as the brief; do not parse it. It quotes web pages: render
-            it with raw HTML and unsafe links switched off. The two examples of this kit are 2.5 and 5.5 KB;
-            real sites give more, and a column for it must hold 600 KB (not a MySQL TEXT column, which ends
-            at 64 KB). It repeats the contact details and quotes the site's testimonials with the names of
-            its customers.
+            it with raw HTML and unsafe links switched off. A column for it must hold 600 KB: the limit
+            of 200,000 is counted in UTF-16 code units, and one unit is up to 3 bytes of UTF-8. A MySQL
+            TEXT column ends at 64 KB and is too small. The Markdown repeats the contact details and
+            quotes the site's testimonials with the names of its customers.
     IndustryPulse:
       type: object
       required: [events]
       properties:
         updatedAt:
           type: [string, 'null']
-          format: date-time
-          description: When the list was last edited, as an ISO 8601 text. Not shown.
+          description: >-
+            When the list was last edited, as text. A date and time in UTC is best, for example
+            2026-11-18T09:00:00Z. The extension does not show it and does not check its form.
         events:
           type: array
           description: The events, newest first. A JSON array, also when it is empty. The extension shows the first 8 that have a valid date.
@@ -1424,7 +1483,7 @@ components:
           type: string
           maxLength: 40
           x-values: [click-potential, why-not-me, rewind, new-or-noise, brief]
-          description: Which screen asked. For your metering and logs. What you must return depends on responseSchema, not on this.
+          description: Which screen asked. Use it to count requests per feature, and in your logs. What you must return depends on responseSchema, not on this.
         system:
           type: string
           minLength: 1
@@ -1450,8 +1509,8 @@ components:
           minimum: 1
           maximum: 4000
           description: >-
-            Room for the visible reply, in model tokens: 700 for a summary, 2,000 when responseSchema is
-            present. Above your own maximum, use your maximum.
+            The largest size of the visible reply, in model tokens: 700 for a summary, 2,000 when
+            responseSchema is present. Above your own maximum, use your maximum.
     AiCompletionResponse:
       type: object
       required: [text]

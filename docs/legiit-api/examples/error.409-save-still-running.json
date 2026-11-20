@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "conflict",
+    "message": "This save is still running: wait a few seconds, then send it again."
+  }
+}

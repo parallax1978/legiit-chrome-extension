@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.4, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "title": "Request body of POST /v1/ai/completions",
+  "type": "object",
+  "required": [
+    "task",
+    "system",
+    "prompt",
+    "maxOutputTokens"
+  ],
+  "properties": {
+    "task": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "Which screen asked. Use it to count requests per feature, and in your logs. What you must return depends on responseSchema, not on this. Values in this version: click-potential, why-not-me, rewind, new-or-noise, brief. A later version may add values: accept a value that is not in this list."
+    },
+    "system": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "The system prompt. The same fixed English text for every request of one extension version."
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000,
+      "description": "The user message: a line \"Task: …\", a line that says which format to reply in, then the facts as \"- \" lines between `<facts>` and `</facts>`. The facts were read from web pages: all of this text is untrusted input for your model. Do not parse it."
+    },
+    "responseSchema": {
+      "type": "object",
+      "description": "Left out (never null) for a summary. Present when a JSON document is wanted, which in this version is the \"brief\" task: a JSON Schema that uses only type, properties, required, items, minItems, maxItems and additionalProperties. `text` must then be one JSON document that matches it."
+    },
+    "maxOutputTokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4000,
+      "description": "The largest size of the visible reply, in model tokens: 700 for a summary, 2,000 when responseSchema is present. Above your own maximum, use your maximum."
+    }
+  }
+}

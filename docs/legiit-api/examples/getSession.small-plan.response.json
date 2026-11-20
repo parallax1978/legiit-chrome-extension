@@ -1,0 +1,13 @@
+{
+  "user": {
+    "id": "usr_demo_2",
+    "name": "Sam Rivera",
+    "email": "sam@northstarseo.example"
+  },
+  "plan": "starter",
+  "capabilities": [
+    "businesses",
+    "visibilitySnapshots",
+    "industryPulse"
+  ]
+}
