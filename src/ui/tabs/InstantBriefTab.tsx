@@ -15,6 +15,7 @@ import { workspacePayload } from '@/legiit/payloads';
 import { downloadText } from '@/lib/csv';
 import { randomId } from '@/lib/hash';
 import { normalizeDomainInput, slugify, stripWww } from '@/lib/sanitize';
+import { pluralize } from '@/lib/text';
 import { urlKey } from '@/lib/url';
 import { BrandStyleSchema, PageSnapshotSchema, SameOriginFetchReplySchema, type BrandStyle } from '@/model/schemas';
 import { findResultsPages, sendToTab } from '@/panel/tabs';
@@ -42,7 +43,9 @@ export function InstantBriefTab() {
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [confirmAi, setConfirmAi] = useState(false);
-  const task = useTask<Brief>();
+  /** Pages of the site that could not be read in the build that produced the brief on screen. */
+  const [unread, setUnread] = useState<string[]>([]);
+  const task = useTask<{ brief: Brief; unread: string[] }>();
 
   const ready = access.status === 'ready' ? access : null;
   const onPage = ready?.ping.agent === 'page';
@@ -81,12 +84,14 @@ export function InstantBriefTab() {
         // The other pages are fetched from inside the tab: same site, no extra permission, no cookies.
         const fetched = others.length > 0 ? await sendToTab(tabId, { type: 'lens:fetch-same-origin', urls: others.map((l) => l.url) }, SameOriginFetchReplySchema) : { pages: [] };
         const pages: SitePage[] = [];
+        const skipped: string[] = [];
         for (const link of links) {
           if (urlKey(link.url) === urlKey(snapshot.url)) {
             pages.push({ url: snapshot.url, kind: link.kind, doc: currentDoc });
           } else {
             const page = fetched.pages.find((p) => p.url === link.url);
             if (page?.ok) pages.push({ url: page.finalUrl ?? link.url, kind: link.kind, doc: parseHtml(page.html) });
+            else skipped.push(link.url);
           }
         }
         progress(links.length, links.length, 'Reading brand styling');
@@ -103,11 +108,12 @@ export function InstantBriefTab() {
         const search = searchEntries((await listKeywords()).map((k) => k.latest), siteDomain, isTracked);
         const built = composeBrief({ id: randomId('brief'), now: Date.now(), facts, issues, competitors: chosen(), search });
         await saveBrief(built);
-        return built;
+        return { brief: built, unread: skipped };
       })
-      .then((built) => {
-        if (built) {
-          setBrief(built);
+      .then((done) => {
+        if (done) {
+          setBrief(done.brief);
+          setUnread(done.unread);
           void reloadSaved();
         }
       });
@@ -243,9 +249,15 @@ export function InstantBriefTab() {
           }
         >
           <div className="small muted">
-            {formatDateTime(brief.createdAt)} · {brief.facts.pages.length} pages read · drafts written by{' '}
+            {formatDateTime(brief.createdAt)} · {pluralize(brief.facts.pages.length, 'page')} read · drafts written by{' '}
             {brief.writtenBy === 'template' ? 'built-in templates (no AI)' : brief.writtenBy === 'legiit' ? 'Legiit AI' : 'on-device AI'}
           </div>
+          {unread.length > 0 && (
+            <p className="small muted" data-testid="brief-unread">
+              {pluralize(unread.length, 'page')} could not be read and {unread.length === 1 ? 'was' : 'were'} left out:{' '}
+              {unread.map((url) => new URL(url).pathname).join(', ')}
+            </p>
+          )}
           {brief.facts.brandColors.length > 0 && (
             <div className="small" data-testid="brief-colors">
               {brief.facts.brandColors.map((c) => (
@@ -298,7 +310,13 @@ export function InstantBriefTab() {
         <Card title="Saved briefs" testId="brief-saved">
           {saved.map((b) => (
             <div className="item row between" key={b.id}>
-              <Button variant="link" onClick={() => setBrief(b)}>
+              <Button
+                variant="link"
+                onClick={() => {
+                  setBrief(b);
+                  setUnread([]);
+                }}
+              >
                 {b.businessName}
               </Button>
               <span className="row small muted">

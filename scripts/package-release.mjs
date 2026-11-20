@@ -48,7 +48,11 @@ check((manifest.host_permissions ?? []).includes('https://web.archive.org/*'), '
 check(!(manifest.host_permissions ?? []).some((h) => /[*]:\/\/[*]\/|<all_urls>|^https?:\/\/\*\//.test(h)), 'no broad host may be required at install');
 check(manifest.web_accessible_resources === undefined, 'the package must not expose web-accessible resources');
 check(!Object.keys(manifest.commands ?? {}).some((c) => c.startsWith('dev-')), 'development commands must not ship');
-check(!/unsafe-eval'|unsafe-inline|https?:\/\/(?!\*)[a-z]/.test(String(manifest.content_security_policy?.extension_pages).replace("'wasm-unsafe-eval'", '')), 'CSP must not allow eval, inline script or remote code');
+const csp = String(manifest.content_security_policy?.extension_pages);
+const scriptSrc = /script-src ([^;]*)/.exec(csp)?.[1] ?? '';
+check(scriptSrc.trim() === "'self' 'wasm-unsafe-eval'", `script-src must be exactly 'self' 'wasm-unsafe-eval' (found ${scriptSrc})`);
+check(/default-src 'self'/.test(csp) && /object-src 'none'/.test(csp) && /frame-src 'none'/.test(csp), 'CSP must keep default-src, object-src and frame-src locked down');
+check(!/https?:\/\/[a-z0-9]/i.test(csp), 'CSP must not name any remote host');
 check((manifest.description ?? '').length <= 132, 'the manifest description (store summary) is limited to 132 characters');
 for (const banned of ['tabs', 'history', 'cookies', 'webRequest', 'debugger', 'notifications', 'offscreen', 'downloads']) {
   check(!(manifest.permissions ?? []).includes(banned), `permission "${banned}" is not allowed`);

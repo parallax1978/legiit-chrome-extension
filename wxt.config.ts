@@ -25,6 +25,10 @@ const legiitOrigin = new URL(legiitBaseUrl).origin;
  *   It does not allow eval() or remote code.
  * - No remote scripts, styles, images, fonts or frames can load: everything
  *   but connect-src is limited to the package itself.
+ * - Inline *styles* (never scripts) are allowed. The panel parses fetched HTML
+ *   with DOMParser to read it; those inert documents contain style attributes,
+ *   and without this Chrome logs a CSP error for each one. Nothing from a
+ *   fetched page is ever inserted into an extension page.
  * - connect-src allows http(s) because fetching pages the user chose to scan
  *   is a core feature; which hosts may actually be contacted is enforced by
  *   src/net/guarded-fetch.ts and Chrome's host permissions.
@@ -34,7 +38,7 @@ function extensionPagesCsp(dev: boolean): string {
     "default-src 'self'",
     `script-src 'self' 'wasm-unsafe-eval'${dev ? ' http://localhost:3000' : ''}`,
     "object-src 'none'",
-    `style-src 'self'${dev ? " 'unsafe-inline'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src 'self' https: http:${dev ? ' ws://localhost:3000' : ''}`,

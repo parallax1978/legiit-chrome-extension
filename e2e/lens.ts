@@ -49,6 +49,11 @@ export interface LensOptions {
    * only difference is that these test domains are already granted.
    */
   grantFixtureSites: boolean;
+  /**
+   * Removes the bundled embedding model from the copy of the extension under
+   * test, to exercise the "model failed to load" path of New or Noise.
+   */
+  removeModel: boolean;
   /** Size of the browser window that fixture pages render in. */
   windowSize: { width: number; height: number };
 }
@@ -79,6 +84,69 @@ export interface Lens {
   trackScenarioBrands(): Promise<void>;
   /** Requests made by the extension itself (everything except pages the test navigated to). */
   extensionRequests(): SeenRequest[];
+  /** Reads the text of the results strip. It lives in a closed shadow root, so this goes through the DevTools protocol. */
+  stripText(page: Page): Promise<string | null>;
+  /** Clicks a button inside the strip with a real mouse click. */
+  clickStrip(page: Page, label: string): Promise<void>;
+  /** True when Chrome has the extension's real side panel open (not the tab the tests drive). */
+  realSidePanelOpen(): Promise<boolean>;
+  /** Reads the text of a file the extension offered as a download. */
+  downloadText(page: Page, trigger: () => Promise<void>): Promise<{ name: string; text: string }>;
+}
+
+interface DomNode {
+  nodeId: number;
+  nodeName: string;
+  nodeValue: string;
+  attributes?: string[];
+  children?: DomNode[];
+  shadowRoots?: (DomNode & { shadowRootType?: string })[];
+}
+
+function findNode(node: DomNode, predicate: (n: DomNode) => boolean): DomNode | null {
+  if (predicate(node)) return node;
+  for (const child of [...(node.shadowRoots ?? []), ...(node.children ?? [])]) {
+    const found = findNode(child, predicate);
+    if (found) return found;
+  }
+  return null;
+}
+
+function textOf(node: DomNode): string {
+  if (node.nodeName === '#text') return node.nodeValue;
+  if (node.nodeName === 'STYLE') return '';
+  return (node.children ?? []).map(textOf).join(' ');
+}
+
+async function stripShadow(context: BrowserContext, page: Page): Promise<{ cdp: CDPSession; shadow: DomNode & { shadowRootType?: string } } | null> {
+  const cdp = await context.newCDPSession(page);
+  const { root } = (await cdp.send('DOM.getDocument', { depth: -1, pierce: true })) as unknown as { root: DomNode };
+  const host = findNode(root, (n) => n.attributes?.includes('data-legiit-lens-strip') ?? false);
+  const shadow = host?.shadowRoots?.[0];
+  if (!shadow) {
+    await cdp.detach();
+    return null;
+  }
+  return { cdp, shadow };
+}
+
+/**
+ * The user's own browsing: page navigations, and a page loading its own
+ * same-origin images, styles, fonts and scripts. Everything else was caused
+ * by the extension: requests from extension pages, from the service worker,
+ * from a worker, and any fetch/XHR issued inside a web page (fixture pages
+ * contain no scripts, so those can only come from a content script).
+ */
+function isUsersOwnBrowsing(request: SeenRequest): boolean {
+  if (request.from.startsWith('chrome-extension://') || request.from === 'service-worker' || request.from === '') return false;
+  if (request.resourceType === 'document') return true;
+  let sameOrigin = false;
+  try {
+    sameOrigin = new URL(request.from).origin === new URL(request.url).origin;
+  } catch {
+    sameOrigin = false;
+  }
+  return sameOrigin && ['image', 'stylesheet', 'font', 'media', 'script'].includes(request.resourceType);
 }
 
 function contentTypeFor(file: string, fallback: string): string {
@@ -97,6 +165,10 @@ function findFixture(url: URL): { file: string; contentType: string } | null {
   }
   const exact = fixtureManifest.routes.find((r) => r.url === clean.href || r.url === clean.href.replace(/\/$/, '') || `${r.url}/` === clean.href);
   if (exact) return { file: exact.file, contentType: contentTypeFor(exact.file, exact.contentType) };
+  // Images and icons on fixture sites: one small placeholder image, so fixture pages load without errors of their own.
+  if (/\.example$/.test(clean.hostname) && /\.(png|jpe?g|ico|webp|gif)$/i.test(clean.pathname)) {
+    return { file: 'site/assets/brightpath-logo.png', contentType: 'image/png' };
+  }
   // Google results: same host and path, same query and mode.
   if (/^www\.google\./.test(clean.hostname) && clean.pathname === '/search') {
     const match = fixtureManifest.routes.find((r) => {
@@ -115,21 +187,25 @@ function findFixture(url: URL): { file: string; contentType: string } | null {
 
 export const test = base.extend<LensOptions & { lens: Lens }>({
   grantFixtureSites: [false, { option: true }],
+  removeModel: [false, { option: true }],
   windowSize: [{ width: 1280, height: 800 }, { option: true }],
 
-  lens: async ({ grantFixtureSites, windowSize }, use) => {
+  lens: async ({ grantFixtureSites, removeModel, windowSize }, use) => {
     if (!existsSync(join(DIST, 'manifest.json'))) throw new Error('dist/ is missing. Run "npm run build" first (npm run e2e does this for you).');
 
     // The extension under test: dist/ as built, or a copy whose manifest additionally grants the fixture domains.
     let extensionDir = DIST;
     let scratch: string | null = null;
-    if (grantFixtureSites) {
+    if (grantFixtureSites || removeModel) {
       scratch = mkdtempSync(join(tmpdir(), 'lens-ext-'));
       cpSync(DIST, scratch, { recursive: true });
-      const manifestPath = join(scratch, 'manifest.json');
-      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { host_permissions: string[] };
-      manifest.host_permissions = [...manifest.host_permissions, '*://*.example/*', '*://*.reddit.com/*', '*://*.youtube.com/*'];
-      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      if (grantFixtureSites) {
+        const manifestPath = join(scratch, 'manifest.json');
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { host_permissions: string[] };
+        manifest.host_permissions = [...manifest.host_permissions, '*://*.example/*', '*://*.reddit.com/*', '*://*.youtube.com/*'];
+        writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      }
+      if (removeModel) rmSync(join(scratch, 'models'), { recursive: true, force: true });
       extensionDir = scratch;
     }
 
@@ -239,6 +315,8 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
       },
       async invoke(page) {
         if (!browser) throw new Error('Browser handle is not available');
+        // A toolbar click always lands on the tab the user is looking at; Chrome grants activeTab to the active tab only.
+        await page.bringToFront();
         cdp ??= await browser.newBrowserCDPSession();
         const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab' }] });
         const target = targetInfos.find((t) => t.type === 'tab' && t.url === page.url());
@@ -256,7 +334,34 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
         });
       },
       extensionRequests() {
-        return requests.filter((r) => r.resourceType !== 'document');
+        return requests.filter((r) => !isUsersOwnBrowsing(r));
+      },
+      async stripText(page) {
+        const found = await stripShadow(context, page);
+        if (!found) return null;
+        await found.cdp.detach();
+        return textOf(found.shadow).replace(/\s+/g, ' ').trim();
+      },
+      async clickStrip(page, label) {
+        const found = await stripShadow(context, page);
+        if (!found) throw new Error('The strip is not on the page');
+        const button = findNode(found.shadow, (n) => n.nodeName === 'BUTTON' && textOf(n).trim() === label);
+        if (!button) throw new Error(`No "${label}" button in the strip`);
+        const { model } = (await found.cdp.send('DOM.getBoxModel', { nodeId: button.nodeId })) as { model: { content: number[] } };
+        const [x1, y1, , , x3, y3] = model.content as [number, number, number, number, number, number, number, number];
+        await found.cdp.detach();
+        await page.mouse.click((x1 + x3) / 2, (y1 + y3) / 2);
+      },
+      async realSidePanelOpen() {
+        if (!browser) return false;
+        cdp ??= await browser.newBrowserCDPSession();
+        const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{}] });
+        return targetInfos.some((t) => t.url === `chrome-extension://${extensionId}/sidepanel.html`);
+      },
+      async downloadText(page, trigger) {
+        const [download] = await Promise.all([page.waitForEvent('download'), trigger()]);
+        const path = await download.path();
+        return { name: download.suggestedFilename(), text: readFileSync(path, 'utf8') };
       },
     };
 

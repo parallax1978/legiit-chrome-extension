@@ -65,7 +65,6 @@ export const SettingsSchema = v.object({
     }),
     { businessId: null, businessName: null, focusKeywords: [], avatars: [] },
   ),
-  onboardingSeen: v.optional(v.boolean(), false),
 });
 
 export type Settings = v.InferOutput<typeof SettingsSchema>;

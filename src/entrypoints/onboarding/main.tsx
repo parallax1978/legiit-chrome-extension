@@ -2,16 +2,12 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PRODUCT_NAME, SINGLE_PURPOSE, SUGGESTED_SHORTCUT } from '@/config/constants';
-import { updateSettings } from '@/storage/settings';
 import { Button, Card } from '@/ui/kit';
 import '@/ui/styles.css';
 
 function Onboarding() {
   const [shortcut, setShortcut] = useState(SUGGESTED_SHORTCUT);
   useEffect(() => {
-    void updateSettings((draft) => {
-      draft.onboardingSeen = true;
-    }).catch(() => undefined);
     chrome.commands
       ?.getAll()
       .then((commands) => setShortcut(commands.find((c) => c.name === '_execute_action')?.shortcut || SUGGESTED_SHORTCUT))
