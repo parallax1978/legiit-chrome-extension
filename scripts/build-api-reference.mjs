@@ -23,16 +23,31 @@ const target = join(kit, 'reference.md');
 
 const contract = parse(readFileSync(contractPath, 'utf8'));
 
-/** Follows local "$ref" pointers ("#/components/schemas/Name"). */
+/**
+ * Follows local "$ref" pointers ("#/components/schemas/Name"). Keywords written
+ * next to a $ref (a description, a tighter limit) win over the referenced ones.
+ * "oneOf: [X, null]" is read as a nullable X.
+ */
 function deref(node) {
   let current = node;
   let name = null;
   let guard = 0;
-  while (current && typeof current === 'object' && typeof current.$ref === 'string') {
-    const parts = current.$ref.replace(/^#\//, '').split('/');
+  while (current && typeof current === 'object') {
+    let ref = typeof current.$ref === 'string' ? current.$ref : null;
+    let nullable = false;
+    if (!ref && Array.isArray(current.oneOf) && current.oneOf.length === 2 && current.oneOf.some((s) => s.type === 'null')) {
+      ref = current.oneOf.find((s) => typeof s.$ref === 'string')?.$ref ?? null;
+      nullable = ref !== null;
+    }
+    if (!ref) break;
+    const parts = ref.replace(/^#\//, '').split('/');
     name = parts.at(-1);
-    current = parts.reduce((value, part) => (value ? value[part] : undefined), contract);
-    if (++guard > 20) throw new Error(`Circular $ref at ${node.$ref}`);
+    const target = parts.reduce((value, part) => (value ? value[part] : undefined), contract);
+    if (!target) throw new Error(`Unresolved $ref: ${ref}`);
+    const { $ref: _ref, oneOf: _oneOf, ...siblings } = current;
+    current = { ...target, ...siblings };
+    if (nullable) current.type = [...new Set([...(Array.isArray(current.type) ? current.type : [current.type]), 'null'])];
+    if (++guard > 20) throw new Error(`Circular $ref at ${ref}`);
   }
   if (!current) throw new Error(`Unresolved $ref: ${JSON.stringify(node)}`);
   return { schema: current, name };
@@ -54,26 +69,51 @@ function typeLabel(schema) {
   return nullable ? `${label} or null` : label;
 }
 
+const count = (n) => Number(n).toLocaleString('en-US');
+
 function limits(schema) {
+  const all = types(schema);
   const out = [];
   if (schema.const !== undefined) out.push(`always ${code(JSON.stringify(schema.const))}`);
-  if (schema.format) out.push(schema.format);
-  if (schema.minLength !== undefined) out.push(`min ${schema.minLength} chars`);
-  if (schema.maxLength !== undefined) out.push(`max ${schema.maxLength.toLocaleString('en-US')} chars`);
-  if (schema.minItems !== undefined) out.push(`min ${schema.minItems} items`);
-  if (schema.maxItems !== undefined) out.push(`max ${schema.maxItems.toLocaleString('en-US')} items`);
-  if (schema.minimum !== undefined && schema.maximum !== undefined) out.push(`${schema.minimum} to ${schema.maximum}`);
-  else if (schema.minimum !== undefined) out.push(`≥ ${schema.minimum}`);
-  else if (schema.maximum !== undefined) out.push(`≤ ${schema.maximum}`);
-  return out.join(', ');
+  if (schema.format) out.push({ 'date-time': 'date and time (ISO 8601)', date: 'date (YYYY-MM-DD)', uuid: 'UUID' }[schema.format] ?? schema.format);
+  if (all.includes('string')) {
+    if (schema.minLength !== undefined && schema.maxLength !== undefined) out.push(`${count(schema.minLength)} to ${count(schema.maxLength)} chars`);
+    else if (schema.minLength !== undefined) out.push(`at least ${count(schema.minLength)} char${schema.minLength === 1 ? '' : 's'}`);
+    else if (schema.maxLength !== undefined) out.push(`0 to ${count(schema.maxLength)} chars`);
+  }
+  if (all.includes('array')) {
+    if (schema.minItems !== undefined && schema.maxItems !== undefined) out.push(`${count(schema.minItems)} to ${count(schema.maxItems)} items`);
+    else if (schema.minItems !== undefined) out.push(`at least ${count(schema.minItems)} item${schema.minItems === 1 ? '' : 's'}`);
+    else if (schema.maxItems !== undefined) out.push(`0 to ${count(schema.maxItems)} items`);
+    // Limits of the items, when they are plain values.
+    const item = schema.items ? deref(schema.items).schema : null;
+    if (item && !item.properties) {
+      const inner = limits(item);
+      if (inner) out.push(`each: ${inner}`);
+    }
+  }
+  if (all.includes('integer') || all.includes('number')) {
+    // An id can be text or a number: say which limit belongs to which.
+    const label = all.includes('string') ? 'as a number: ' : '';
+    if (label && out.length > 0) out[out.length - 1] = `as text: ${out[out.length - 1]}`;
+    if (schema.minimum !== undefined && schema.maximum !== undefined) out.push(`${label}${count(schema.minimum)} to ${count(schema.maximum)}`);
+    else if (schema.minimum !== undefined) out.push(`${label}${count(schema.minimum)} or more`);
+    else if (schema.maximum !== undefined) out.push(`${label}${count(schema.maximum)} or less`);
+  }
+  if (schema.pattern === '^https?://') out.push('starts with http:// or https://');
+  else if (schema.pattern === '^https://') out.push('starts with https://');
+  else if (schema.pattern === '^(https?://|mailto:)') out.push('starts with http://, https:// or mailto:');
+  return out.join('; ');
 }
 
 function describe(schema) {
   const parts = [];
   if (schema.description) parts.push(String(schema.description).trim().replace(/\s*\n\s*/g, ' '));
-  const values = schema.enum ? schema.enum.filter((v) => v !== null) : null;
-  if (values && values.length > 0) parts.push(`One of: ${values.map(code).join(', ')}.`);
-  if (schema['x-examples']) parts.push(`For example: ${schema['x-examples'].map(code).join(', ')}.`);
+  const item = types(schema).includes('array') && schema.items ? deref(schema.items).schema : null;
+  const values = (schema.enum ?? item?.enum)?.filter((v) => v !== null);
+  if (values && values.length > 0) parts.push(`${item?.enum ? 'Values' : 'One of'}: ${values.map(code).join(', ')}.`);
+  const examples = schema['x-examples'] ?? item?.['x-examples'];
+  if (examples) parts.push(`For example: ${examples.map(code).join(', ')}.`);
   return parts.join(' ');
 }
 
@@ -101,9 +141,9 @@ function rows(schemaNode, prefix = '', requiredHere = true, out = []) {
 
 const cell = (text) => String(text ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
-function table(list, { withRequired }) {
+function table(list, { request }) {
   if (list.length === 0) return '_No fields._\n';
-  const head = withRequired ? '| Field | Type | Required | Limits | Meaning |\n| --- | --- | --- | --- | --- |' : '| Field | Type | Always present | Limits | Meaning |\n| --- | --- | --- | --- | --- |';
+  const head = `| Field | Type | ${request ? 'Always sent' : 'Required'} | Limits | Meaning |\n| --- | --- | --- | --- | --- |`;
   const body = list.map((r) => `| ${code(r.path)} | ${cell(r.type)} | ${r.required ? 'yes' : 'no'} | ${cell(r.limits)} | ${cell(r.description)} |`);
   return `${head}\n${body.join('\n')}\n`;
 }
@@ -111,7 +151,9 @@ function table(list, { withRequired }) {
 /** Shortens long arrays and strings so an example stays readable. Returns notes on what was cut. */
 function shorten(value, notes, path = '') {
   if (Array.isArray(value)) {
-    const keep = value.length > 3 ? 2 : value.length;
+    // Lists of plain values are short and are shown whole; lists of objects are cut to two.
+    const plain = value.every((item) => item === null || typeof item !== 'object');
+    const keep = plain ? Math.min(value.length, 12) : value.length > 3 ? 2 : value.length;
     if (keep < value.length) notes.push(`${code(path || 'array')}: ${keep} of ${value.length} items shown`);
     return value.slice(0, keep).map((item, i) => shorten(item, notes, `${path}[${i}]`.replace(/\[\d+\]$/, '[]')));
   }
@@ -137,41 +179,54 @@ const exampleFiles = existsSync(examplesDir) ? readdirSync(examplesDir).filter((
 const examplesFor = (operationId, kind) => exampleFiles.filter((f) => f === `${operationId}.${kind}.json` || (f.startsWith(`${operationId}.`) && f.endsWith(`.${kind}.json`)));
 const variantOf = (file, operationId, kind) => file.slice(operationId.length + 1, -(kind.length + 6)).replace(/-/g, ' ');
 
+const responses = contract.components.responses;
+const responseName = (node) => (typeof node.$ref === 'string' ? node.$ref.split('/').at(-1) : null);
+const flat = (text) => String(text ?? '').trim().replace(/\s*\n\s*/g, ' ');
+
 const sections = [];
+const toc = [];
 let number = 0;
 for (const [path, methods] of Object.entries(contract.paths)) {
   for (const [method, op] of Object.entries(methods)) {
     number++;
     const lines = [];
-    lines.push(`## ${number}. ${method.toUpperCase()} ${path}`);
+    const title = `${number}. ${method.toUpperCase()} ${path}`;
+    toc.push(`| ${number} | ${code(`${method.toUpperCase()} ${path}`)} | ${cell(flat(op.summary))} | ${op['x-capability'] ? code(op['x-capability']) : 'always on'} |`);
+    lines.push(`## ${title}`);
     lines.push('');
-    lines.push(String(op.summary ?? '').trim());
+    lines.push(flat(op.summary));
     lines.push('');
+    const errors = Object.entries(op.responses).filter(([status]) => !status.startsWith('2'));
     const facts = [
-      ['Client method', code(op.operationId)],
-      ['Capability', op['x-capability'] ? code(op['x-capability']) : 'none (always available)'],
-      ['Called when', op['x-called-when'] ? String(op['x-called-when']).trim().replace(/\s*\n\s*/g, ' ') : ''],
-      ['Success', Object.keys(op.responses).filter((s) => s.startsWith('2')).map(code).join(' or ')],
+      ['Capability', op['x-capability'] ? code(op['x-capability']) : 'none: always available'],
+      ['Called when', flat(op['x-called-when'])],
+      ['Success', Object.keys(op.responses).filter((status) => status.startsWith('2')).map(code).join(' or ')],
+      ['Errors', `${errors.map(([status, node]) => `${code(status.replace('XX', 'xx'))}${responseName(node) === 'NotFound' ? ' (business not found, or feature not available)' : responseName(node) === 'Unavailable' ? ' (feature not available)' : ''}`).join(', ')}. See [Errors](#errors).`],
+      ['Operation id', code(op.operationId)],
     ].filter(([, value]) => value);
     lines.push('| | |', '| --- | --- |', ...facts.map(([k, v]) => `| ${k} | ${cell(v)} |`));
     lines.push('');
     if (op.description) lines.push(String(op.description).trim(), '');
 
     const params = (op.parameters ?? []).map((p) => deref(p).schema);
-    if (params.length > 0) {
-      lines.push('### Path parameters', '');
-      lines.push('| Name | Type | Limits | Meaning |', '| --- | --- | --- | --- |');
-      for (const p of params) lines.push(`| ${code(p.name)} | ${typeLabel(p.schema ?? {})} | ${cell(limits(p.schema ?? {}))} | ${cell(p.description ?? '')} |`);
+    for (const [where, heading] of [['path', 'Path parameters'], ['header', 'Request headers (besides the common ones)']]) {
+      const list = params.filter((p) => p.in === where);
+      if (list.length === 0) continue;
+      lines.push(`### ${heading}`, '');
+      lines.push('| Name | Type | Always sent | Limits | Meaning |', '| --- | --- | --- | --- | --- |');
+      for (const p of list) lines.push(`| ${code(p.name)} | ${typeLabel(p.schema ?? {})} | ${where === 'path' || p.name === 'Idempotency-Key' ? 'yes' : 'no'} | ${cell(limits(p.schema ?? {}))} | ${cell(flat(p.description))} |`);
       lines.push('');
     }
 
     const body = op.requestBody?.content?.['application/json']?.schema;
     if (body) {
+      const top = deref(body).schema;
       lines.push('### Request body', '');
-      lines.push(table(rows(body), { withRequired: true }));
+      if (top.description) lines.push(flat(top.description), '');
+      lines.push(table(rows(body), { request: true }));
       for (const file of examplesFor(op.operationId, 'request')) {
         const variant = variantOf(file, op.operationId, 'request');
-        lines.push(exampleBlock(file, variant ? `Example request (${variant})` : 'Example request'));
+        lines.push(exampleBlock(file, variant ? `Example request: ${variant}` : 'Example request'));
       }
     }
 
@@ -180,39 +235,65 @@ for (const [path, methods] of Object.entries(contract.paths)) {
       const response = deref(success[1]).schema;
       const schema = response.content?.['application/json']?.schema;
       lines.push(`### Response ${success[0]}`, '');
-      if (schema) lines.push(table(rows(schema), { withRequired: false }));
+      if (response.description) lines.push(flat(response.description), '');
+      if (schema) {
+        const top = deref(schema).schema;
+        if (top.description) lines.push(flat(top.description), '');
+        lines.push(table(rows(schema), { request: false }));
+      }
       for (const file of examplesFor(op.operationId, 'response')) {
         const variant = variantOf(file, op.operationId, 'response');
-        lines.push(exampleBlock(file, variant ? `Example response (${variant})` : 'Example response'));
+        lines.push(exampleBlock(file, variant ? `Example response: ${variant}` : 'Example response'));
       }
-    }
-
-    const errors = Object.entries(op.responses).filter(([status]) => !status.startsWith('2'));
-    if (errors.length > 0) {
-      lines.push('### Errors', '');
-      lines.push('| Status | When | What the extension does |', '| --- | --- | --- |');
-      for (const [status, node] of errors) {
-        const response = deref(node).schema;
-        lines.push(`| ${code(status)} | ${cell(response.description ?? '')} | ${cell(response['x-extension-reaction'] ?? '')} |`);
-      }
-      lines.push('');
     }
     sections.push(lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd());
   }
 }
 
+// One table for the error replies, which are the same for every endpoint.
+const statusOf = { Unauthorised: '401', Forbidden: '403', NotFound: '404', Unavailable: '404, 405, 501', Invalid: '422, 400', RateLimited: '429', ServerError: '5xx' };
+const errorRows = Object.entries(statusOf).map(([name, status]) => `| ${code(status)} | ${cell(flat(responses[name].description))} | ${cell(flat(responses[name]['x-extension-reaction']))} |`);
+const errorSchema = contract.components.schemas.Error;
 const errorExamples = exampleFiles.filter((f) => f.startsWith('error.'));
+const errorSection = [
+  '## Errors',
+  '',
+  'The same for every endpoint. A reply that is not listed here (any other 4xx) is shown to the user like a 422.',
+  '',
+  '| Status | Meaning | What the extension does |',
+  '| --- | --- | --- |',
+  ...errorRows,
+  '',
+  '### Error body',
+  '',
+  flat(errorSchema.description),
+  '',
+  table(rows(errorSchema), { request: false }),
+  ...errorExamples.map((file) => exampleBlock(file, `Example: ${file.replace(/^error\./, '').replace(/\.json$/, '').replace(/-/g, ' ')}`)),
+].join('\n');
+
 const output = `${[
   '# Endpoint reference',
   '',
   '<!-- Generated by scripts/build-api-reference.mjs from openapi.yaml and examples/. Do not edit by hand: change the contract, then run "npm run api:reference". -->',
   '',
-  `Generated from ${code('openapi.yaml')} (version ${contract.info.version}). Field tables come from the contract; the examples are real requests built by the extension's own code from its test fixtures, and real responses of the mock server.`,
+  `Generated from ${code('openapi.yaml')}, version ${contract.info.version}. Read [README.md](README.md) first: it has the rules that apply to every endpoint.`,
   '',
-  'Read [README.md](README.md) first: it has the rules that apply to every endpoint.',
+  'How to read the tables:',
+  '',
+  `- ${code('a.b')} is field ${code('b')} of object ${code('a')}. ${code('a[].b')} is field ${code('b')} of every item of list ${code('a')}.`,
+  '- Request tables describe what the extension sends. "Always sent: yes" means the key is in every request, possibly with the value null, "" or [].',
+  '- Response tables describe what you return. "Required: no" means the key may be left out or be null.',
+  '- Lengths are in UTF-16 code units, the "length" of a JavaScript string. One unit is at most 3 bytes of UTF-8.',
+  '- The examples are real: requests were built by the extension\'s own code from its test pages, responses come from the mock server. Long lists are shortened here; the files in `examples/` are complete.',
+  '',
+  '| # | Endpoint | What it does | Capability |',
+  '| --- | --- | --- | --- |',
+  ...toc,
   '',
   sections.join('\n\n'),
-  ...(errorExamples.length > 0 ? ['', '## Error bodies', '', ...errorExamples.map((file) => exampleBlock(file, `Example: ${file.replace(/^error\./, '').replace(/\.json$/, '').replace(/-/g, ' ')}`))] : []),
+  '',
+  errorSection,
 ].join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 
 if (process.argv.includes('--check')) {

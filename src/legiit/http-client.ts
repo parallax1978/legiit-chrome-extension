@@ -1,8 +1,10 @@
 /** LegiitClient over HTTPS. Base URL and auth come from config; every request goes through the guarded network layer. */
 import * as v from 'valibot';
 import { errorMessage, timeoutSignal } from '@/lib/async';
+import { cleanText, cutText } from '@/lib/sanitize';
 import type { AuthProvider } from './auth';
-import { LegiitError, type LegiitClient } from './client';
+import { LegiitError, type LegiitClient, type SaveOptions } from './client';
+import { MAX_REQUEST_BYTES, TIMEOUT_MS } from './limits';
 import { ALL_CAPABILITIES } from './types';
 import type {
   AiCompletionRequest,
@@ -19,44 +21,66 @@ import type {
   WorkspaceFromBriefPayload,
 } from './types';
 
-const text = (max: number) => v.pipe(v.string(), v.maxLength(max));
+/*
+ * Replies are read tolerantly, so the server can grow without breaking an
+ * extension that is already installed:
+ *   - unknown fields are ignored;
+ *   - an optional field may be absent or null;
+ *   - text longer than its limit is cut, a list longer than its limit is cut;
+ *   - an id may be a string or an integer (it is used as a string).
+ * A reply that lacks a required field, or has one of the wrong type, is
+ * rejected as a whole ("invalid-response"): half a reply is never used.
+ */
+const text = (max: number) => v.pipe(v.string(), v.transform((value) => cutText(value, max)));
+const optionalText = (max: number) => v.nullish(text(max), null);
+const id = (max: number) =>
+  v.pipe(
+    v.union([v.string(), v.pipe(v.number(), v.safeInteger())]),
+    v.transform((value) => String(value).trim()),
+    v.minLength(1),
+    v.maxLength(max),
+  );
+const list = <TItem extends v.GenericSchema>(item: TItem, max: number) => v.pipe(v.array(item), v.transform((items) => items.slice(0, max)));
+const optionalList = <TItem extends v.GenericSchema>(item: TItem, max: number) => v.nullish(list(item, max), []);
 
-/** Responses are validated: the server is trusted, but a malformed reply must not break the UI. */
 const SessionSchema = v.object({
-  user: v.object({ id: text(120), name: text(200), email: v.optional(v.nullable(text(320)), null) }),
-  plan: v.optional(v.nullable(text(80)), null),
-  capabilities: v.optional(v.array(v.picklist(ALL_CAPABILITIES)), []),
-});
-const BusinessSchema = v.object({ id: text(120), name: text(200), domain: v.optional(v.nullable(text(255)), null) });
-const BusinessListSchema = v.object({ businesses: v.pipe(v.array(BusinessSchema), v.maxLength(500)) });
-const BusinessDetailsSchema = v.object({
-  id: text(120),
-  name: text(200),
-  brandNames: v.optional(v.pipe(v.array(text(160)), v.maxLength(30)), []),
-  domains: v.optional(v.pipe(v.array(text(255)), v.maxLength(30)), []),
-  competitors: v.optional(
-    v.pipe(v.array(v.object({ name: text(160), domains: v.optional(v.pipe(v.array(text(255)), v.maxLength(30)), []) })), v.maxLength(200)),
+  user: v.object({ id: id(120), name: v.nullish(text(200), ''), email: optionalText(320) }),
+  plan: optionalText(80),
+  /** Names this version does not know are ignored, so new capabilities can be added on the server at any time. */
+  capabilities: v.nullish(
+    v.pipe(
+      v.array(v.unknown()),
+      v.transform((names) => ALL_CAPABILITIES.filter((capability) => names.includes(capability))),
+    ),
     [],
   ),
-  focusKeywords: v.optional(v.pipe(v.array(text(200)), v.maxLength(200)), []),
-  avatars: v.optional(v.pipe(v.array(v.object({ name: text(160), description: text(2000) })), v.maxLength(20)), []),
 });
-const SaveResultSchema = v.object({ id: text(200), url: v.optional(v.nullable(text(2048)), null) });
+const BusinessSchema = v.object({ id: id(120), name: text(200), domain: optionalText(255) });
+const BusinessListSchema = v.object({ businesses: list(BusinessSchema, 500) });
+const BusinessDetailsSchema = v.object({
+  id: id(120),
+  name: text(200),
+  brandNames: optionalList(text(160), 30),
+  domains: optionalList(text(255), 30),
+  competitors: optionalList(v.object({ name: text(160), domains: optionalList(text(255), 30) }), 200),
+  focusKeywords: optionalList(text(200), 200),
+  avatars: optionalList(v.object({ name: text(160), description: v.nullish(text(2000), '') }), 20),
+});
+const SaveResultSchema = v.object({ id: id(200), url: optionalText(2048) });
 const PulseSchema = v.object({
-  updatedAt: text(40),
-  events: v.pipe(
-    v.array(
-      v.object({
-        date: text(40),
-        title: text(300),
-        type: v.picklist(['algorithm-update', 'serp-feature', 'news']),
-        url: v.optional(v.nullable(text(2048)), null),
-      }),
-    ),
-    v.maxLength(200),
+  updatedAt: optionalText(40),
+  events: list(
+    v.object({
+      /** A calendar day. A full timestamp is accepted and cut to its day. */
+      date: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}/), v.transform((value) => value.slice(0, 10))),
+      title: text(300),
+      type: v.nullish(text(40), 'news'),
+      url: optionalText(2048),
+    }),
+    200,
   ),
 });
-const CompletionSchema = v.object({ text: text(20_000), model: v.optional(v.nullable(text(120)), null) });
+const CompletionSchema = v.object({ text: text(20_000), model: optionalText(120) });
 
 export interface HttpClientOptions {
   baseUrl: string;
@@ -64,7 +88,31 @@ export interface HttpClientOptions {
   /** The network primitive: guardedFetch bound to the "legiit" purpose in production. */
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
   clientVersion?: string;
+  /** Overrides both time limits (tests). */
   timeoutMs?: number;
+}
+
+const TIMED_OUT = 'Legiit did not answer in time';
+
+interface RequestOptions {
+  body?: unknown;
+  timeoutMs?: number;
+  idempotencyKey?: string;
+}
+
+/** The "error" object of a failed reply, when the server sent one in the agreed shape. */
+async function readError(response: Response): Promise<{ code: string; message: string }> {
+  try {
+    const parsed = (await response.json()) as { error?: { code?: unknown; message?: unknown } } | null;
+    const error = parsed?.error;
+    return {
+      code: typeof error?.code === 'string' ? error.code : '',
+      // Shown to the user as plain text: one line, no control characters.
+      message: typeof error?.message === 'string' ? cleanText(error.message, 200) : '',
+    };
+  } catch {
+    return { code: '', message: '' };
+  }
 }
 
 export class HttpLegiitClient implements LegiitClient {
@@ -78,57 +126,73 @@ export class HttpLegiitClient implements LegiitClient {
     method: 'GET' | 'POST',
     path: string,
     schema: TSchema,
-    body?: unknown,
+    options: RequestOptions = {},
   ): Promise<v.InferOutput<TSchema>> {
     const auth = await this.options.auth.headers();
     if (!auth) throw new LegiitError('unauthorised', 'Not connected to Legiit');
-    const timer = timeoutSignal(this.options.timeoutMs ?? 20_000);
-    let response: Response;
+
+    const body = options.body === undefined ? undefined : JSON.stringify(options.body);
+    if (body !== undefined) {
+      const bytes = new TextEncoder().encode(body).length;
+      if (bytes > MAX_REQUEST_BYTES) {
+        throw new LegiitError('rejected', `This is too large to send to Legiit (${Math.ceil(bytes / 1024).toLocaleString('en-US')} KB; the limit is ${MAX_REQUEST_BYTES / 1024} KB). Nothing was sent.`);
+      }
+    }
+
+    const timer = timeoutSignal(this.options.timeoutMs ?? options.timeoutMs ?? TIMEOUT_MS.default);
     try {
-      response = await this.options.fetch(`${this.base}${path}`, {
-        method,
-        signal: timer.signal,
-        headers: {
-          ...auth,
-          Accept: 'application/json',
-          'X-Legiit-Client': `legiit-lens/${this.options.clientVersion ?? '0'}`,
-          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        },
-        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      });
-    } catch (error) {
-      throw new LegiitError('network', `Could not reach Legiit: ${errorMessage(error)}`);
+      let response: Response;
+      try {
+        response = await this.options.fetch(`${this.base}${path}`, {
+          method,
+          signal: timer.signal,
+          // Never answered from the browser's cache: a session or a business is always read fresh.
+          cache: 'no-store',
+          headers: {
+            ...auth,
+            Accept: 'application/json',
+            'X-Legiit-Client': `legiit-lens/${this.options.clientVersion ?? '0'}`,
+            ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+            ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+          },
+          ...(body !== undefined ? { body } : {}),
+        });
+      } catch (error) {
+        throw new LegiitError('network', timer.signal.aborted ? TIMED_OUT : `Could not reach Legiit: ${errorMessage(error)}`);
+      }
+
+      const { status } = response;
+      if (status === 401) throw new LegiitError('unauthorised', 'Legiit did not accept the token', status);
+      if (status === 404) {
+        // "The thing you named does not exist" (a deleted business) is told apart from "this endpoint does not exist".
+        const error = await readError(response);
+        if (error.code === 'not_found') throw new LegiitError('rejected', `Legiit could not find it (404)${error.message ? `: ${error.message}` : ''}`, status);
+        throw new LegiitError('unavailable', 'This Legiit feature is not available', status);
+      }
+      if (status === 405 || status === 501) throw new LegiitError('unavailable', 'This Legiit feature is not available', status);
+      if (status >= 500) throw new LegiitError('server', `Legiit had a problem (${status})`, status);
+      if (!response.ok) {
+        const error = await readError(response);
+        throw new LegiitError('rejected', `Legiit rejected the request (${status})${error.message ? `: ${error.message}` : ''}`, status);
+      }
+
+      let json: unknown;
+      try {
+        json = await response.json();
+      } catch {
+        if (timer.signal.aborted) throw new LegiitError('network', TIMED_OUT);
+        throw new LegiitError('invalid-response', 'Legiit sent a reply that could not be read', status);
+      }
+      const parsed = v.safeParse(schema, json);
+      if (!parsed.success) throw new LegiitError('invalid-response', 'Legiit sent a reply in an unexpected shape', status);
+      return parsed.output;
     } finally {
       timer.clear();
     }
+  }
 
-    if (response.status === 401 || response.status === 403) {
-      throw new LegiitError('unauthorised', 'Legiit did not accept the token', response.status);
-    }
-    if (response.status === 404 || response.status === 405 || response.status === 501) {
-      throw new LegiitError('unavailable', 'This Legiit feature is not available', response.status);
-    }
-    if (response.status >= 500) throw new LegiitError('server', `Legiit had a problem (${response.status})`, response.status);
-    if (!response.ok) {
-      let detail = '';
-      try {
-        const parsed = (await response.json()) as { error?: { message?: unknown } };
-        if (typeof parsed.error?.message === 'string') detail = `: ${parsed.error.message.slice(0, 200)}`;
-      } catch {
-        detail = '';
-      }
-      throw new LegiitError('rejected', `Legiit rejected the request (${response.status})${detail}`, response.status);
-    }
-
-    let json: unknown;
-    try {
-      json = await response.json();
-    } catch {
-      throw new LegiitError('invalid-response', 'Legiit sent a reply that could not be read', response.status);
-    }
-    const parsed = v.safeParse(schema, json);
-    if (!parsed.success) throw new LegiitError('invalid-response', 'Legiit sent a reply in an unexpected shape', response.status);
-    return parsed.output;
+  private save(path: string, payload: unknown, options?: SaveOptions): Promise<SaveResult> {
+    return this.request('POST', path, SaveResultSchema, { body: payload, idempotencyKey: options?.idempotencyKey });
   }
 
   getSession(): Promise<LegiitSession> {
@@ -143,24 +207,24 @@ export class HttpLegiitClient implements LegiitClient {
     return this.request('GET', `/v1/businesses/${encodeURIComponent(businessId)}`, BusinessDetailsSchema);
   }
 
-  saveVisibilitySnapshot(businessId: string, payload: VisibilitySnapshotPayload): Promise<SaveResult> {
-    return this.request('POST', `/v1/businesses/${encodeURIComponent(businessId)}/visibility-snapshots`, SaveResultSchema, payload);
+  saveVisibilitySnapshot(businessId: string, payload: VisibilitySnapshotPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/visibility-snapshots`, payload, options);
   }
 
-  saveGapList(businessId: string, payload: GapListPayload): Promise<SaveResult> {
-    return this.request('POST', `/v1/businesses/${encodeURIComponent(businessId)}/gap-lists`, SaveResultSchema, payload);
+  saveGapList(businessId: string, payload: GapListPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/gap-lists`, payload, options);
   }
 
-  addCompetitor(businessId: string, payload: CompetitorPayload): Promise<SaveResult> {
-    return this.request('POST', `/v1/businesses/${encodeURIComponent(businessId)}/competitors`, SaveResultSchema, payload);
+  addCompetitor(businessId: string, payload: CompetitorPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/competitors`, payload, options);
   }
 
-  sendToContentEditor(businessId: string, payload: ContentEditorPayload): Promise<SaveResult> {
-    return this.request('POST', `/v1/businesses/${encodeURIComponent(businessId)}/content-editor/documents`, SaveResultSchema, payload);
+  sendToContentEditor(businessId: string, payload: ContentEditorPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save(`/v1/businesses/${encodeURIComponent(businessId)}/content-editor/documents`, payload, options);
   }
 
-  createWorkspaceFromBrief(payload: WorkspaceFromBriefPayload): Promise<SaveResult> {
-    return this.request('POST', '/v1/workspaces/from-brief', SaveResultSchema, payload);
+  createWorkspaceFromBrief(payload: WorkspaceFromBriefPayload, options?: SaveOptions): Promise<SaveResult> {
+    return this.save('/v1/workspaces/from-brief', payload, options);
   }
 
   getIndustryPulse(): Promise<IndustryPulse> {
@@ -168,6 +232,6 @@ export class HttpLegiitClient implements LegiitClient {
   }
 
   completeAI(request: AiCompletionRequest): Promise<AiCompletionResponse> {
-    return this.request('POST', '/v1/ai/completions', CompletionSchema, request);
+    return this.request('POST', '/v1/ai/completions', CompletionSchema, { body: request, timeoutMs: TIMEOUT_MS.ai });
   }
 }

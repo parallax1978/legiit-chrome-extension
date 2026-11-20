@@ -1,7 +1,7 @@
 /**
  * The optional Legiit connection. Requests to the Legiit API host are
  * answered by the same handlers as the local mock server (npm run mock), so
- * these tests also check the extension against docs/legiit-api-contract.yaml.
+ * these tests also check the extension against docs/legiit-api/openapi.yaml.
  */
 import type { Page } from '@playwright/test';
 import { expect, LEGIIT_ORIGIN, scenario, test, type Lens } from './lens';
@@ -37,6 +37,8 @@ async function reviewAndSend(lens: Lens, panel: Page, method: string): Promise<u
   expect(posts).toHaveLength(postsBefore + 1);
   // The bytes on the wire are the object that was on screen.
   expect(JSON.parse(posts.at(-1)!.body ?? 'null')).toEqual(shown);
+  // Every save carries a key of its own, so Legiit can recognise a repeated send.
+  expect(lens.legiit.requests.at(-1)!.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   return shown;
 }
 
@@ -152,15 +154,24 @@ test.describe('connected to Legiit', () => {
     await added.getByTestId('brand-domains').fill('riverbenddental.example');
     await added.getByTestId('brand-domains').blur();
     const competitor = await reviewAndSend(lens, options, 'addCompetitor');
-    expect(competitor).toEqual({ name: 'Riverbend Dental', domain: 'riverbenddental.example' });
+    expect(competitor).toEqual({ name: 'Riverbend Dental', domains: ['riverbenddental.example'] });
     expect(lens.legiit.saved.competitors[0]).toMatchObject({ businessId: 'biz_brightpath', payload: competitor });
+    // Sending the same competitor again does not create a second one.
+    await reviewAndSend(lens, options, 'addCompetitor');
+    expect(lens.legiit.saved.competitors).toHaveLength(1);
+    expect(new Set(lens.legiit.requests.filter((r) => r.method === 'POST').map((r) => r.idempotencyKey)).size).toBe(2);
 
     const { page, tabId } = await lens.open(scenario.urls.site!);
     const panel = await lens.openPanel(tabId, 'brief');
     await lens.invoke(page);
     await panel.getByTestId('brief-build').click();
     await expect(panel.getByTestId('brief-result')).toBeVisible();
-    const workspace = (await reviewAndSend(lens, panel, 'createWorkspaceFromBrief')) as { businessName: string; markdown: string; avatars: { draft: boolean }[]; competitors: { name: string }[] };
+    const workspace = (await reviewAndSend(lens, panel, 'createWorkspaceFromBrief')) as { briefId: string; businessName: string; siteUrl: string; markdown: string; avatars: { draft: boolean }[]; competitors: { name: string; domains: string[] }[]; issues: { code: string; detail: string }[] };
+    expect(workspace.briefId).toMatch(/^brief/);
+    expect(workspace.siteUrl).toBe(new URL(scenario.urls.site!).origin + '/');
+    expect(workspace.issues.length).toBeGreaterThan(0);
+    expect(workspace.issues.every((i) => /^[a-z0-9-]+$/.test(i.code) && i.detail.length > 0)).toBe(true);
+    expect(workspace.competitors.find((c) => c.name === 'Riverbend Dental')).toEqual({ name: 'Riverbend Dental', domains: ['riverbenddental.example'] });
     expect(workspace.businessName).toBe('BrightPath Dental');
     expect(workspace.markdown).toContain('# Client brief: BrightPath Dental');
     expect(workspace.avatars).toHaveLength(3);
@@ -264,10 +275,31 @@ test.describe('an account with some endpoints switched off', () => {
     lens.legiit.session.capabilities = lens.legiit.session.capabilities.filter((c) => c !== 'visibilitySnapshots');
     await panel.getByTestId('save-saveVisibilitySnapshot').click();
     await panel.getByTestId('save-confirm').click();
+    // The user is told what happened; the dialog does not just vanish.
+    await expect(panel.getByTestId('save-error')).toHaveText('Legiit cannot receive this yet. Nothing was saved.');
+    await expect(panel.getByTestId('save-confirm')).toBeDisabled();
+    await panel.getByTestId('save-dialog').getByRole('button', { name: 'Cancel' }).click();
     await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toHaveCount(0);
     expect(lens.legiit.saved.visibilitySnapshots).toEqual([]);
     // The rest of the tab is unaffected.
     await expect(panel.getByTestId('cp-organic')).toBeVisible();
+  });
+
+  test('a business that no longer exists is reported, and the save action stays', async ({ lens }) => {
+    const options = await connect(lens, 'demo-token');
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    // The business is deleted in Command Center after it was chosen in the extension.
+    delete lens.legiit.details['biz_brightpath'];
+    (lens.legiit.businesses as { businesses: { id: string }[] }).businesses.shift();
+    await panel.getByTestId('save-saveVisibilitySnapshot').click();
+    await panel.getByTestId('save-confirm').click();
+    await expect(panel.getByTestId('save-error')).toHaveText('Legiit could not find it (404): No such business');
+    await panel.getByTestId('save-dialog').getByRole('button', { name: 'Cancel' }).click();
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toBeVisible();
+    // Settings says which business is gone, so the user can choose again.
+    await options.reload();
+    await expect(options.getByTestId('legiit-business-gone')).toContainText('BrightPath Dental is no longer in this Legiit account');
   });
 });
 

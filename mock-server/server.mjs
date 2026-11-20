@@ -6,8 +6,8 @@
  *   LEGIIT_API_BASE_URL=http://localhost:8787 npm run dev
  *
  * Then connect in the extension with the token "demo-token"
- * ("limited-token" simulates an account with fewer features, "invalid" is rejected).
- * It implements docs/legiit-api-contract.yaml with fixtures from fixtures/legiit.
+ * ("limited-token" simulates an account with fewer features; any other token is refused with 401).
+ * It implements docs/legiit-api/openapi.yaml with fixtures from fixtures/legiit.
  */
 import { createServer } from 'node:http';
 import { createMockState, handleMockRequest, MOCK_TOKENS } from './handlers.mjs';
@@ -41,7 +41,7 @@ const server = createServer((req, res) => {
 
 server.listen(port, '127.0.0.1', () => {
   console.log(`Legiit mock API listening on http://localhost:${port}`);
-  console.log(`Tokens: "${MOCK_TOKENS.valid}" (full access), "${MOCK_TOKENS.limited}" (some features), "${MOCK_TOKENS.invalid}" (rejected)`);
+  console.log(`Tokens: "${MOCK_TOKENS.valid}" (full access), "${MOCK_TOKENS.limited}" (some features). Any other token is refused with 401.`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)));

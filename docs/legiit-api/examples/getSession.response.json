@@ -1,0 +1,18 @@
+{
+  "user": {
+    "id": "usr_demo_1",
+    "name": "Dana Whitfield",
+    "email": "dana@northstarseo.example"
+  },
+  "plan": "agency",
+  "capabilities": [
+    "businesses",
+    "visibilitySnapshots",
+    "gapLists",
+    "competitors",
+    "contentEditor",
+    "workspaces",
+    "industryPulse",
+    "ai"
+  ]
+}

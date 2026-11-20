@@ -1,0 +1,4 @@
+{
+  "text": "{\"avatars\":[{\"name\":\"Mock avatar 1\",\"who\":\"A customer described by the mock model (1).\",\"wants\":\"Clear prices and fast answers.\",\"worries\":\"Wasting time.\",\"searches\":[\"example search\"],\"proof\":\"The site shows reviews.\"},{\"name\":\"Mock avatar 2\",\"who\":\"A customer described by the mock model (2).\",\"wants\":\"Clear prices and fast answers.\",\"worries\":\"Wasting time.\",\"searches\":[\"example search\"],\"proof\":\"The site shows reviews.\"},{\"name\":\"Mock avatar 3\",\"who\":\"A customer described by the mock model (3).\",\"wants\":\"Clear prices and fast answers.\",\"worries\":\"Wasting time.\",\"searches\":[\"example search\"],\"proof\":\"The site shows reviews.\"}],\"nextSteps\":[\"Mock step one from Legiit AI.\",\"Mock step two from Legiit AI.\"]}",
+  "model": "legiit-mock-1"
+}

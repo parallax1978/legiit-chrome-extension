@@ -63,7 +63,7 @@ The development build (`npm run dev`) is for working on the code only. WXT adds 
 
 ## Trying the Legiit connection
 
-There is no real Legiit API yet. The extension talks to an interface (`src/legiit/client.ts`); the proposed endpoints are in `docs/legiit-api-contract.yaml`.
+There is no real Legiit API yet. The extension talks to an interface (`src/legiit/client.ts`). Everything the Legiit backend team needs to build the API is in [`docs/legiit-api/`](docs/legiit-api/README.md): a build guide, an endpoint reference, the OpenAPI contract, example requests and a check they run against their API (`npm run api:check`).
 
 ```bash
 npm run mock
@@ -105,7 +105,7 @@ Google country domains are in `src/config/google-domains.ts`. Selectors are in `
 | `docs/DECISIONS.md` | Every decision and assumption, and where the official docs differ from the original brief |
 | `docs/PERMISSIONS.md` | Every permission and host, mapped to the code that uses it |
 | `docs/QA.md` | Manual checklist for live pages |
-| `docs/legiit-api-contract.yaml` | OpenAPI contract for the Legiit endpoints the extension expects |
+| `docs/legiit-api/` | Handoff kit for the Legiit backend team: build guide, endpoint reference, OpenAPI contract, examples |
 | `store/` | Chrome Web Store listing, justifications, privacy policy, reviewer notes, images |
 
 ## Before releasing

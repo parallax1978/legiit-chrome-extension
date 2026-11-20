@@ -7,7 +7,7 @@ import { blockText } from '@/extract/blocks';
 import { documentBase, listProp, readJsonLd, resolveHref, stringProp, typesOf, type JsonLdNode } from '@/extract/html';
 import { extractAllText, extractMainContent } from '@/extract/main-content';
 import { extractPageFacts, type PageFacts } from '@/extract/page-facts';
-import { cleanText, safeHttpUrl, stripWww } from '@/lib/sanitize';
+import { cleanText, cutText, safeHttpUrl, stripWww } from '@/lib/sanitize';
 import { countWords, splitSentences, STOPWORDS, tokenize, uniqueBy } from '@/lib/text';
 import type { BrandStyle } from '@/model/schemas';
 import type { PageKind } from './crawl';
@@ -196,7 +196,7 @@ function describeTone(text: string): { sample: string; traits: string[] } | null
   traits.push(avg <= 14 ? `Short sentences (about ${Math.round(avg)} words)` : avg >= 24 ? `Long sentences (about ${Math.round(avg)} words)` : `Medium-length sentences (about ${Math.round(avg)} words)`);
   if ((body.match(/!/g)?.length ?? 0) >= 2) traits.push('Energetic (uses exclamation marks)');
   if (/\b\w+['’](?:s|re|ll|ve|d|t)\b/i.test(body)) traits.push('Conversational (uses contractions)');
-  return { sample: sample.length > 420 ? `${sample.slice(0, 419)}…` : sample, traits };
+  return { sample: sample.length > 420 ? `${cutText(sample, 419)}…` : sample, traits };
 }
 
 function findTestimonials(doc: Document, nodes: readonly JsonLdNode[]): Testimonial[] {

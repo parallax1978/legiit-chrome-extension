@@ -24,6 +24,9 @@
     "notices": "node scripts/make-notices.mjs",
     "privacy:html": "node scripts/render-privacy-policy.mjs",
     "check": "npm run typecheck && npm run lint && npm test",
+    "api:check": "vitest run --config vitest.api.config.ts",
+    "api:reference": "node scripts/build-api-reference.mjs",
+    "api:examples": "node scripts/update-api-examples.mjs",
     "postinstall": "wxt prepare",
     "fixtures": "node scripts/build-fixtures.mjs"
   },

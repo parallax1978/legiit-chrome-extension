@@ -5,11 +5,39 @@
 
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F​-‏‪-‮⁠-⁤﻿]/g;
 
+/**
+ * Cuts a string to at most `max` UTF-16 units without splitting a surrogate
+ * pair. A plain slice() can end on the first half of an emoji; that lone half
+ * is not valid Unicode, and strict JSON stores (PostgreSQL jsonb, for one)
+ * refuse it.
+ */
+export function cutText(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const end = max > 0 && /[\uD800-\uDBFF]/.test(value.charAt(max - 1)) ? max - 1 : max;
+  return value.slice(0, Math.max(0, end));
+}
+
 /** Collapse whitespace, strip control and bidi-override characters, cap the length. */
 export function cleanText(value: unknown, maxLength = 500): string {
   if (typeof value !== 'string') return '';
   const cleaned = value.replace(CONTROL_CHARS, '').replace(/\s+/g, ' ').trim();
-  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 1).trimEnd()}…` : cleaned;
+  return cleaned.length > maxLength ? `${cutText(cleaned, maxLength - 1).trimEnd()}…` : cleaned;
+}
+
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/**
+ * Returns a copy of a JSON value in which every string is well-formed Unicode
+ * (a lone surrogate becomes U+FFFD). Applied to everything that leaves the
+ * device, whatever page text it was built from.
+ */
+export function wellFormedDeep<T>(value: T): T {
+  if (typeof value === 'string') return value.replace(LONE_SURROGATE, '\uFFFD') as T;
+  if (Array.isArray(value)) return value.map((item) => wellFormedDeep(item as unknown)) as T;
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, wellFormedDeep(child)])) as T;
+  }
+  return value;
 }
 
 /** Like cleanText but keeps paragraph breaks (used for long answer and article text). */
@@ -22,7 +50,7 @@ export function cleanMultiline(value: unknown, maxLength = 20_000): string {
     .replace(/ *\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  return cleaned.length > maxLength ? cleaned.slice(0, maxLength) : cleaned;
+  return cutText(cleaned, maxLength);
 }
 
 const MAX_URL_LENGTH = 2048;

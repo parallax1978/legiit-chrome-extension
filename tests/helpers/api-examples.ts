@@ -19,10 +19,14 @@ import { extractBusinessFacts, type SitePage } from '@/features/instant-brief/ex
 import { findIssues } from '@/features/instant-brief/issues';
 import { briefToMarkdown } from '@/features/instant-brief/markdown';
 import { searchEntries } from '@/features/instant-brief/search';
+import { classifySentences, type NoiseReport } from '@/features/new-or-noise/classify';
+import { contentSentences, textSentences } from '@/features/new-or-noise/sentences';
 import { buildGapRows, sortGapRows } from '@/features/why-not-me/gap';
 import { buildSerpPresence, summarisePresence } from '@/features/why-not-me/presence';
 import { analysePage, pickSerpTargets } from '@/features/why-not-me/scan';
-import { competitorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
+import { extractMainContent } from '@/extract/main-content';
+import { competitorPayload, contentEditorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
+import { LexicalEngine } from '@/similarity/engine';
 import { getPack } from '@/selectors';
 import { parseSerp } from '@/serp/parse';
 import { fixtureDoc, fixtureJson, fixtureText, scenario, scenarioBrands, serpEnv } from './fixtures';
@@ -55,8 +59,27 @@ export function buildExampleBrief(): Brief {
   });
 }
 
+const ARTICLE = 'articles/brightpath-how-often-teeth-cleaning.html';
+const ARTICLE_URL = manifest.routes.find((r) => r.file === ARTICLE)!.url;
+
+/**
+ * The New or Noise comparison of the fixture article with the competing
+ * articles. Uses the word-overlap engine, which gives the same result on
+ * every machine (the on-device language model is exercised by the end-to-end
+ * tests).
+ */
+export async function buildExampleNoiseReport(pageCount = 5): Promise<{ report: NoiseReport; title: string }> {
+  const doc = fixtureDoc(ARTICLE);
+  const target = contentSentences(extractMainContent(doc));
+  const pages = manifest.routes
+    .filter((r) => r.file.startsWith('articles/') && r.file !== ARTICLE)
+    .slice(0, pageCount)
+    .map((r) => ({ url: r.url, title: r.url, sentences: contentSentences(extractMainContent(fixtureDoc(r.file))) }));
+  return { report: await classifySentences(target, pages, new LexicalEngine()), title: doc.title };
+}
+
 /** File name → request body, for every POST endpoint. Deterministic. */
-export function buildExampleRequests(): Record<string, unknown> {
+export async function buildExampleRequests(): Promise<Record<string, unknown>> {
   const matcher = new BrandMatcher(scenarioBrands);
   const doc = fixtureDoc('google/serp-full.html');
   const serp = parseSerp(doc, getPack('google'), serpEnv(doc, scenario.urls.serpFull!));
@@ -74,10 +97,21 @@ export function buildExampleRequests(): Record<string, unknown> {
   const brief = buildExampleBrief();
   const explanation = explainClickPotential(cp, matcher);
 
+  const noise = await buildExampleNoiseReport();
+  // Text the user pasted, compared with a single page: several values are empty and all of them are valid.
+  const pasted = await classifySentences(
+    textSentences('We clean teeth with an air-polishing system that most patients find gentler than scraping. Every visit ends with a written plan you can take home.'),
+    [{ url: manifest.routes.find((r) => r.file.startsWith('articles/') && r.file !== ARTICLE)!.url, title: '', sentences: contentSentences(extractMainContent(fixtureDoc(manifest.routes.find((r) => r.file.startsWith('articles/') && r.file !== ARTICLE)!.file))) }],
+    new LexicalEngine(),
+  );
+
   return {
-    'saveVisibilitySnapshot.request.json': snapshotPayload(snapshot),
+    'saveVisibilitySnapshot.request.json': snapshotPayload(snapshot, scenarioBrands),
     'saveGapList.request.json': gapPayload(presence, rows),
     'addCompetitor.request.json': competitorPayload({ name: 'Riverbend Dental', domains: ['riverbenddental.example'] }),
+    'addCompetitor.name-only.request.json': competitorPayload({ name: 'Dr. Okafor’s Practice', domains: [] }),
+    'sendToContentEditor.request.json': contentEditorPayload({ targetKeyword: 'how often should you get your teeth cleaned', source: 'page', pageUrl: ARTICLE_URL, pageTitle: noise.title, capturedAt: EXAMPLE_NOW, report: noise.report }),
+    'sendToContentEditor.pasted-text.request.json': contentEditorPayload({ targetKeyword: '', source: 'pasted', pageUrl: null, pageTitle: '', capturedAt: EXAMPLE_NOW, report: pasted }),
     'createWorkspaceFromBrief.request.json': workspacePayload(brief, briefToMarkdown(brief, { name: 'North Star SEO', logoDataUrl: null })),
     'completeAI.request.json': legiitAiPayload({ task: 'click-potential', instruction: SUMMARY_INSTRUCTIONS['click-potential'], facts: explanation, fallback: explanation }),
     'completeAI.brief.request.json': legiitAiPayload(briefRewriteRequest(brief)),

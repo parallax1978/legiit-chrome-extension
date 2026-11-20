@@ -52,7 +52,10 @@ export interface NoiseReport {
   engine: SimilarityEngine['kind'];
   engineLabel: string;
   threshold: number;
+  /** Comparison pages that had at least one usable sentence. A page that loaded but had none is not compared. */
   pagesCompared: number;
+  /** Addresses of those pages, in comparison order. Its length is pagesCompared. */
+  comparedUrls: string[];
   /** Pages needed for "said by most": more than half. */
   mostNeeds: number;
   sentences: ClassifiedSentence[];
@@ -126,6 +129,7 @@ export async function classifySentences(
     engineLabel: engine.label,
     threshold,
     pagesCompared: pageCount,
+    comparedUrls: usable.map((p) => p.url),
     mostNeeds: mostThreshold(pageCount),
     sentences,
     totalWords,

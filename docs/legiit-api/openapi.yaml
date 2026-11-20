@@ -1,0 +1,1260 @@
+openapi: 3.1.0
+info:
+  title: Legiit Command Center API for Legiit Lens
+  version: 1.0.0-draft.2
+  summary: The API the Legiit Lens Chrome extension calls. To be built by the Legiit backend team.
+  description: |
+    The extension is finished and calls exactly this API. The API does not exist yet.
+    Read README.md first: it has the rules that apply to every endpoint (base URL,
+    authentication, headers, errors, limits) and tells you how to test.
+
+    This file is the source of truth for field names, types and limits. reference.md
+    and the mock server are generated from it or checked against it.
+
+    Conventions used in this file
+    - Request schemas describe exactly what the extension sends. Every listed field is
+      always present; a field with no value is sent as null, never left out.
+    - Response schemas describe what you must return. The extension ignores fields it
+      does not know, so you may add fields.
+    - Ignore request fields you do not know: a later extension version may add fields.
+    - Text lengths are counted in UTF-16 code units (the "length" of a JavaScript
+      string). One unit is at most 3 bytes in UTF-8.
+    - x-capability: the capability the extension needs before it shows this feature.
+    - x-called-when: what the user does that causes the call.
+    - x-extension-reaction: what the extension does with that response.
+servers:
+  - url: https://api.legiit.com
+    description: Production. ASSUMED host, to be confirmed before the extension goes to the Chrome Web Store.
+  - url: http://localhost:8787
+    description: The mock server in this repository (npm run mock).
+security:
+  - bearerToken: []
+tags:
+  - name: Account
+  - name: Businesses
+  - name: Saves
+  - name: Insights
+  - name: AI
+paths:
+  /v1/session:
+    get:
+      operationId: getSession
+      tags: [Account]
+      summary: Checks the token. Returns who is connected and which features are switched on.
+      description: |
+        This is the first call the extension makes and the one that decides whether it is connected.
+        It must be fast and must not depend on any capability.
+
+        The extension shows a feature only when its capability is in `capabilities`. With an empty list
+        the user is connected and sees no Legiit feature at all.
+      x-called-when: >-
+        The user clicks Connect. After that, once each time the side panel or the settings page opens
+        while a token is stored.
+      responses:
+        '200':
+          description: The token is valid.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/businesses:
+    get:
+      operationId: listBusinesses
+      tags: [Businesses]
+      summary: Lists the businesses the user can save into.
+      description: |
+        Return every business of the user in one reply. There is no paging: the extension shows the
+        first 500, in the order you return them, in a drop-down under Settings.
+      x-capability: businesses
+      x-called-when: The settings screen is shown while connected.
+      responses:
+        '200':
+          description: The businesses. An empty list is fine; the extension then tells the user to add one in Command Center.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BusinessList' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/businesses/{businessId}:
+    get:
+      operationId: getBusinessDetails
+      tags: [Businesses]
+      summary: Returns one business with its brand names, domains and competitors.
+      description: |
+        The extension copies these values once, into the user's tracked brands on their device. It does
+        not ask again until the user chooses the business again, so a later change in Command Center is
+        not picked up on its own. Disconnecting removes the copies.
+      x-capability: businesses
+      x-called-when: The user chooses a business in the drop-down under Settings.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      responses:
+        '200':
+          description: The business.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BusinessDetails' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/businesses/{businessId}/visibility-snapshots:
+    post:
+      operationId: saveVisibilitySnapshot
+      tags: [Saves]
+      summary: Saves one measured Google results page for a business.
+      description: |
+        A snapshot records how one Google results page looked in the user's browser: where the organic
+        results start, what fills the first screen, and where the tracked brands rank.
+
+        Store it as a point in time for the keyword. Saving the same keyword again later is a new
+        snapshot, not an update.
+      x-capability: visibilitySnapshots
+      x-called-when: The user clicks "Save to Command Center" on the Click Potential tab, reads the JSON and confirms.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VisibilitySnapshot' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/businesses/{businessId}/gap-lists:
+    post:
+      operationId: saveGapList
+      tags: [Saves]
+      summary: Saves a list of places where competitors appear and the business does not.
+      description: |
+        A gap list comes from one Google results page or one AI answer (ChatGPT, Gemini, Perplexity,
+        Copilot, Google AI Mode, or text the user pasted). Each row is one place where a tracked
+        competitor is present and the user's own brand is absent.
+
+        Store it as its own list. The same reading can be saved twice with different rows: first as read,
+        then again after the user ran "Scan sources", which adds contact details to rows.
+      x-capability: gapLists
+      x-called-when: The user clicks "Save to Command Center" on the Why Not Me tab, reads the JSON and confirms.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GapList' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/businesses/{businessId}/competitors:
+    post:
+      operationId: addCompetitor
+      tags: [Saves]
+      summary: Adds a competitor to a business.
+      description: |
+        The user typed this competitor into the extension's settings and wants it in Command Center too.
+
+        If the business already has a competitor with this name or one of these domains, do not create
+        a second one: answer 200 or 201 with the id of the existing competitor.
+
+        After a save, GET /v1/businesses/{businessId} should list the competitor.
+      x-capability: competitors
+      x-called-when: The user clicks "Add to Command Center" next to a competitor in Settings, reads the JSON and confirms.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Competitor' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/businesses/{businessId}/content-editor/documents:
+    post:
+      operationId: sendToContentEditor
+      tags: [Saves]
+      summary: Sends a content analysis of one page to the content editor.
+      description: |
+        The extension compared one page, sentence by sentence, with competing pages for a keyword. The body
+        says which of the page's sentences nobody else makes (worth keeping) and which points most
+        competitors make that the page lacks (worth adding).
+
+        Create a document or a brief in the content editor from it. What that document looks like is
+        your decision; the extension only needs the id and a link.
+      x-capability: contentEditor
+      x-called-when: The user clicks "Send to content editor" on the New or Noise tab, reads the JSON and confirms.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContentEditorDocument' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/workspaces/from-brief:
+    post:
+      operationId: createWorkspaceFromBrief
+      tags: [Saves]
+      summary: Creates a workspace for a new client from a brief the extension wrote.
+      description: |
+        The extension read up to eight pages of a prospect's website and wrote a client brief: what the
+        business is, what it offers, where, who its competitors are, and what is wrong with the site.
+
+        Create a new workspace (a new business) from it. This is the one save that is not tied to an
+        existing business, so the path has no business id. The `url` you return is opened by the user
+        straight away: the button is labelled "Open in Command Center".
+
+        Everything in the body was read from a public website by a program. Treat the values as
+        suggestions the user will review, not as verified facts.
+      x-capability: workspaces
+      x-called-when: The user clicks "Open in Command Center" on the Instant Brief tab, reads the JSON and confirms.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceFromBrief' }
+      responses:
+        '201': { $ref: '#/components/responses/Saved' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/industry-pulse:
+    get:
+      operationId: getIndustryPulse
+      tags: [Insights]
+      summary: Returns dated search-industry events, such as Google algorithm updates.
+      description: |
+        The Rewind tab shows how a page changed over time. It offers the dates of the first eight events
+        as shortcuts: one click filters the page history to the 30 days before that date. Only `date`
+        and `title` are shown.
+
+        The data is the same for every user, so the reply can be cached on your side.
+      x-capability: industryPulse
+      x-called-when: The Rewind tab is opened while connected.
+      responses:
+        '200':
+          description: The events, newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustryPulse' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/ai/completions:
+    post:
+      operationId: completeAI
+      tags: [AI]
+      summary: Rewrites a summary with Legiit's language model.
+      description: |
+        Every screen of the extension already shows a summary built without AI. With this capability the
+        user can ask for it to be rewritten. The extension sends the complete instructions (`system`)
+        and the facts (`prompt`); you pass them to a language model and return its text.
+
+        Two kinds of request:
+        - Without `responseSchema`: return 3 to 6 short lines of plain text, one point per line. The
+          extension shows the first 8 lines as bullet points and drops any line of 600 characters or more.
+        - With `responseSchema` (only when `task` is "brief"): `text` must be one JSON document that
+          matches that JSON Schema. Pass the schema to your model's structured-output option.
+
+        This is not a save. Nothing has to be stored, and there is no Idempotency-Key.
+
+        The reply is not streamed: answer with one JSON body. The extension waits up to 60 seconds.
+
+        Security: `prompt` contains text read from web pages, between <facts> tags. It is untrusted
+        input for your model. `system` and `prompt` come from the client, so anyone with a token can
+        send their own: limit use per account and enforce the length limits below.
+      x-capability: ai
+      x-called-when: The user clicks "Rewrite with Legiit AI" on any tab, reads the JSON and confirms.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiCompletionRequest' }
+      responses:
+        '200':
+          description: The text the model wrote.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiCompletionResponse' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/Unavailable' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: >-
+        An API token the user creates in Command Center and pastes into the extension. Opaque to the
+        extension: any text of up to 4,096 characters without line breaks.
+  parameters:
+    BusinessId:
+      name: businessId
+      in: path
+      required: true
+      description: >-
+        The `id` of a business from GET /v1/businesses, sent back exactly as you returned it
+        (percent-encoded). An integer id arrives as its decimal digits.
+      schema: { type: string, minLength: 1, maxLength: 120 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        A random UUID that identifies one save the user confirmed. If the user sends the same save again
+        from the same dialog (after a timeout, for example), the key is the same. Recommended: when you
+        have already handled this key for this user in the last 24 hours, return the first response
+        again and store nothing. Optional to implement; without it a retry creates a second item.
+      schema: { type: string, format: uuid }
+  responses:
+    Saved:
+      description: >-
+        The item was stored. 200 is accepted as well as 201. The body is required: a 204 or an empty
+        body is treated as a failed save.
+      x-extension-reaction: Closes the dialog and shows "Saved", with an "Open in Command Center" link when `url` is present.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SaveResult' }
+    Unauthorised:
+      description: The token is missing, unknown, expired or revoked. Use 401 for nothing else.
+      x-extension-reaction: >-
+        On GET /v1/session: deletes the stored token and asks the user to paste a new one. On any other
+        request: shows "Legiit did not accept the token"; the token is deleted the next time the session
+        is checked.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: >-
+        The token is valid but this user may not do this (plan, role, quota). For a feature that is
+        simply switched off, leave its capability out of the session instead: the extension then never
+        calls it.
+      x-extension-reaction: Shows "Legiit rejected the request (403)" followed by your `error.message`. Keeps the token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: >-
+        Two cases share this status. (1) The business does not exist or does not belong to this user:
+        answer with `error.code` "not_found". (2) The endpoint is not built or not enabled: any other
+        404 (also 405 or 501), with or without a body.
+      x-extension-reaction: >-
+        With `error.code` "not_found": shows "Legiit could not find it (404)" followed by your
+        `error.message`; the feature stays. Any other 404, 405 or 501: hides this feature until the
+        side panel or settings page is opened again.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: The endpoint is not built or not enabled. 405 and 501 mean the same to the extension.
+      x-extension-reaction: Hides this feature until the side panel or settings page is opened again. During Connect, shows "The Legiit API is not available yet".
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Invalid:
+      description: >-
+        The body was understood but cannot be accepted. 400 is treated the same way. Say what is wrong
+        in `error.message`, in words a user can act on.
+      x-extension-reaction: Keeps the dialog open and shows "Legiit rejected the request (422)" followed by your `error.message`. The user can send again.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Too many requests from this user. The extension does not read Retry-After.
+      x-extension-reaction: Shows "Legiit rejected the request (429)" followed by your `error.message`. Never retries on its own.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: Something failed on your side (any 5xx). A body is optional and is not shown.
+      x-extension-reaction: Shows "Legiit had a problem" with the status code. Never retries on its own; the user can click again.
+  schemas:
+    Error:
+      type: object
+      description: The JSON body of every 4xx reply.
+      required: [error]
+      properties:
+        error:
+          type: object
+          description: The one top-level key of an error reply.
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              maxLength: 60
+              description: >-
+                A short machine-readable reason. The extension reads exactly one value: "not_found" on a
+                404 means "this business does not exist" rather than "this endpoint does not exist".
+                Use your own values for everything else.
+              x-examples: [unauthorised, forbidden, not_found, not_available, invalid, rate_limited]
+            message:
+              type: string
+              minLength: 1
+              maxLength: 200
+              description: >-
+                One plain sentence for the user, without HTML. The extension shows the first 200
+                characters after the status code, as text.
+    Id:
+      type: [string, integer]
+      minLength: 1
+      maxLength: 120
+      minimum: 0
+      description: >-
+        An identifier. A string of up to 120 characters or a non-negative integer, whichever your
+        database uses. The extension treats it as opaque text and sends it back unchanged.
+    Capability:
+      type: string
+      enum: [businesses, visibilitySnapshots, gapLists, competitors, contentEditor, workspaces, industryPulse, ai]
+      description: >-
+        One feature the extension can show. businesses: the business drop-down and everything that
+        needs a business. visibilitySnapshots, gapLists, competitors, contentEditor, workspaces: one
+        save button each. industryPulse: date shortcuts on the Rewind tab. ai: "Rewrite with Legiit AI".
+    Session:
+      type: object
+      required: [user, capabilities]
+      properties:
+        user:
+          type: object
+          description: The person the token belongs to.
+          required: [id]
+          properties:
+            id:
+              $ref: '#/components/schemas/Id'
+              description: Stable id of the user. Not shown.
+            name:
+              type: [string, 'null']
+              maxLength: 200
+              description: Display name, shown after "Connected". When it is null or empty the e-mail is shown instead.
+            email:
+              type: [string, 'null']
+              maxLength: 320
+              description: Shown only when there is no name.
+        plan:
+          type: [string, 'null']
+          maxLength: 80
+          description: Name of the user's plan, as text to show next to the name. Not used for any decision.
+          x-examples: [agency]
+        capabilities:
+          type: array
+          uniqueItems: true
+          description: >-
+            The features this token may use. The extension shows a feature only when its capability is
+            listed, and ignores names it does not know. To launch endpoint by endpoint, list only what
+            is live.
+          items: { $ref: '#/components/schemas/Capability' }
+    Business:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          description: Used as {businessId} in every path below a business.
+        name:
+          type: string
+          maxLength: 200
+          description: Shown in the drop-down. Longer names are cut at 200 characters.
+        domain:
+          type: [string, 'null']
+          maxLength: 255
+          description: The main domain. Shown only when the name is empty.
+    BusinessList:
+      type: object
+      required: [businesses]
+      properties:
+        businesses:
+          type: array
+          maxItems: 500
+          description: All businesses of the user, in the order to show them. Only the first 500 are used.
+          items: { $ref: '#/components/schemas/Business' }
+    BusinessDetails:
+      type: object
+      description: >-
+        What the extension pre-fills as "tracked brands". Brands are how it tells the user's own results
+        from competitors' results on a Google page: by domain for links, by name for text.
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          description: The same id as in the path.
+        name:
+          type: string
+          maxLength: 200
+          description: Name of the business. Becomes the name of the user's own tracked brand (cut at 160 characters).
+        brandNames:
+          type: [array, 'null']
+          maxItems: 30
+          description: >-
+            Other ways people write the business's name ("BrightPath", "Bright Path Dental"). Used to
+            find the brand in AI answers and page text. Absent or null means none.
+          items: { type: string, maxLength: 160 }
+        domains:
+          type: [array, 'null']
+          maxItems: 30
+          description: >-
+            Domains that belong to the business. A result on one of them counts as the user's own.
+            "example.com", "www.example.com" and "https://www.example.com/page" are all read as
+            example.com. Subdomains of a listed domain count too. Values that are not a domain are skipped.
+          items: { type: string, maxLength: 255 }
+        competitors:
+          type: [array, 'null']
+          maxItems: 200
+          description: The business's competitors. Each becomes a tracked competitor.
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+                maxLength: 160
+                description: Display name. A competitor with an empty name is tracked under its first domain.
+              domains:
+                type: [array, 'null']
+                maxItems: 30
+                description: Domains of the competitor, read the same way as the business's own domains.
+                items: { type: string, maxLength: 255 }
+        focusKeywords:
+          type: [array, 'null']
+          maxItems: 200
+          description: Keywords the business wants to rank for. Shown as a line of text under Settings; nothing else uses them yet.
+          items: { type: string, maxLength: 200 }
+        avatars:
+          type: [array, 'null']
+          maxItems: 20
+          description: Customer avatars of the business. Stored on the device for a later version; not shown yet. Safe to leave out.
+          items:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string, maxLength: 160, description: Short label of the avatar. }
+              description: { type: [string, 'null'], maxLength: 2000, description: Who this customer is. }
+    SaveResult:
+      type: object
+      required: [id]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          description: Id of the stored item. Not shown to the user.
+        url:
+          type: [string, 'null']
+          maxLength: 2048
+          pattern: '^https://'
+          description: >-
+            Address of a page in Command Center that shows the stored item. The extension shows it as
+            an "Open in Command Center" link that opens in a new tab, so the page must work for a
+            signed-in user. null or absent: "Saved" is shown without a link.
+    HttpUrl:
+      type: string
+      maxLength: 2048
+      pattern: '^https?://'
+      description: >-
+        An absolute http or https address, written the way the browser writes it. It can contain characters
+        that strict URI validators reject (for example [ ] and | in a query string): check the scheme and
+        the length, nothing more.
+    Fold:
+      type: [string, 'null']
+      enum: [above, partly, below, null]
+      description: >-
+        Where a result sits relative to the fold, which is the bottom edge of the first screen (y = viewport.height).
+        above: the result ends at or above the fold. partly: the fold cuts through it. below: it starts at or
+        below the fold. null: it could not be measured.
+    VisibilitySnapshot:
+      type: object
+      description: >-
+        One measurement of one Google results page, exactly as the user's Chrome laid it out (their window size,
+        location and personalisation). Pixel values are CSS pixels from the top of the document, so they do not
+        depend on how far the user had scrolled.
+      required: [keyword, capturedAt, googleHost, mode, resultsOffset, viewport, location, firstOrganicTopPx, firstOrganicFold, organicShare, grade, firstScreenShares, organic, tracked]
+      properties:
+        keyword:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: The search query as typed (the q parameter of the page), with whitespace collapsed.
+        capturedAt:
+          type: string
+          format: date-time
+          description: >-
+            When the page was measured, on the user's clock, as UTC with milliseconds (2026-11-20T12:00:00.000Z).
+            It is not the time of the save. It can be slightly ahead of server time, and it repeats when the
+            user saves the same measurement twice.
+        googleHost:
+          type: string
+          maxLength: 40
+          pattern: '^www\.google\.[a-z.]+$'
+          description: Host of the results page. Always starts with "www.google." and can be a country site.
+          x-examples: [www.google.com, www.google.co.uk]
+        mode:
+          type: string
+          enum: [web]
+          description: Kind of results page. Always "web" in version 1; AI Mode pages are not saved.
+        resultsOffset:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: >-
+            How many results come before this page (Google's start parameter): 0 on the first results page,
+            10 on the second. Positions in this body are relative to the page; add this number for an
+            approximate absolute rank.
+        viewport:
+          type: object
+          description: Size of the page area of the browser window when the page was measured, in CSS pixels.
+          required: [width, height]
+          properties:
+            width: { type: integer, minimum: 1, description: Width of the first screen. }
+            height: { type: integer, minimum: 1, description: Height of the first screen. This is the fold. }
+        location:
+          type: [string, 'null']
+          maxLength: 160
+          description: >-
+            The place name Google printed on the page (for example "Austin, Texas"), in the language of
+            Google's interface. null when the page shows none.
+        firstOrganicTopPx:
+          type: [integer, 'null']
+          minimum: 0
+          description: Top edge of the topmost organic result. null when no organic result could be measured.
+        firstOrganicFold:
+          $ref: '#/components/schemas/Fold'
+          description: Fold position of the topmost organic result. null exactly when firstOrganicTopPx is null.
+        organicShare:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: >-
+            Part of the first screen covered by organic results (0.25 means 25 %), rounded to 4 decimals.
+            Equal to the "organic" entry of firstScreenShares, or 0 when there is none.
+        grade:
+          type: object
+          description: >-
+            The extension's "organic click potential" for this page. It is a layout score, not a measured
+            click-through rate.
+          required: [letter, score, estimate]
+          properties:
+            letter:
+              type: string
+              enum: [A, B, C, D, F]
+              description: Band of the score. A is 85 to 100, B 70 to 84, C 50 to 69, D 30 to 49, F 0 to 29.
+            score:
+              type: integer
+              minimum: 0
+              maximum: 100
+              description: >-
+                100, minus up to 60 points for how far down the first screen the first organic result starts,
+                minus up to 40 points for the part of the first screen's result area that is not organic.
+            estimate:
+              type: boolean
+              const: true
+              description: Always true. Label the grade as an estimate wherever it is shown.
+        firstScreenShares:
+          type: array
+          maxItems: 12
+          description: >-
+            What fills the first screen: one entry per kind of result that is visible there, largest first.
+            A kind that is missing covers nothing. Kinds are measured separately, so the shares can overlap
+            and need not add up to 1.
+          items:
+            type: object
+            required: [type, share]
+            properties:
+              type:
+                type: string
+                enum: [organic, ai_overview, ad, local_pack, featured_snippet, paa, video, image, shopping, forum, top_stories, knowledge_panel]
+                description: >-
+                  Kind of result. paa is "People also ask", forum is "Discussions and forums", top_stories is the
+                  news block.
+              share:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Part of the first screen this kind covers, rounded to 4 decimals. A sliver can round to 0.
+        organic:
+          type: array
+          maxItems: 100
+          description: >-
+            The organic results of this page, in page order. Links inside other blocks (featured snippet,
+            People also ask, videos) are not organic results. The array can be empty.
+          items:
+            type: object
+            required: [position, url, domain, title, topPx, fold]
+            properties:
+              position:
+                type: integer
+                minimum: 1
+                maximum: 100
+                description: 1-based order among the organic results of this page, without gaps.
+              url:
+                $ref: '#/components/schemas/HttpUrl'
+                description: Where the result leads, with Google's redirect and tracking parameters removed.
+              domain:
+                type: string
+                maxLength: 255
+                description: Host of url, in lower case, without a leading "www." (other subdomains are kept).
+              title:
+                type: string
+                minLength: 1
+                maxLength: 400
+                description: The result's title as shown on the page.
+              topPx:
+                type: [integer, 'null']
+                minimum: 0
+                description: Top edge of the result. null when it could not be measured.
+              fold:
+                $ref: '#/components/schemas/Fold'
+                description: Fold position of the result. null exactly when topPx is null.
+        tracked:
+          type: array
+          maxItems: 250
+          description: >-
+            Every brand the user tracks in the extension, their own and competitors: brands found among the
+            organic results first, in result order, then the brands that were not found. The names come from
+            the extension's settings (typed by the user, or pre-filled from Business Details). They are labels,
+            not ids, and need not match the competitors stored for the business.
+          items:
+            type: object
+            required: [owner, name, position, topPx, fold]
+            properties:
+              owner:
+                type: string
+                enum: [mine, competitor]
+                description: mine is one of the user's own brands, competitor one of their competitors.
+              name:
+                type: string
+                maxLength: 160
+                description: The brand's display name. Can be empty when the user tracked a domain without a name.
+              position:
+                type: [integer, 'null']
+                minimum: 1
+                maximum: 100
+                description: >-
+                  organic[].position of the brand's first organic result on this page. null means the brand has
+                  no organic result on this page. A brand matches a result by domain, never by its name.
+              topPx:
+                type: [integer, 'null']
+                minimum: 0
+                description: Top edge of that result. null when position is null or the result could not be measured.
+              fold:
+                $ref: '#/components/schemas/Fold'
+                description: Fold position of that result. null when topPx is null.
+    GapList:
+      type: object
+      description: >-
+        A "Why Not Me" gap list: the places on one source where tracked competitors appear and the user's own
+        brand does not. It is computed in the extension against the brands tracked there.
+      required: [source, subject, capturedAt, rows]
+      properties:
+        source:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: >-
+            Where the list was read from, as a label. An AI Overview shown on a results page belongs to
+            "Google results". Store it as text and accept labels you do not know.
+          x-examples: [Google results, Google AI Mode, ChatGPT, Gemini, Perplexity, Copilot, Pasted answer]
+        subject:
+          type: string
+          maxLength: 4000
+          description: >-
+            The Google query, or the question the user asked on the AI site. It can be an empty string: always
+            for "Pasted answer", and whenever no question could be read. Do not require it and do not use it
+            as a unique key.
+        capturedAt:
+          type: string
+          format: date-time
+          description: >-
+            When the page or answer was read, on the user's clock, as UTC with milliseconds. It is not the time
+            of the save and it is not unique: saving the same reading before and after "Scan sources" sends the
+            same value with different rows.
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          description: >-
+            One row per gap, in the order shown to the user (highest priority first unless they re-sorted).
+            Typically 1 to 40 rows.
+          items:
+            type: object
+            required: [surfaceId, surface, position, title, url, domain, competitors, evidence, pageType, actionable, scanned, contacts]
+            properties:
+              surfaceId:
+                type: string
+                enum: [ai_overview, organic, local_pack, forum, video, ad, featured_snippet, top_stories, shopping, answer_text, citations, scanned_page]
+                description: >-
+                  Where the gap is, as a code. answer_text and citations belong to AI answers; the others to a
+                  Google results page. scanned_page is a page found only by "Scan sources".
+              surface:
+                type: string
+                minLength: 1
+                maxLength: 60
+                description: The same place as a label for people. Use surfaceId and position in code, not this text.
+                x-examples: ['Organic #3', AI Overview citation, Answer text, Cited by ChatGPT]
+              position:
+                type: [integer, 'null']
+                minimum: 1
+                description: >-
+                  1-based position inside its own surface on the page the user had open: the organic position,
+                  the order of the citation, the order of the item in its block. null exactly when pageType is
+                  "surface". It is not an absolute Google rank.
+              title:
+                type: string
+                maxLength: 1000
+                description: >-
+                  Title of the page or item. For pageType "surface" it is a sentence written by the extension.
+                  Can be empty for an ad without a readable headline.
+              url:
+                oneOf:
+                  - $ref: '#/components/schemas/HttpUrl'
+                  - type: 'null'
+                description: >-
+                  Address of the page the row is about, with tracking parameters removed. null for pageType
+                  "surface", and for some local-pack and ad rows that have no link.
+              domain:
+                type: [string, 'null']
+                maxLength: 255
+                description: Host of url, in lower case, without a leading "www.". null exactly when url is null.
+              competitors:
+                type: array
+                minItems: 1
+                maxItems: 200
+                description: >-
+                  Display names of the tracked competitors found here, from the extension's own list. They are
+                  not ids and may not match the competitors stored for the business. Store them as text.
+                items: { type: string, maxLength: 160 }
+              evidence:
+                type: string
+                minLength: 1
+                maxLength: 2000
+                description: >-
+                  One English sentence, written by the extension, that says why the row is a gap. Show it;
+                  do not parse it.
+              pageType:
+                type: string
+                enum: [competitor-site, list, forum, video, third-party, surface]
+                description: >-
+                  Kind of thing the row points at. surface: the wording of the surface itself (no page).
+                  competitor-site: a page on a tracked competitor's own domain. list: a list-style page such as
+                  "10 best…". forum, video: results of those blocks. third-party: any other page.
+              actionable:
+                type: boolean
+                description: >-
+                  true when the row is a page on someone else's site where the business could plausibly get
+                  included: not a competitor's own site, not an ad, not a local-pack listing. Store it as sent;
+                  it cannot be derived from pageType.
+              scanned:
+                type: boolean
+                description: >-
+                  true when "Scan sources" fetched and read the page. title, competitors, evidence, pageType and
+                  contacts then describe the fetched page.
+              contacts:
+                type: array
+                maxItems: 18
+                description: >-
+                  Ways to reach the people behind the page, found on the scanned page. Empty unless scanned is
+                  true. These are names and addresses read from third-party pages: handle them as personal data.
+                items:
+                  type: object
+                  required: [kind, label, url]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [contact, author, submission]
+                      description: >-
+                        contact: a contact, about or team page, or an e-mail link. author: the author's page or
+                        byline. submission: a "submit", "write for us", "get listed" or "advertise" link.
+                    label:
+                      type: string
+                      minLength: 1
+                      maxLength: 300
+                      description: Text to show for the link.
+                    url:
+                      type: string
+                      maxLength: 2048
+                      pattern: '^(https?://|mailto:)'
+                      description: >-
+                        An absolute http or https address, or "mailto:" followed by an e-mail address. Render
+                        mailto values as e-mail links; never fetch them.
+    Competitor:
+      type: object
+      description: >-
+        A competitor as the user tracks it in the extension. The same shape is used when one is added to
+        a business, listed in a brief, and returned in Business Details.
+      required: [name, domains]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+          description: Display name, as the user typed it. Compare names without regard to case.
+        domains:
+          type: array
+          maxItems: 30
+          description: >-
+            The competitor's sites as host names: lower case, no "www.", no path. Can be empty when the
+            competitor is tracked by name only. A value is whatever the user typed that parses as a host:
+            it can be a subdomain, and it is not checked against a list of public suffixes.
+          items: { type: string, minLength: 1, maxLength: 255 }
+    ContentEditorDocument:
+      type: object
+      description: >-
+        The result of comparing one text with competing pages, sentence by sentence. Two sentences "make
+        the same point" when their similarity reaches method.threshold. The text itself is not sent:
+        only its sentences that nobody else makes, and the points it lacks.
+      required: [targetKeyword, source, pageUrl, pageTitle, capturedAt, method, wordShare, onlyHere, missingPoints, comparedUrls]
+      properties:
+        targetKeyword:
+          type: string
+          maxLength: 500
+          description: >-
+            A free-text label from the "Target keyword" box. The user can type a search phrase; when they
+            do not, it is pre-filled with the first part of the page title, so it is often a headline.
+            Can be an empty string. Do not use it as a key.
+        source:
+          type: string
+          enum: [page, selection, pasted]
+          description: >-
+            What was checked. page: the main content of the page at pageUrl. selection: only the text the
+            user had selected on that page. pasted: text the user pasted into the extension; there is no page.
+        pageUrl:
+          oneOf:
+            - $ref: '#/components/schemas/HttpUrl'
+            - type: 'null'
+          description: >-
+            Address of the page, as open in the user's browser (query string and fragment included). null
+            exactly when source is "pasted".
+        pageTitle:
+          type: string
+          maxLength: 500
+          description: Title of the page. An empty string when source is "pasted" or the page has no title.
+        capturedAt:
+          type: string
+          format: date-time
+          description: When the comparison was made, on the user's clock, as UTC with milliseconds. It is not the time of the save.
+        method:
+          type: object
+          description: How the comparison was made, so that two documents can be compared fairly.
+          required: [engine, threshold, pagesCompared]
+          properties:
+            engine:
+              type: string
+              enum: [embedding, lexical]
+              description: >-
+                embedding: sentence meanings compared with a language model that runs in the browser (the
+                normal case). lexical: shared words, used when that model cannot run; it misses paraphrases.
+            threshold:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: >-
+                Similarity (0 to 1) from which two sentences count as making the same point. In this
+                version 0.72 for embedding and 0.5 for lexical.
+            pagesCompared:
+              type: integer
+              minimum: 1
+              maximum: 8
+              description: >-
+                How many competing pages the text was compared with. Always the number of comparedUrls.
+                "Most" below means more than half of this number.
+        wordShare:
+          type: object
+          description: >-
+            How the words of the checked text divide by how common their sentence is: fractions of 1 (not
+            percentages), counted in words (not sentences), rounded to 4 decimals. The three add up to 1
+            within rounding.
+          required: [saidByMost, saidBySome, onlyHere]
+          properties:
+            saidByMost: { type: number, minimum: 0, maximum: 1, description: In sentences that more than half of the compared pages also make. }
+            saidBySome: { type: number, minimum: 0, maximum: 1, description: In sentences that at least one compared page makes, but not more than half. Always 0 when one page was compared. }
+            onlyHere: { type: number, minimum: 0, maximum: 1, description: In sentences that no compared page makes. The sentences themselves are in the onlyHere list. }
+        onlyHere:
+          type: array
+          maxItems: 200
+          description: >-
+            The sentences of the checked text that no compared page makes, in the order they appear. This
+            is what is new in the text. Empty when every sentence has a match. Sentences shorter than five
+            words are never checked.
+          items: { type: string, minLength: 1, maxLength: 600 }
+        missingPoints:
+          type: array
+          maxItems: 12
+          description: >-
+            Points that more than half of the compared pages make and the checked text does not, most
+            widespread first. Near-duplicates are merged. Always empty when fewer than two pages were compared.
+          items:
+            type: object
+            required: [text, pages, urls]
+            properties:
+              text: { type: string, minLength: 1, maxLength: 600, description: One sentence that makes the point, quoted from one of the pages in urls. }
+              pages: { type: integer, minimum: 2, maximum: 8, description: How many compared pages make the point. Always the number of urls. }
+              urls:
+                type: array
+                minItems: 2
+                maxItems: 8
+                description: The compared pages that make the point. Each one is also in comparedUrls.
+                items: { $ref: '#/components/schemas/HttpUrl' }
+        comparedUrls:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: >-
+            The competing pages the text was compared with, in comparison order: the addresses that were
+            requested, before any redirect. Pages that could not be read or had no text are left out.
+          items: { $ref: '#/components/schemas/HttpUrl' }
+    WorkspaceFromBrief:
+      type: object
+      description: >-
+        A client brief the extension wrote from a business's public website (it reads up to 8 pages of the
+        site). Nothing in it was typed or confirmed by the user except the list of competitors. Every list
+        can be empty: the extension sends what it found.
+      required: [briefId, businessName, siteUrl, createdAt, contact, serviceAreas, services, competitors, focusKeywords, avatars, issues, nextSteps, markdown]
+      properties:
+        briefId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >-
+            The extension's own id of the brief, random and unique on the user's device. The same brief sent
+            again (after the user edited its competitors, or days later from "Saved briefs") carries the
+            same briefId and the same createdAt.
+          x-examples: [brief_3f9c2a7d41b06e58aa]
+        businessName:
+          type: string
+          minLength: 1
+          maxLength: 160
+          description: >-
+            Name of the business as read from its site: structured data, the site-name tag, or the part of
+            the page titles that repeats. When none is found it is the host name without "www."
+            ("brightpathdental.example"), so a name equal to the host of siteUrl means "no name found".
+        siteUrl:
+          $ref: '#/components/schemas/HttpUrl'
+          description: The site the brief is about, as its origin with a trailing slash and nothing after it (https://www.example.com/).
+        createdAt:
+          type: string
+          format: date-time
+          description: >-
+            When the brief was built on the user's device, on the user's clock, as UTC with milliseconds. It
+            is not the time of the save and can be days in the past. Record your own time of receipt.
+        contact:
+          type: object
+          description: >-
+            Contact details the business publishes on its own site. Text as published: store and show it,
+            do not validate or normalise it.
+          required: [phones, emails, addresses]
+          properties:
+            phones:
+              type: array
+              maxItems: 6
+              description: Phone numbers the way the site writes them. An entry can be the text of a phone link, such as "Call (512) 555-0142".
+              items: { type: string, minLength: 1, maxLength: 60 }
+            emails:
+              type: array
+              maxItems: 6
+              description: E-mail addresses in the site's own letter case. A link with several recipients arrives as one comma-separated entry.
+              items: { type: string, minLength: 1, maxLength: 320 }
+            addresses:
+              type: array
+              maxItems: 4
+              description: Postal addresses, each on one line.
+              items: { type: string, minLength: 1, maxLength: 240 }
+        serviceAreas:
+          type: array
+          maxItems: 16
+          description: Places the business says it serves, in the site's wording.
+          items: { type: string, minLength: 1, maxLength: 80 }
+        services:
+          type: array
+          maxItems: 20
+          description: Services or products named on the site, in the site's wording.
+          items: { type: string, minLength: 1, maxLength: 120 }
+        competitors:
+          type: array
+          maxItems: 200
+          description: >-
+            The competitors the user ticked for this brief: ones they track in the extension, ones they
+            typed, and sites picked from an open Google results page. Names are labels, not ids. No two
+            entries share a name or a domain.
+          items: { $ref: '#/components/schemas/Competitor' }
+        focusKeywords:
+          type: array
+          maxItems: 30
+          description: >-
+            Search phrases suggested by the site's own page titles and headings, in lower case, most
+            widespread first. They are candidates: nobody researched or confirmed them.
+          items: { type: string, minLength: 1, maxLength: 200 }
+        avatars:
+          type: array
+          minItems: 3
+          maxItems: 3
+          description: >-
+            Exactly three draft customer avatars, written from the site's content by a template or, when the
+            user asked for it, by AI.
+          items:
+            type: object
+            required: [name, description, draft]
+            properties:
+              name: { type: string, minLength: 1, maxLength: 160, description: Short label of the avatar. }
+              description:
+                type: string
+                minLength: 1
+                maxLength: 2000
+                description: 'One paragraph in a fixed form: "<who they are> Wants: <what they want> Worries about: <what they worry about>".'
+              draft: { type: boolean, const: true, description: Always true. Show the avatar as a draft for the user to review. }
+        issues:
+          type: array
+          maxItems: 20
+          description: >-
+            Basic on-page SEO findings for the pages that were read, most severe first. At most one entry
+            per kind of finding.
+          items:
+            type: object
+            required: [code, severity, title, detail, pages]
+            properties:
+              code:
+                type: string
+                enum: [not-https, noindex, missing-title, duplicate-title, short-title, long-title, missing-description, missing-h1, multiple-h1, canonical-elsewhere, missing-canonical, missing-viewport, missing-alt, no-structured-data, thin-content]
+                description: The kind of finding. Use this, not the title, to recognise a finding. A later extension version may add codes.
+              severity: { type: string, enum: [high, medium, low], description: How much the finding matters for search. Fixed per code. }
+              title: { type: string, minLength: 1, maxLength: 300, description: 'The finding in a few English words, for display ("Missing meta description").' }
+              detail: { type: string, maxLength: 2000, description: One English sentence that names the affected pages by path. For display. }
+              pages:
+                type: array
+                minItems: 1
+                maxItems: 8
+                description: Addresses of the pages the finding applies to, as they were read (after redirects; the open page with its query string).
+                items: { $ref: '#/components/schemas/HttpUrl' }
+        nextSteps:
+          type: array
+          maxItems: 8
+          description: Recommended first actions, most important first, one English sentence each. They can quote a keyword the user searched for.
+          items: { type: string, minLength: 1, maxLength: 600 }
+        markdown:
+          type: string
+          minLength: 1
+          maxLength: 200000
+          description: >-
+            The whole brief as one Markdown document (CommonMark with tables), the same text the user can
+            export. It holds more than the fields above: the search findings, the site's tone of voice and
+            testimonials, and "Prepared by <agency name>" when the user set one. Store it and show it as
+            the brief; do not parse it. It quotes web pages, so render it as untrusted text. Typical size
+            5 to 30 KB.
+    IndustryPulse:
+      type: object
+      required: [events]
+      properties:
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the list was last edited. Not shown.
+        events:
+          type: array
+          maxItems: 200
+          description: The events, newest first. The extension uses the first 8.
+          items:
+            type: object
+            required: [date, title]
+            properties:
+              date:
+                type: string
+                format: date
+                description: The day of the event, as YYYY-MM-DD. For a rollout, the day it started.
+              title:
+                type: string
+                minLength: 1
+                maxLength: 300
+                description: What happened. Shown as the tooltip of the date.
+              type:
+                type: [string, 'null']
+                maxLength: 40
+                description: Kind of event. Not used by the extension yet; any text is accepted.
+                x-examples: [algorithm-update, serp-feature, news]
+              url:
+                type: [string, 'null']
+                maxLength: 2048
+                description: A page that describes the event. Not shown yet.
+    AiCompletionRequest:
+      type: object
+      required: [task, system, prompt, maxOutputTokens]
+      properties:
+        task:
+          type: string
+          enum: [click-potential, why-not-me, rewind, new-or-noise, brief]
+          description: Which screen asked. For your metering and logs; it does not change what you must return.
+        system:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: The system prompt. The same fixed English text for every request of one extension version.
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 10000
+          description: >-
+            The user message: a line "Task: …", a line that says which format to reply in, then the facts as
+            "- " lines between <facts> and </facts>. The facts were read from web pages.
+        responseSchema:
+          type: object
+          description: >-
+            Present only when task is "brief". A JSON Schema (draft 2020-12 subset: type, properties,
+            required, items, minItems, maxItems, additionalProperties). `text` must then be one JSON
+            document that matches it.
+        maxOutputTokens:
+          type: integer
+          minimum: 1
+          maximum: 2000
+          description: Upper limit for the length of the reply, in model tokens. Currently always 700.
+    AiCompletionResponse:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          description: >-
+            What the model wrote. Plain text; Markdown bullets ("- ") are fine and are stripped. With a
+            responseSchema: one JSON document, with nothing before or after it. Longer text is cut at
+            20,000 characters.
+        model:
+          type: [string, 'null']
+          maxLength: 120
+          description: Name of the model that wrote it. Not shown yet.

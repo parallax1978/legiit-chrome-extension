@@ -184,7 +184,7 @@ test.describe('Why Not Me on AI answer sites', () => {
     await expect(panel.getByTestId('wnm-presence')).toContainText('Pasted answer');
     await expect(panel.getByTestId('surface-answer_text')).toContainText('Competitors, not you');
     await expect(panel.getByTestId('surface-answer_text')).toContainText('Capitol Dental Care');
-    await expect(panel.getByTestId('gap-row').first()).toContainText('The Pasted answer answer names Lakeside Smiles and Capitol Dental Care');
+    await expect(panel.getByTestId('gap-row').first()).toContainText('The pasted answer names Lakeside Smiles and Capitol Dental Care');
     await expect(panel.getByTestId('wnm-scan')).toContainText('Read the 1 cited');
     expect(lens.errors).toEqual([]);
   });

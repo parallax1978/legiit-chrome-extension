@@ -1,5 +1,6 @@
 /** Turns extracted page content into the sentences New or Noise compares. */
 import type { MainContent } from '@/extract/main-content';
+import { cutText } from '@/lib/sanitize';
 import { countWords, splitSentences } from '@/lib/text';
 
 export interface SentenceUnit {
@@ -30,7 +31,7 @@ export function contentSentences(content: Pick<MainContent, 'blocks'>, options: 
       const key = sentence.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ text: sentence.length > 600 ? sentence.slice(0, 600) : sentence, words });
+      out.push({ text: cutText(sentence, 600), words });
       if (out.length >= max) return out;
     }
   }

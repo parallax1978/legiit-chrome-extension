@@ -6,9 +6,27 @@ import type { PageKind } from './crawl';
 
 export type Severity = 'high' | 'medium' | 'low';
 
+/** The finding types. Stable identifiers: they are sent to Legiit with a brief (see the API contract). */
+export type IssueCode =
+  | 'not-https'
+  | 'noindex'
+  | 'missing-title'
+  | 'duplicate-title'
+  | 'short-title'
+  | 'long-title'
+  | 'missing-description'
+  | 'missing-h1'
+  | 'multiple-h1'
+  | 'canonical-elsewhere'
+  | 'missing-canonical'
+  | 'missing-viewport'
+  | 'missing-alt'
+  | 'no-structured-data'
+  | 'thin-content';
+
 export interface Issue {
   severity: Severity;
-  code: string;
+  code: IssueCode;
   title: string;
   detail: string;
   /** URLs of the affected pages. */
@@ -35,7 +53,7 @@ function pathOf(url: string): string {
 
 export function findIssues(pages: readonly IssueInput[]): Issue[] {
   const issues: Issue[] = [];
-  const add = (severity: Severity, code: string, title: string, detail: string, affected: readonly IssueInput[]): void => {
+  const add = (severity: Severity, code: IssueCode, title: string, detail: string, affected: readonly IssueInput[]): void => {
     if (affected.length > 0) issues.push({ severity, code, title, detail, pages: affected.map((p) => p.url) });
   };
   const paths = (affected: readonly IssueInput[]): string => affected.map((p) => pathOf(p.url)).join(', ');

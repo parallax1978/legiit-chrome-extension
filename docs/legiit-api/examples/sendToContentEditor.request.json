@@ -1,0 +1,59 @@
+{
+  "targetKeyword": "how often should you get your teeth cleaned",
+  "source": "page",
+  "pageUrl": "https://www.brightpathdental.example/blog/how-often-teeth-cleaning",
+  "pageTitle": "How Often Should You Get Your Teeth Cleaned? | BrightPath Dental",
+  "capturedAt": "2026-11-20T12:00:00.000Z",
+  "method": {
+    "engine": "lexical",
+    "threshold": 0.5,
+    "pagesCompared": 5
+  },
+  "wordShare": {
+    "saidByMost": 0.2868,
+    "saidBySome": 0.2171,
+    "onlyHere": 0.4961
+  },
+  "onlyHere": [
+    "At BrightPath Dental we use an air-polishing system that lifts stains without scraping.",
+    "Our South Austin hygienists book fifty-minute appointments so nobody is rushed.",
+    "In our 2025 patient survey, 68 percent of patients on a four-month schedule reported less bleeding when flossing.",
+    "We send a text reminder three weeks before you are due, with a link to pick your own time."
+  ],
+  "missingPoints": [
+    {
+      "text": "A routine cleaning takes about 30 to 60 minutes.",
+      "pages": 3,
+      "urls": [
+        "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
+        "https://www.lakesidesmiles.example/blog/dental-cleaning-schedule",
+        "https://www.nationaloralhealth.example/cleanings"
+      ]
+    },
+    {
+      "text": "Dental X-rays are usually taken once a year during a cleaning visit.",
+      "pages": 3,
+      "urls": [
+        "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
+        "https://www.lakesidesmiles.example/blog/dental-cleaning-schedule",
+        "https://www.nationaloralhealth.example/cleanings"
+      ]
+    },
+    {
+      "text": "A fluoride treatment is often applied at the end of the cleaning.",
+      "pages": 3,
+      "urls": [
+        "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
+        "https://www.familydentalfacts.example/how-often-dental-cleaning",
+        "https://www.smilehealthdaily.example/teeth-cleaning-frequency"
+      ]
+    }
+  ],
+  "comparedUrls": [
+    "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning",
+    "https://www.familydentalfacts.example/how-often-dental-cleaning",
+    "https://www.lakesidesmiles.example/blog/dental-cleaning-schedule",
+    "https://www.nationaloralhealth.example/cleanings",
+    "https://www.smilehealthdaily.example/teeth-cleaning-frequency"
+  ]
+}

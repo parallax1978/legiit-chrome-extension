@@ -176,7 +176,7 @@ web.archive.org is not reachable from the build environment. CDX parsing, sampli
 | # | Assumption | Where to change it |
 |---|---|---|
 | A-1 | The Legiit API is at `https://api.legiit.com`. It is a **required host in the manifest**; changing a required host later re-prompts every user, so settle it before the first submission. | `DEFAULT_LEGIIT_API_BASE_URL` in `src/config/constants.ts`, or `LEGIIT_API_BASE_URL` at build time |
-| A-2 | The endpoint paths, payloads, capability names and bearer-token auth in `docs/legiit-api-contract.yaml`. They are a proposal written from the brief's method list. | `src/legiit/http-client.ts`, `src/legiit/types.ts`, the contract |
+| A-2 | The endpoint paths, payloads, capability names and bearer-token auth in `docs/legiit-api/openapi.yaml`. They were written from the brief's method list; the Legiit backend team builds the API from that contract (see `docs/legiit-api/README.md`). | `src/legiit/http-client.ts`, `src/legiit/types.ts`, `src/legiit/payloads.ts`, the contract |
 | A-3 | Command Center links returned by save endpoints (`url` in the response) are safe to show as "Open in Command Center". | `SaveToLegiit` in `src/ui/shared.tsx` |
 | A-4 | Product name "Legiit Lens", publisher "Legiit". | `src/config/constants.ts` |
 | A-5 | The shortcut Alt+Shift+L is free on users' machines. Chrome silently drops a suggested shortcut that is taken; the panel then tells the user where to set one. | `SUGGESTED_SHORTCUT` |

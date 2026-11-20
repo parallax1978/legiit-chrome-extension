@@ -46,8 +46,8 @@ All of this is kept in your browser's storage for the extension. It is not synce
 **With a Legiit account connected:**
 
 - The extension reads your own account data from Legiit (your name, plan, businesses, their tracked competitors, focus keywords and customer profiles) to pre-fill its settings, and Legiit's list of notable search-industry dates.
-- When you click **Save to Command Center**, **Send to content editor**, **Open in Command Center**, **Add to Command Center** or **Rewrite with Legiit AI**, the extension shows the exact data it will send and sends it only after you confirm. Depending on the action this can include: a search keyword and the results measured on that page, a list of pages and the brands they mention, sentences from a page you analyzed, or a client brief with the business details found on a website.
-- Your API token is sent to Legiit with each of these requests, and to no one else.
+- When you click **Save to Command Center**, **Send to content editor**, **Open in Command Center**, **Add to Command Center** or **Rewrite with Legiit AI**, the extension shows the exact data it will send and sends it only after you confirm. Depending on the action this can include: a search keyword and the results measured on that page; a list of pages, the brands they mention and the contact links found on those pages; sentences from a page you analyzed; or a client brief with the business details found on a website.
+- Your API token and the extension's version number are sent to Legiit with each of these requests, and to no one else. A save also carries a random one-time number, so that sending it twice by accident does not store it twice.
 
 Data you save to your Legiit account is handled under Legiit's privacy policy: [LINK TO LEGIIT PRIVACY POLICY — placeholder].
 

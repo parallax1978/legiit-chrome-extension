@@ -395,7 +395,7 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
             <div className="row">
               <CsvButton filename={`gap-list-${slugify(presence.subject || presence.sourceLabel)}.csv`} build={() => gapCsv(presence, rows)} testId="gap-export" />
               {connection.client && (
-                <SaveToLegiit method="saveGapList" payload={() => gapPayload(presence, rows)} send={(payload, businessId) => connection.client!.saveGapList(businessId, payload)} />
+                <SaveToLegiit method="saveGapList" payload={() => gapPayload(presence, rows)} send={(payload, businessId, options) => connection.client!.saveGapList(businessId, payload, options)} />
               )}
             </div>
           ) : undefined

@@ -4,8 +4,8 @@ import { briefRewriteRequest, rewriteBrief } from '@/ai/brief-rewrite';
 import { legiitAiPayload } from '@/ai/provider';
 import { parseHtml } from '@/extract/html';
 import { extractPageFacts } from '@/extract/page-facts';
-import { composeBrief, type Brief, type BriefCompetitor } from '@/features/instant-brief/compose';
-import { pickSitePages } from '@/features/instant-brief/crawl';
+import { composeBrief, withRewrites, type Brief, type BriefCompetitor } from '@/features/instant-brief/compose';
+import { classifyPage, pickSitePages } from '@/features/instant-brief/crawl';
 import { extractBusinessFacts, type SitePage } from '@/features/instant-brief/extract';
 import { findIssues } from '@/features/instant-brief/issues';
 import { briefToMarkdown } from '@/features/instant-brief/markdown';
@@ -94,6 +94,10 @@ export function InstantBriefTab() {
             else skipped.push(link.url);
           }
         }
+        // The open page is always part of the brief, even when it is not among the picked links (an address with a query string, say).
+        if (!pages.some((p) => urlKey(p.url) === urlKey(snapshot.url))) {
+          pages.unshift({ url: snapshot.url, kind: classifyPage(new URL(snapshot.url).pathname, ''), doc: currentDoc });
+        }
         progress(links.length, links.length, 'Reading brand styling');
         let style: BrandStyle | null = null;
         try {
@@ -121,9 +125,9 @@ export function InstantBriefTab() {
 
   const updateCompetitors = async () => {
     if (!brief) return;
-    const next = { ...composeBrief({ id: brief.id, now: brief.createdAt, facts: brief.facts, issues: brief.issues, competitors: chosen(), search: brief.search }) };
-    // Keep AI-written drafts if there were any.
-    const merged = brief.writtenBy === 'template' ? next : { ...next, avatars: brief.avatars, writtenBy: brief.writtenBy };
+    const next = composeBrief({ id: brief.id, now: brief.createdAt, facts: brief.facts, issues: brief.issues, competitors: chosen(), search: brief.search });
+    // Keep AI-written drafts if there were any, in the text of the brief as well as in its data.
+    const merged = brief.writtenBy === 'template' ? next : withRewrites(next, { avatars: brief.avatars, nextSteps: brief.nextSteps, writtenBy: brief.writtenBy });
     await saveBrief(merged);
     setBrief(merged);
     void reloadSaved();
@@ -286,7 +290,7 @@ export function InstantBriefTab() {
                 label="Open in Command Center"
                 needsBusiness={false}
                 payload={() => workspacePayload(brief, briefToMarkdown(brief, agency))}
-                send={(payload) => connection.client!.createWorkspaceFromBrief(payload)}
+                send={(payload, _businessId, options) => connection.client!.createWorkspaceFromBrief(payload, options)}
               />
             )}
           </div>
@@ -354,6 +358,7 @@ export function InstantBriefTab() {
         >
           <p>This is exactly what will be sent to Legiit. Nothing else leaves your device.</p>
           <pre className="payload">{JSON.stringify(legiitAiPayload(briefRewriteRequest(brief)), null, 2)}</pre>
+          <p className="small muted">Sent with it: your Legiit token and this extension’s version number.</p>
         </Dialog>
       )}
     </>

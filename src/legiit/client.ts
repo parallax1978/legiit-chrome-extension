@@ -18,15 +18,23 @@ import type {
   WorkspaceFromBriefPayload,
 } from './types';
 
+export interface SaveOptions {
+  /**
+   * Identifies one confirmed save. A retry of the same save carries the same
+   * key, so the server can answer it without storing the item twice.
+   */
+  idempotencyKey?: string;
+}
+
 export interface LegiitClient {
   getSession(): Promise<LegiitSession>;
   listBusinesses(): Promise<LegiitBusiness[]>;
   getBusinessDetails(businessId: string): Promise<LegiitBusinessDetails>;
-  saveVisibilitySnapshot(businessId: string, payload: VisibilitySnapshotPayload): Promise<SaveResult>;
-  saveGapList(businessId: string, payload: GapListPayload): Promise<SaveResult>;
-  addCompetitor(businessId: string, payload: CompetitorPayload): Promise<SaveResult>;
-  sendToContentEditor(businessId: string, payload: ContentEditorPayload): Promise<SaveResult>;
-  createWorkspaceFromBrief(payload: WorkspaceFromBriefPayload): Promise<SaveResult>;
+  saveVisibilitySnapshot(businessId: string, payload: VisibilitySnapshotPayload, options?: SaveOptions): Promise<SaveResult>;
+  saveGapList(businessId: string, payload: GapListPayload, options?: SaveOptions): Promise<SaveResult>;
+  addCompetitor(businessId: string, payload: CompetitorPayload, options?: SaveOptions): Promise<SaveResult>;
+  sendToContentEditor(businessId: string, payload: ContentEditorPayload, options?: SaveOptions): Promise<SaveResult>;
+  createWorkspaceFromBrief(payload: WorkspaceFromBriefPayload, options?: SaveOptions): Promise<SaveResult>;
   getIndustryPulse(): Promise<IndustryPulse>;
   completeAI(request: AiCompletionRequest): Promise<AiCompletionResponse>;
 }

@@ -1,0 +1,134 @@
+{
+  "keyword": "best dentist in austin",
+  "capturedAt": "2026-11-20T12:00:00.000Z",
+  "googleHost": "www.google.com",
+  "mode": "web",
+  "resultsOffset": 0,
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "location": "Austin, Texas",
+  "firstOrganicTopPx": 1431,
+  "firstOrganicFold": "below",
+  "organicShare": 0,
+  "grade": {
+    "letter": "F",
+    "score": 0,
+    "estimate": true
+  },
+  "firstScreenShares": [
+    {
+      "type": "ai_overview",
+      "share": 0.2681
+    },
+    {
+      "type": "ad",
+      "share": 0.1267
+    }
+  ],
+  "organic": [
+    {
+      "position": 1,
+      "url": "https://www.austinhealthguide.example/best-dentists-austin",
+      "domain": "austinhealthguide.example",
+      "title": "10 Best Dentists in Austin (2026)",
+      "topPx": 1431,
+      "fold": "below"
+    },
+    {
+      "position": 2,
+      "url": "https://www.lakesidesmiles.example/",
+      "domain": "lakesidesmiles.example",
+      "title": "Lakeside Smiles | Family & Cosmetic Dentist in Austin, TX",
+      "topPx": 1596,
+      "fold": "below"
+    },
+    {
+      "position": 3,
+      "url": "https://texaslocalpicks.example/austin/top-rated-dentists",
+      "domain": "texaslocalpicks.example",
+      "title": "Top Rated Dentists in Austin, Texas",
+      "topPx": 1739,
+      "fold": "below"
+    },
+    {
+      "position": 4,
+      "url": "https://www.capitoldentalcare.example/",
+      "domain": "capitoldentalcare.example",
+      "title": "Capitol Dental Care: Downtown Austin Dentist",
+      "topPx": 2166,
+      "fold": "below"
+    },
+    {
+      "position": 5,
+      "url": "https://smilecompare.example/lakeside-smiles-vs-capitol-dental-care",
+      "domain": "smilecompare.example",
+      "title": "Lakeside Smiles vs Capitol Dental Care: Which Austin Dentist Is Better?",
+      "topPx": 2309,
+      "fold": "below"
+    },
+    {
+      "position": 6,
+      "url": "https://www.brightpathdental.example/",
+      "domain": "brightpathdental.example",
+      "title": "BrightPath Dental | Gentle Dentistry in South Austin",
+      "topPx": 2475,
+      "fold": "below"
+    },
+    {
+      "position": 7,
+      "url": "https://www.atxneighbors.example/dentist-recommendations",
+      "domain": "atxneighbors.example",
+      "title": "Dentist recommendations from Austin neighbors",
+      "topPx": 2891,
+      "fold": "below"
+    },
+    {
+      "position": 8,
+      "url": "https://www.zilkerfamilydentistry.example/about",
+      "domain": "zilkerfamilydentistry.example",
+      "title": "About Zilker Family Dentistry",
+      "topPx": 3034,
+      "fold": "below"
+    },
+    {
+      "position": 9,
+      "url": "https://www.texasdentalboard.example/find-a-dentist",
+      "domain": "texasdentalboard.example",
+      "title": "Find a Licensed Dentist – Texas Dental Board",
+      "topPx": 3432,
+      "fold": "below"
+    }
+  ],
+  "tracked": [
+    {
+      "owner": "competitor",
+      "name": "Lakeside Smiles",
+      "position": 2,
+      "topPx": 1596,
+      "fold": "below"
+    },
+    {
+      "owner": "competitor",
+      "name": "Capitol Dental Care",
+      "position": 4,
+      "topPx": 2166,
+      "fold": "below"
+    },
+    {
+      "owner": "mine",
+      "name": "BrightPath Dental",
+      "position": 6,
+      "topPx": 2475,
+      "fold": "below"
+    },
+    {
+      "owner": "competitor",
+      "name": "Zilker Family Dentistry",
+      "position": 8,
+      "topPx": 3034,
+      "fold": "below"
+    }
+  ]
+}

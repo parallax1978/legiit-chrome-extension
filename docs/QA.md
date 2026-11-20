@@ -156,10 +156,10 @@ With the mock server (until the real API exists):
 - [ ] "Save to Command Center" appears on Click Potential, the gap list, New or Noise ("Send to content editor") and the brief ("Open in Command Center").
 - [ ] Each opens a dialog with the exact JSON. Cancel: nothing in the server log. Send: one POST whose body equals the dialog.
 - [ ] "Rewrite with Legiit AI" asks first and shows what it will send.
-- [ ] Token `limited-token`: buttons for missing features are not shown. Token `invalid`: a clear error, nothing stored.
+- [ ] Token `limited-token`: buttons for missing features are not shown. Any other token (for example `invalid`): a clear error, nothing stored.
 - [ ] Disconnect: token gone, pre-filled brands gone, no further requests in the server log.
 
-When the real API exists: repeat against it, and compare every request with `docs/legiit-api-contract.yaml`.
+When the real API exists: run `npm run api:check` against it first (see `docs/legiit-api/README.md`), then repeat this section with a build that points at it.
 
 ## 11. Chrome built-in AI (optional provider)
 

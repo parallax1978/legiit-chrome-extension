@@ -9,7 +9,7 @@ import { contentSentences, textSentences, type SentenceUnit } from '@/features/n
 import { recordRun } from '@/features/shared/gating';
 import { loadPages } from '@/features/shared/load-pages';
 import { contentEditorPayload } from '@/legiit/payloads';
-import { safeHttpUrl, slugify, stripWww } from '@/lib/sanitize';
+import { cutText, safeHttpUrl, slugify, stripWww } from '@/lib/sanitize';
 import { formatPercent } from '@/lib/text';
 import { urlKey } from '@/lib/url';
 import type { HighlightGroup } from '@/model/messages';
@@ -41,6 +41,8 @@ interface NoiseResult {
   pageUrl: string | null;
   pageTitle: string;
   mode: Mode;
+  /** When the comparison was made. */
+  at: number;
 }
 
 const CLASS_ORDER: SentenceClass[] = ['only', 'some', 'most'];
@@ -48,7 +50,8 @@ const CLASS_COLOR: Readonly<Record<SentenceClass, string>> = { most: '#94a3b8', 
 
 /** "Page title | Site" → "Page title": a sensible first guess at the target keyword. */
 function keywordFromTitle(title: string): string {
-  return (title.split(/\s[|–—·]\s|\s-\s/)[0] ?? title).replace(/[?!.]+$/, '').trim().slice(0, 120);
+  const first = (title.split(/\s[|–—·]\s|\s-\s/)[0] ?? title).replace(/[?!.]+$/, '').trim();
+  return cutText(first, 120).trim();
 }
 
 function parseUrlList(text: string): string[] {
@@ -159,11 +162,12 @@ export function NewOrNoiseTab() {
       const digests = await loadPages(comparisonUrls, { fetchPage, cache: pageCache }, { signal, onProgress: (done, total) => progress(done, total, 'Reading comparison pages') });
       const pages: ComparisonPage[] = digests.filter((d) => d.ok).map((d) => ({ url: d.url, title: d.title, sentences: contentSentences({ blocks: d.blocks }) }));
       if (pages.length === 0) throw new Error('None of the comparison pages could be read.');
+      if (pages.every((p) => p.sentences.length === 0)) throw new Error('The comparison pages had no readable text to compare with.');
 
       progress(0, 0, 'Loading the on-device model');
       const { engine, fallbackReason } = await getEngine();
       const report = await classifySentences(target, pages, engine, { signal, onProgress: (done, total) => progress(done, total, 'Comparing sentences') });
-      return { report, digests, fallbackReason, keyword: keyword.trim(), pageUrl: mode === 'pasted' ? null : pageUrl, pageTitle: mode === 'pasted' ? 'Pasted text' : pageTitle, mode };
+      return { report, digests, fallbackReason, keyword: keyword.trim(), pageUrl: mode === 'pasted' ? null : pageUrl, pageTitle: mode === 'pasted' ? 'Pasted text' : pageTitle, mode, at: Date.now() };
     });
   };
 
@@ -344,8 +348,8 @@ export function NewOrNoiseTab() {
                 <SaveToLegiit
                   method="sendToContentEditor"
                   label="Send to content editor"
-                  payload={() => contentEditorPayload({ targetKeyword: result.keyword, pageUrl: result.pageUrl, pageTitle: result.pageTitle, report: result.report, comparedUrls: result.digests.filter((d) => d.ok).map((d) => d.url) })}
-                  send={(payload, businessId) => connection.client!.sendToContentEditor(businessId, payload)}
+                  payload={() => contentEditorPayload({ targetKeyword: result.keyword, source: result.mode, pageUrl: result.pageUrl, pageTitle: result.mode === 'pasted' ? '' : result.pageTitle, capturedAt: result.at, report: result.report })}
+                  send={(payload, businessId, options) => connection.client!.sendToContentEditor(businessId, payload, options)}
                 />
               )}
             </div>

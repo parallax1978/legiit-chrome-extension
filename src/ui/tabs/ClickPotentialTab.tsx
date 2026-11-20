@@ -18,6 +18,7 @@ import { formatInt, formatPercent } from '@/lib/text';
 import { SerpDataSchema, type SerpData } from '@/model/schemas';
 import { sendToTab } from '@/panel/tabs';
 import { deleteKeyword, deleteSnapshot, listKeywords, listSnapshots, saveSnapshot, type KeywordSummary } from '@/storage/db';
+import { trackedBrands } from '@/storage/settings';
 import { useConnection, useSettings, useTarget } from '../hooks';
 import { Button, Card, Chip, EmptyState, ExtensionLink, ExternalLink, formatDateTime, Notice, Stat, type Tone } from '../kit';
 import { AccessCard, CsvButton, SaveToLegiit, Summary } from '../shared';
@@ -412,8 +413,13 @@ export function ClickPotentialTab() {
         actions={
           <div className="row">
             <CsvButton filename={`click-potential-${slugify(serp.keyword)}.csv`} build={() => organicCsv(serp, cp)} testId="cp-export" />
-            {snapshot && connection.client && (
-              <SaveToLegiit method="saveVisibilitySnapshot" payload={() => snapshotPayload(snapshot)} send={(payload, businessId) => connection.client!.saveVisibilitySnapshot(businessId, payload)} />
+            {/* Only a page that was really measured, for a real query, is worth saving. */}
+            {snapshot && cp.measured && snapshot.keyword !== '' && connection.client && (
+              <SaveToLegiit
+                method="saveVisibilitySnapshot"
+                payload={() => snapshotPayload(snapshot, trackedBrands(settings))}
+                send={(payload, businessId, options) => connection.client!.saveVisibilitySnapshot(businessId, payload, options)}
+              />
             )}
           </div>
         }

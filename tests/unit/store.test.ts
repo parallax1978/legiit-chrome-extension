@@ -146,7 +146,7 @@ describe('store images', () => {
 
 describe('project documents', () => {
   it('are all present', () => {
-    for (const file of ['README.md', 'docs/ARCHITECTURE.md', 'docs/DECISIONS.md', 'docs/PERMISSIONS.md', 'docs/QA.md', 'docs/legiit-api-contract.yaml', 'store/README.md', 'public/THIRD-PARTY-NOTICES.txt']) {
+    for (const file of ['README.md', 'docs/ARCHITECTURE.md', 'docs/DECISIONS.md', 'docs/PERMISSIONS.md', 'docs/QA.md', 'docs/legiit-api/README.md', 'docs/legiit-api/reference.md', 'docs/legiit-api/openapi.yaml', 'store/README.md', 'public/THIRD-PARTY-NOTICES.txt']) {
       expect(existsSync(join(ROOT, file)), file).toBe(true);
       expect(read(file).length, file).toBeGreaterThan(1500);
     }

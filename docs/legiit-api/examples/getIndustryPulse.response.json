@@ -1,0 +1,35 @@
+{
+  "updatedAt": "2026-11-18T09:00:00Z",
+  "events": [
+    {
+      "date": "2026-10-06",
+      "title": "Google core update (rollout started)",
+      "type": "algorithm-update",
+      "url": null
+    },
+    {
+      "date": "2026-06-03",
+      "title": "AI Overviews expanded to more local queries",
+      "type": "serp-feature",
+      "url": null
+    },
+    {
+      "date": "2025-03-13",
+      "title": "Google core update (rollout started)",
+      "type": "algorithm-update",
+      "url": null
+    },
+    {
+      "date": "2025-02-01",
+      "title": "Reviews system refresh",
+      "type": "algorithm-update",
+      "url": null
+    },
+    {
+      "date": "2024-08-15",
+      "title": "Google core update (rollout started)",
+      "type": "algorithm-update",
+      "url": null
+    }
+  ]
+}

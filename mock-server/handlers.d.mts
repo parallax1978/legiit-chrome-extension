@@ -14,7 +14,7 @@ export interface MockResponse {
 export interface MockState {
   session: { capabilities: string[] } & Record<string, unknown>;
   businesses: unknown;
-  details: Record<string, unknown>;
+  details: Record<string, { competitors: { name: string; domains?: string[] }[] } & Record<string, unknown>>;
   pulse: unknown;
   saved: {
     visibilitySnapshots: { id: string; businessId: string; payload: Record<string, unknown> }[];
@@ -24,7 +24,8 @@ export interface MockState {
     workspaces: { id: string; payload: Record<string, unknown> }[];
   };
   aiRequests: Record<string, unknown>[];
-  requests: { method: string; path: string }[];
+  requests: { method: string; path: string; idempotencyKey: string | null }[];
+  replies: Map<string, MockResponse>;
   nextId: number;
 }
 

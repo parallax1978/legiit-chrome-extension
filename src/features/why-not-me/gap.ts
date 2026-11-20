@@ -11,10 +11,17 @@ import type { PageScan } from './scan';
 
 export type GapPageType = 'competitor-site' | 'list' | 'forum' | 'video' | 'third-party' | 'surface';
 
+/** Machine-readable id of where a gap was found. "scanned_page": found only by reading a cited or list-style page. */
+export type GapSurfaceId = SurfaceId | 'scanned_page';
+
 export interface GapRow {
   id: string;
-  surfaceId: SurfaceId | 'scanned_page';
-  /** "AI Overview citation", "Organic #3", "Local pack", "Answer text", "Scanned page"… */
+  surfaceId: GapSurfaceId;
+  /**
+   * Display label: "AI Overview citation", "Organic #3", "Local pack",
+   * "Answer text", "Forums text"… Rows found only by a scan carry the label of
+   * where the page was linked from ("AI Mode citation", "Cited by ChatGPT").
+   */
   surface: string;
   position: number | null;
   title: string;
@@ -34,7 +41,7 @@ export interface GapRow {
 
 export type GapSortKey = 'priority' | 'surface' | 'position' | 'competitors' | 'domain' | 'title';
 
-const SURFACE_WEIGHT: Readonly<Record<GapRow['surfaceId'], number>> = {
+const SURFACE_WEIGHT: Readonly<Record<GapSurfaceId, number>> = {
   ai_overview: 100,
   answer_text: 100,
   citations: 95,
@@ -67,7 +74,7 @@ function list(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-function priority(surfaceId: GapRow['surfaceId'], position: number | null, competitors: number, actionable: boolean, contacts: number): number {
+function priority(surfaceId: GapSurfaceId, position: number | null, competitors: number, actionable: boolean, contacts: number): number {
   return SURFACE_WEIGHT[surfaceId] - Math.min(position ?? 0, 30) + competitors * 10 + (actionable ? 15 : 0) + (contacts > 0 ? 5 : 0);
 }
 
@@ -84,7 +91,7 @@ export function buildGapRows(presence: Presence, scans: readonly PageScan[] = []
 
     // The surface's own wording names competitors and not the user.
     if (surface.textCompetitors.length > 0 && surface.textMine.length === 0) {
-      const what = surface.id === 'answer_text' ? `The ${presence.sourceLabel} answer` : `The ${surface.label} text`;
+      const what = surface.id !== 'answer_text' ? `The ${surface.label} text` : presence.site === 'pasted' ? 'The pasted answer' : `The ${presence.sourceLabel} answer`;
       rows.push({
         id: hashString(`${presence.subject}|${surface.id}|text`),
         surfaceId: surface.id,
@@ -125,7 +132,7 @@ export function buildGapRows(presence: Presence, scans: readonly PageScan[] = []
       const actionable = !ownSite && surface.id !== 'ad' && surface.id !== 'local_pack';
       const evidence = ownSite
         ? `${list(competitors)}'s own page appears here; yours does not.`
-        : scan
+        : scan && scan.competitors.length > 0
           ? `This page names ${list(scan.competitors.map((c) => `${c.name} (${c.mentions}×)`))} and never mentions you.`
           : surface.id === 'local_pack'
             ? `${list(competitors)} is listed in the local pack; you are not.`

@@ -1,0 +1,492 @@
+{
+  "source": "Google results",
+  "subject": "best dentist in austin",
+  "capturedAt": "2026-11-20T12:00:00.000Z",
+  "rows": [
+    {
+      "surfaceId": "ai_overview",
+      "surface": "AI Overview citation",
+      "position": 1,
+      "title": "10 Best Dentists in Austin (2026) – Austin Health Guide",
+      "url": "https://www.austinhealthguide.example/best-dentists-austin",
+      "domain": "austinhealthguide.example",
+      "competitors": [
+        "Capitol Dental Care",
+        "Lakeside Smiles",
+        "Zilker Family Dentistry"
+      ],
+      "evidence": "This page names Capitol Dental Care (2×), Lakeside Smiles (2×) and Zilker Family Dentistry (2×) and never mentions you.",
+      "pageType": "list",
+      "actionable": true,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "About",
+          "url": "https://www.austinhealthguide.example/about"
+        },
+        {
+          "kind": "author",
+          "label": "Maya Ortiz",
+          "url": "https://www.austinhealthguide.example/authors/maya-ortiz"
+        },
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.austinhealthguide.example/contact"
+        },
+        {
+          "kind": "submission",
+          "label": "Suggest a dentist",
+          "url": "https://www.austinhealthguide.example/suggest-a-dentist"
+        },
+        {
+          "kind": "submission",
+          "label": "Editorial guidelines",
+          "url": "https://www.austinhealthguide.example/editorial-guidelines"
+        },
+        {
+          "kind": "contact",
+          "label": "editors@austinhealthguide.example",
+          "url": "mailto:editors@austinhealthguide.example"
+        }
+      ]
+    },
+    {
+      "surfaceId": "ai_overview",
+      "surface": "AI Overview citation",
+      "position": 3,
+      "title": "Top Rated Dentists in Austin, Texas",
+      "url": "https://texaslocalpicks.example/austin/top-rated-dentists",
+      "domain": "texaslocalpicks.example",
+      "competitors": [
+        "Capitol Dental Care",
+        "Lakeside Smiles"
+      ],
+      "evidence": "This page names Capitol Dental Care (1×) and Lakeside Smiles (1×) and never mentions you.",
+      "pageType": "list",
+      "actionable": true,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "About us",
+          "url": "https://texaslocalpicks.example/about-us"
+        },
+        {
+          "kind": "submission",
+          "label": "Get listed",
+          "url": "https://texaslocalpicks.example/get-listed"
+        },
+        {
+          "kind": "contact",
+          "label": "Contact us",
+          "url": "https://texaslocalpicks.example/contact"
+        },
+        {
+          "kind": "contact",
+          "label": "hello@texaslocalpicks.example",
+          "url": "mailto:hello@texaslocalpicks.example"
+        }
+      ]
+    },
+    {
+      "surfaceId": "ai_overview",
+      "surface": "AI Overview text",
+      "position": null,
+      "title": "The AI Overview text names Lakeside Smiles, Capitol Dental Care and Zilker Family Dentistry",
+      "url": null,
+      "domain": null,
+      "competitors": [
+        "Lakeside Smiles",
+        "Capitol Dental Care",
+        "Zilker Family Dentistry"
+      ],
+      "evidence": "The AI Overview text names Lakeside Smiles, Capitol Dental Care and Zilker Family Dentistry and does not mention you.",
+      "pageType": "surface",
+      "actionable": false,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "organic",
+      "surface": "Organic #1",
+      "position": 1,
+      "title": "10 Best Dentists in Austin (2026) – Austin Health Guide",
+      "url": "https://www.austinhealthguide.example/best-dentists-austin",
+      "domain": "austinhealthguide.example",
+      "competitors": [
+        "Capitol Dental Care",
+        "Lakeside Smiles",
+        "Zilker Family Dentistry"
+      ],
+      "evidence": "This page names Capitol Dental Care (2×), Lakeside Smiles (2×) and Zilker Family Dentistry (2×) and never mentions you.",
+      "pageType": "list",
+      "actionable": true,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "About",
+          "url": "https://www.austinhealthguide.example/about"
+        },
+        {
+          "kind": "author",
+          "label": "Maya Ortiz",
+          "url": "https://www.austinhealthguide.example/authors/maya-ortiz"
+        },
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.austinhealthguide.example/contact"
+        },
+        {
+          "kind": "submission",
+          "label": "Suggest a dentist",
+          "url": "https://www.austinhealthguide.example/suggest-a-dentist"
+        },
+        {
+          "kind": "submission",
+          "label": "Editorial guidelines",
+          "url": "https://www.austinhealthguide.example/editorial-guidelines"
+        },
+        {
+          "kind": "contact",
+          "label": "editors@austinhealthguide.example",
+          "url": "mailto:editors@austinhealthguide.example"
+        }
+      ]
+    },
+    {
+      "surfaceId": "ai_overview",
+      "surface": "AI Overview citation",
+      "position": 2,
+      "title": "Family & Cosmetic Dentist in Austin, TX",
+      "url": "https://www.lakesidesmiles.example/",
+      "domain": "lakesidesmiles.example",
+      "competitors": [
+        "Lakeside Smiles"
+      ],
+      "evidence": "Lakeside Smiles's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.lakesidesmiles.example/contact"
+        }
+      ]
+    },
+    {
+      "surfaceId": "ai_overview",
+      "surface": "AI Overview citation",
+      "position": 4,
+      "title": "Capitol Dental Care | Downtown Austin Dentist",
+      "url": "https://www.capitoldentalcare.example/",
+      "domain": "capitoldentalcare.example",
+      "competitors": [
+        "Capitol Dental Care"
+      ],
+      "evidence": "Capitol Dental Care's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.capitoldentalcare.example/contact"
+        }
+      ]
+    },
+    {
+      "surfaceId": "organic",
+      "surface": "Organic #3",
+      "position": 3,
+      "title": "Top Rated Dentists in Austin, Texas",
+      "url": "https://texaslocalpicks.example/austin/top-rated-dentists",
+      "domain": "texaslocalpicks.example",
+      "competitors": [
+        "Capitol Dental Care",
+        "Lakeside Smiles"
+      ],
+      "evidence": "This page names Capitol Dental Care (1×) and Lakeside Smiles (1×) and never mentions you.",
+      "pageType": "list",
+      "actionable": true,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "About us",
+          "url": "https://texaslocalpicks.example/about-us"
+        },
+        {
+          "kind": "submission",
+          "label": "Get listed",
+          "url": "https://texaslocalpicks.example/get-listed"
+        },
+        {
+          "kind": "contact",
+          "label": "Contact us",
+          "url": "https://texaslocalpicks.example/contact"
+        },
+        {
+          "kind": "contact",
+          "label": "hello@texaslocalpicks.example",
+          "url": "mailto:hello@texaslocalpicks.example"
+        }
+      ]
+    },
+    {
+      "surfaceId": "organic",
+      "surface": "Organic #5",
+      "position": 5,
+      "title": "Lakeside Smiles vs Capitol Dental Care: Which Austin Dentist Is Better?",
+      "url": "https://smilecompare.example/lakeside-smiles-vs-capitol-dental-care",
+      "domain": "smilecompare.example",
+      "competitors": [
+        "Lakeside Smiles",
+        "Capitol Dental Care"
+      ],
+      "evidence": "This page names Capitol Dental Care (6×) and Lakeside Smiles (6×) and never mentions you.",
+      "pageType": "list",
+      "actionable": true,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "author",
+          "label": "Dev Patel",
+          "url": "https://smilecompare.example/author/dev-patel/"
+        },
+        {
+          "kind": "submission",
+          "label": "Write for us",
+          "url": "https://smilecompare.example/write-for-us"
+        },
+        {
+          "kind": "contact",
+          "label": "About",
+          "url": "https://smilecompare.example/about"
+        }
+      ]
+    },
+    {
+      "surfaceId": "local_pack",
+      "surface": "Local pack",
+      "position": 1,
+      "title": "Family & Cosmetic Dentist in Austin, TX",
+      "url": "https://www.lakesidesmiles.example/",
+      "domain": "lakesidesmiles.example",
+      "competitors": [
+        "Lakeside Smiles"
+      ],
+      "evidence": "Lakeside Smiles's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.lakesidesmiles.example/contact"
+        }
+      ]
+    },
+    {
+      "surfaceId": "local_pack",
+      "surface": "Local pack",
+      "position": 2,
+      "title": "Capitol Dental Care | Downtown Austin Dentist",
+      "url": "https://www.capitoldentalcare.example/",
+      "domain": "capitoldentalcare.example",
+      "competitors": [
+        "Capitol Dental Care"
+      ],
+      "evidence": "Capitol Dental Care's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.capitoldentalcare.example/contact"
+        }
+      ]
+    },
+    {
+      "surfaceId": "local_pack",
+      "surface": "Local pack",
+      "position": 3,
+      "title": "Zilker Family Dentistry",
+      "url": "https://www.zilkerfamilydentistry.example/",
+      "domain": "zilkerfamilydentistry.example",
+      "competitors": [
+        "Zilker Family Dentistry"
+      ],
+      "evidence": "Zilker Family Dentistry's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "organic",
+      "surface": "Organic #2",
+      "position": 2,
+      "title": "Family & Cosmetic Dentist in Austin, TX",
+      "url": "https://www.lakesidesmiles.example/",
+      "domain": "lakesidesmiles.example",
+      "competitors": [
+        "Lakeside Smiles"
+      ],
+      "evidence": "Lakeside Smiles's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.lakesidesmiles.example/contact"
+        }
+      ]
+    },
+    {
+      "surfaceId": "organic",
+      "surface": "Organic #4",
+      "position": 4,
+      "title": "Capitol Dental Care | Downtown Austin Dentist",
+      "url": "https://www.capitoldentalcare.example/",
+      "domain": "capitoldentalcare.example",
+      "competitors": [
+        "Capitol Dental Care"
+      ],
+      "evidence": "Capitol Dental Care's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": true,
+      "contacts": [
+        {
+          "kind": "contact",
+          "label": "Contact",
+          "url": "https://www.capitoldentalcare.example/contact"
+        }
+      ]
+    },
+    {
+      "surfaceId": "forum",
+      "surface": "Forum result",
+      "position": 1,
+      "title": "Best dentist in Austin? : r/Austin",
+      "url": "https://www.reddit.com/r/Austin/comments/fixture1/best_dentist_in_austin/",
+      "domain": "reddit.com",
+      "competitors": [
+        "Lakeside Smiles"
+      ],
+      "evidence": "Names Lakeside Smiles, not you.",
+      "pageType": "forum",
+      "actionable": true,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "forum",
+      "surface": "Forum result",
+      "position": 3,
+      "title": "Who is the best dentist in Austin?",
+      "url": "https://www.askaustin.example/q/who-is-the-best-dentist-in-austin",
+      "domain": "askaustin.example",
+      "competitors": [
+        "Capitol Dental Care"
+      ],
+      "evidence": "Names Capitol Dental Care, not you.",
+      "pageType": "forum",
+      "actionable": true,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "organic",
+      "surface": "Organic #8",
+      "position": 8,
+      "title": "About Zilker Family Dentistry",
+      "url": "https://www.zilkerfamilydentistry.example/about",
+      "domain": "zilkerfamilydentistry.example",
+      "competitors": [
+        "Zilker Family Dentistry"
+      ],
+      "evidence": "Zilker Family Dentistry's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "video",
+      "surface": "Video result",
+      "position": 1,
+      "title": "How to Choose a Dentist in Austin",
+      "url": "https://www.youtube.com/watch?v=fx1lakeside",
+      "domain": "youtube.com",
+      "competitors": [
+        "Lakeside Smiles"
+      ],
+      "evidence": "Names Lakeside Smiles, not you.",
+      "pageType": "video",
+      "actionable": true,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "video",
+      "surface": "Video result",
+      "position": 2,
+      "title": "Austin Dentist Office Tour | Capitol Dental Care",
+      "url": "https://www.youtube.com/watch?v=fx2capitol",
+      "domain": "youtube.com",
+      "competitors": [
+        "Capitol Dental Care"
+      ],
+      "evidence": "Names Capitol Dental Care, not you.",
+      "pageType": "video",
+      "actionable": true,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "ad",
+      "surface": "Ad",
+      "position": 1,
+      "title": "Lakeside Smiles – New Patient Special $79",
+      "url": "https://www.lakesidesmiles.example/new-patients",
+      "domain": "lakesidesmiles.example",
+      "competitors": [
+        "Lakeside Smiles"
+      ],
+      "evidence": "Lakeside Smiles's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": false,
+      "contacts": []
+    },
+    {
+      "surfaceId": "ad",
+      "surface": "Ad",
+      "position": 3,
+      "title": "Capitol Dental Care – Evening Appointments Downtown",
+      "url": "https://www.capitoldentalcare.example/book",
+      "domain": "capitoldentalcare.example",
+      "competitors": [
+        "Capitol Dental Care"
+      ],
+      "evidence": "Capitol Dental Care's own page appears here; yours does not.",
+      "pageType": "competitor-site",
+      "actionable": false,
+      "scanned": false,
+      "contacts": []
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import { PRODUCT_NAME, SUGGESTED_SHORTCUT } from '@/config/constants';
 import { downloadText } from '@/lib/csv';
 import { errorMessage } from '@/lib/async';
 import { noteFailure } from '@/legiit/connection';
-import { LegiitError, type LegiitMethod } from '@/legiit/client';
+import { isUnavailable, LegiitError, type LegiitMethod, type SaveOptions } from '@/legiit/client';
 import type { SaveResult } from '@/legiit/types';
 import { describeSites, hasAccess, requestAccess } from '@/net/permissions';
 import { Button, Card, Chip, Dialog, ExternalLink, Lines, Notice } from './kit';
@@ -160,6 +160,7 @@ export function Summary({ title = 'What explains it', request, testId }: { title
         >
           <p>This is exactly what will be sent to Legiit. Nothing else leaves your device.</p>
           <pre className="payload">{JSON.stringify(legiitAiPayload(request), null, 2)}</pre>
+          <p className="small muted">Sent with it: your Legiit token and this extension’s version number.</p>
         </Dialog>
       )}
     </Card>
@@ -183,7 +184,7 @@ export function SaveToLegiit<T>({
   label?: string;
   /** Built when the dialog opens, so it reflects what is on screen. */
   payload: () => T;
-  send: (payload: T, businessId: string) => Promise<SaveResult>;
+  send: (payload: T, businessId: string, options: SaveOptions) => Promise<SaveResult>;
   needsBusiness?: boolean;
   testId?: string;
 }) {
@@ -191,13 +192,18 @@ export function SaveToLegiit<T>({
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState<T | null>(null);
+  const [key, setKey] = useState('');
   const [state, setState] = useState<{ status: 'idle' | 'sending' | 'saved' | 'error'; message?: string; result?: SaveResult }>({ status: 'idle' });
 
-  if (!can(method)) return null;
+  // The button goes away when Legiit turns out not to offer this. An open dialog stays, so the user reads why.
+  const available = can(method);
+  if (!available && !open) return null;
   const businessId = settings.legiit.businessId;
 
   const start = () => {
     setBody(payload());
+    // One key per confirmed save: sending again from this dialog repeats the key, so Legiit can avoid storing it twice.
+    setKey(crypto.randomUUID());
     setState({ status: 'idle' });
     setOpen(true);
   };
@@ -205,21 +211,24 @@ export function SaveToLegiit<T>({
     if (body === null) return;
     setState({ status: 'sending' });
     try {
-      const result = await send(body, businessId ?? '');
+      const result = await send(body, businessId ?? '', { idempotencyKey: key });
       setState({ status: 'saved', result });
       setOpen(false);
     } catch (error) {
       noteFailure(method, error);
       refreshCapabilities();
-      setState({ status: 'error', message: error instanceof LegiitError ? error.message : errorMessage(error) });
+      const message = isUnavailable(error) ? 'Legiit cannot receive this yet. Nothing was saved.' : error instanceof LegiitError ? error.message : errorMessage(error);
+      setState({ status: 'error', message });
     }
   };
 
   return (
     <>
-      <Button small onClick={start} data-testid={testId ?? `save-${method}`}>
-        {label}
-      </Button>
+      {available && (
+        <Button small onClick={start} data-testid={testId ?? `save-${method}`}>
+          {label}
+        </Button>
+      )}
       {state.status === 'saved' && (
         <span className="small" data-testid="save-result">
           <Chip tone="ok">Saved</Chip> {state.result?.url && <ExternalLink href={state.result.url}>Open in Command Center</ExternalLink>}
@@ -233,7 +242,7 @@ export function SaveToLegiit<T>({
           footer={
             <>
               <Button onClick={() => setOpen(false)}>Cancel</Button>
-              <Button variant="primary" disabled={state.status === 'sending' || (needsBusiness && !businessId)} onClick={() => void confirm()} data-testid="save-confirm">
+              <Button variant="primary" disabled={state.status === 'sending' || !available || (needsBusiness && !businessId)} onClick={() => void confirm()} data-testid="save-confirm">
                 {state.status === 'sending' ? 'Sending…' : 'Send to Legiit'}
               </Button>
             </>
@@ -249,7 +258,14 @@ export function SaveToLegiit<T>({
           <pre className="payload" data-testid="save-payload">
             {JSON.stringify(body, null, 2)}
           </pre>
-          {state.status === 'error' && <Notice tone="error">{state.message}</Notice>}
+          <p className="small muted" data-testid="save-also-sent">
+            Sent with it: your Legiit token, this extension’s version number, and a one-time number that stops an accidental repeat from being stored twice.
+          </p>
+          {state.status === 'error' && (
+            <Notice tone="error" testId="save-error">
+              {state.message}
+            </Notice>
+          )}
         </Dialog>
       )}
     </>

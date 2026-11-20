@@ -10,7 +10,9 @@
  * finding the facts.
  */
 import type { LegiitClient } from '@/legiit/client';
+import { LIMITS } from '@/legiit/limits';
 import type { AiCompletionRequest } from '@/legiit/types';
+import { cutText, wellFormedDeep } from '@/lib/sanitize';
 
 export type AiProviderId = 'legiit' | 'chrome-prompt' | 'none';
 export type AiTask = AiCompletionRequest['task'];
@@ -49,7 +51,7 @@ export function buildPrompt(request: AiRequest): { system: string; prompt: strin
   const facts: string[] = [];
   let used = 0;
   for (const fact of request.facts) {
-    const line = fact.replace(/\s+/g, ' ').trim().slice(0, 600);
+    const line = cutText(fact.replace(/\s+/g, ' ').trim(), 600);
     if (!line) continue;
     if (used + line.length > MAX_FACT_CHARS) break;
     facts.push(`- ${line}`);
@@ -67,13 +69,13 @@ export function buildPrompt(request: AiRequest): { system: string; prompt: strin
 /** The request body for the Legiit AI endpoint. Shown to the user verbatim before it is sent. */
 export function legiitAiPayload(request: AiRequest): AiCompletionRequest {
   const { system, prompt } = buildPrompt(request);
-  return {
+  return wellFormedDeep({
     task: request.task,
-    system,
-    prompt,
+    system: cutText(system, LIMITS.ai.system),
+    prompt: cutText(prompt, LIMITS.ai.prompt),
     ...(request.responseSchema ? { responseSchema: request.responseSchema } : {}),
-    maxOutputTokens: 700,
-  };
+    maxOutputTokens: LIMITS.ai.maxOutputTokens,
+  });
 }
 
 /** Provider 3: no model at all. */

@@ -1,0 +1,25 @@
+{
+  "targetKeyword": "",
+  "source": "pasted",
+  "pageUrl": null,
+  "pageTitle": "",
+  "capturedAt": "2026-11-20T12:00:00.000Z",
+  "method": {
+    "engine": "lexical",
+    "threshold": 0.5,
+    "pagesCompared": 1
+  },
+  "wordShare": {
+    "saidByMost": 0,
+    "saidBySome": 0,
+    "onlyHere": 1
+  },
+  "onlyHere": [
+    "We clean teeth with an air-polishing system that most patients find gentler than scraping.",
+    "Every visit ends with a written plan you can take home."
+  ],
+  "missingPoints": [],
+  "comparedUrls": [
+    "https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning"
+  ]
+}

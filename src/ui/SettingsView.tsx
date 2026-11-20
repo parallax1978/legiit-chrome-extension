@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { chromeModelAvailability, downloadChromeModel } from '@/ai/provider';
 import { PRODUCT_NAME } from '@/config/constants';
 import { LEGIIT_API_BASE_URL } from '@/config/runtime';
-import { LegiitError } from '@/legiit/client';
+import { isUnavailable, LegiitError } from '@/legiit/client';
+import { competitorPayload } from '@/legiit/payloads';
 import { applyBusinessDetails, clearBusinessDetails } from '@/legiit/prefill';
 import type { LegiitBusiness } from '@/legiit/types';
 import { errorMessage } from '@/lib/async';
@@ -72,11 +73,8 @@ function BrandEditor({ brand, kind, onChange, onRemove }: { brand: StoredBrand; 
           <SaveToLegiit
             method="addCompetitor"
             label="Add to Command Center"
-            payload={() => {
-              const current = typed();
-              return { name: current.name, domain: current.domains[0] ?? null };
-            }}
-            send={(payload, businessId) => connection.client!.addCompetitor(businessId, payload)}
+            payload={() => competitorPayload(typed())}
+            send={(payload, businessId, options) => connection.client!.addCompetitor(businessId, payload, options)}
           />
         </div>
       )}
@@ -197,20 +195,25 @@ function LegiitSection() {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [businesses, setBusinesses] = useState<LegiitBusiness[]>([]);
+  const [businesses, setBusinesses] = useState<LegiitBusiness[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const client = connection.client;
   const canList = can('listBusinesses');
 
   useEffect(() => {
     let alive = true;
-    if (!client || !canList) {
-      setBusinesses([]);
-      return;
-    }
+    setBusinesses(null);
+    setListError(null);
+    if (!client || !canList) return;
     client.listBusinesses().then(
       (list) => alive && setBusinesses(list),
-      () => alive && setBusinesses([]),
+      (e: unknown) => {
+        if (!alive) return;
+        setBusinesses([]);
+        // An account without this feature simply has no list; anything else is worth saying.
+        if (!isUnavailable(e)) setListError(`Could not load your businesses: ${errorMessage(e)}`);
+      },
     );
     return () => {
       alive = false;
@@ -265,7 +268,7 @@ function LegiitSection() {
           <div className="row" data-testid="legiit-connected">
             <Chip tone="ok">Connected</Chip>
             <span>
-              {connection.session.user.name}
+              {connection.session.user.name || connection.session.user.email || 'Legiit account'}
               {connection.session.plan ? ` · ${connection.session.plan}` : ''}
             </span>
           </div>
@@ -273,13 +276,28 @@ function LegiitSection() {
             <Field label="Business" hint="Saves go to this business, and its brand names and competitors are pre-filled.">
               <select value={settings.legiit.businessId ?? ''} onChange={(e) => void chooseBusiness(e.target.value)} data-testid="legiit-business">
                 <option value="">Choose a business…</option>
-                {businesses.map((b) => (
+                {(businesses ?? []).map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {b.name || b.domain || b.id}
                   </option>
                 ))}
               </select>
             </Field>
+          )}
+          {listError && (
+            <Notice tone="error" testId="legiit-businesses-error">
+              {listError}
+            </Notice>
+          )}
+          {businesses !== null && businesses.length > 0 && settings.legiit.businessId && !businesses.some((b) => b.id === settings.legiit.businessId) && (
+            <Notice tone="warn" testId="legiit-business-gone">
+              {settings.legiit.businessName ?? 'The business you chose'} is no longer in this Legiit account. Choose a business again.
+            </Notice>
+          )}
+          {canList && !listError && businesses !== null && businesses.length === 0 && (
+            <p className="small muted" data-testid="legiit-no-businesses">
+              This Legiit account has no businesses yet. Add one in Command Center, then open this page again.
+            </p>
           )}
           {note && <Notice tone="ok">{note}</Notice>}
           {settings.legiit.focusKeywords.length > 0 && (
