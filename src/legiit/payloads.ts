@@ -10,7 +10,7 @@ import type { Brief } from '@/features/instant-brief/compose';
 import type { NoiseReport } from '@/features/new-or-noise/classify';
 import type { GapRow } from '@/features/why-not-me/gap';
 import type { Presence } from '@/features/why-not-me/presence';
-import type { ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
+import type { CompetitorPayload, ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
 
 const round = (value: number, digits = 4): number => Number(value.toFixed(digits));
 
@@ -95,4 +95,9 @@ export function workspacePayload(brief: Brief, markdown: string): WorkspaceFromB
     nextSteps: brief.nextSteps,
     markdown,
   };
+}
+
+/** A competitor the user typed in Settings, as it is added to a business in Command Center. */
+export function competitorPayload(brand: { name: string; domains: readonly string[] }): CompetitorPayload {
+  return { name: brand.name, domain: brand.domains[0] ?? null };
 }
