@@ -181,6 +181,9 @@ interface TargetValue {
 
 const TargetContext = createContext<TargetValue | null>(null);
 
+/** How long to wait between attempts to read a tab the user has just invoked the extension on (about 2 s in total). */
+const INVOKED_RETRY_DELAYS_MS = [100, 250, 500, 1200];
+
 export function TargetProvider({ children }: { children: ReactNode }) {
   const [access, setAccess] = useState<TargetValue['access']>({ status: 'loading' });
   const [epoch, setEpoch] = useState(0);
@@ -188,12 +191,30 @@ export function TargetProvider({ children }: { children: ReactNode }) {
   const tabIdRef = useRef<number | null>(null);
   const requestRef = useRef(0);
 
-  const resolve = useCallback(async (forcedTabId?: number) => {
+  /**
+   * Finds out what the panel can see in the target tab.
+   *
+   * `justInvoked` means Chrome has just told the service worker that the user
+   * invoked the extension on this tab, which grants access to it. That grant
+   * reaches the page a moment later than the event reaches us: on a busy
+   * machine the first attempt to read the page can still be refused. So after
+   * an invocation a refusal is not final; the probe is repeated for about two
+   * seconds before the panel concludes it has no access.
+   */
+  const resolve = useCallback(async (forcedTabId?: number, justInvoked = false) => {
     const request = ++requestRef.current;
     const pinned = pinnedTabId();
     const tabId = pinned ?? forcedTabId ?? (await activeTabId());
     tabIdRef.current = tabId;
-    const result = await probeTab(tabId);
+    let result = await probeTab(tabId);
+    if (justInvoked) {
+      for (const wait of INVOKED_RETRY_DELAYS_MS) {
+        if (result.status !== 'no-access' || request !== requestRef.current) break;
+        await new Promise((done) => setTimeout(done, wait));
+        if (request !== requestRef.current) break;
+        result = await probeTab(tabId);
+      }
+    }
     // A newer probe may have started while this one was running.
     if (request === requestRef.current) {
       setAccess(result);
@@ -222,7 +243,7 @@ export function TargetProvider({ children }: { children: ReactNode }) {
         // The user just invoked the extension on this tab: Chrome has granted access to it.
         const pinned = pinnedTabId();
         if (pinned === null || pinned === event.tabId) {
-          void resolve(event.tabId);
+          void resolve(event.tabId, true);
           if (event.intent === 'selection' || event.intent === 'analyze') setIntent({ intent: event.intent, at: Date.now() });
         }
       } else if (event.type === 'lens:page-changed' && sender.tab?.id === tabIdRef.current) {

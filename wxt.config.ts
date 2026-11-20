@@ -94,7 +94,9 @@ export default defineConfig({
       // Required hosts: the Wayback Machine (Rewind) and the Legiit API (only used when connected).
       host_permissions: [`${WAYBACK_ORIGIN}/*`, `${legiitOrigin}/*`],
       // Never granted at install. Requested per site, at the moment of use, from a user gesture.
-      optional_host_permissions: ['https://*/*', 'http://*/*'],
+      // One pattern for both schemes: Chrome only lets an extension request a pattern that fits inside a
+      // single optional pattern, and sites are requested as "*://*.example.com/*" (see src/net/permissions.ts).
+      optional_host_permissions: ['*://*/*'],
       commands: {
         _execute_action: {
           suggested_key: { default: SUGGESTED_SHORTCUT },

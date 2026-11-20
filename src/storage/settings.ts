@@ -195,4 +195,5 @@ export async function restrictStorageToTrustedContexts(): Promise<void> {
 
 export async function clearAllSettings(): Promise<void> {
   await chrome.storage.local.clear();
+  await chrome.storage.session?.clear().catch(() => undefined);
 }

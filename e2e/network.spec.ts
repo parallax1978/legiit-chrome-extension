@@ -130,6 +130,28 @@ test.describe('network destinations', () => {
     expect(lens.requests.filter((r) => r.served === 'blocked')).toEqual([]);
     // No request carried data out: every one is a GET without a body.
     expect(made.filter((r) => r.method !== 'GET' || r.body !== null)).toEqual([]);
+    // And nothing went wrong anywhere on the way: pages, content scripts, side panel, service worker.
+    expect(await lens.allErrors()).toEqual([]);
+  });
+
+  test('errors would be noticed: in a page, in a content script’s page, and in the service worker', async ({ lens }) => {
+    const { page } = await lens.open(U.plainPage!);
+    await page.evaluate(() => console.error('deliberate page error'));
+    await page.evaluate(() => {
+      setTimeout(() => {
+        throw new Error('deliberate uncaught page error');
+      }, 0);
+    });
+    await lens.worker.evaluate(() => {
+      console.error('deliberate worker console error');
+      void Promise.reject(new Error('deliberate worker rejection'));
+    });
+    await page.waitForTimeout(300);
+    const all = (await lens.allErrors()).join('\n');
+    expect(all).toContain('deliberate page error');
+    expect(all).toContain('deliberate uncaught page error');
+    expect(all).toContain('deliberate worker console error');
+    expect(all).toContain('unhandled rejection: deliberate worker rejection');
   });
 
   test('Google and AI pages are only read: the content scripts send nothing', async ({ lens }) => {

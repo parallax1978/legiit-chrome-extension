@@ -127,6 +127,11 @@
       "contentType": "text/html; charset=utf-8"
     },
     {
+      "url": "https://www.brightpathdental.example/services/teeth-whitening",
+      "file": "site/services-teeth-whitening.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
       "url": "https://www.capitoldentalcare.example/",
       "file": "lists/capitoldentalcare-home.html",
       "contentType": "text/html; charset=utf-8"

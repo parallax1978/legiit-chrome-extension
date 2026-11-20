@@ -28,17 +28,10 @@ export async function hasAccess(url: string): Promise<boolean> {
 
 /** Patterns for the given URLs that are not granted yet. */
 export async function missingAccess(urls: readonly string[]): Promise<string[]> {
-  const missing: string[] = [];
-  for (const pattern of patternsFor(urls)) {
-    let granted = false;
-    try {
-      granted = await chrome.permissions.contains({ origins: [pattern] });
-    } catch {
-      granted = false;
-    }
-    if (!granted) missing.push(pattern);
-  }
-  return missing;
+  const patterns = patternsFor(urls);
+  // Checked together, so the click that started this is still "recent" when Chrome is asked to prompt.
+  const granted = await Promise.all(patterns.map((pattern) => chrome.permissions.contains({ origins: [pattern] }).catch(() => false)));
+  return patterns.filter((_, index) => !granted[index]);
 }
 
 /**

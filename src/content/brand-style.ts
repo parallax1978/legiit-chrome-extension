@@ -23,6 +23,9 @@ function isBrandLike(hex: string): boolean {
   return max - min >= 28 && max > 40 && min < 235;
 }
 
+/** The browser's own link colours. Seeing them means the site did not style its links, not that blue is its brand. */
+const BROWSER_LINK_COLORS = new Set(['#0000ee', '#551a8b']);
+
 const SAMPLES: readonly { selector: string; property: 'backgroundColor' | 'color'; source: string; weight: number }[] = [
   { selector: 'header, [role="banner"], nav', property: 'backgroundColor', source: 'header background', weight: 6 },
   { selector: 'button, [role="button"], a[class*="btn" i], a[class*="button" i], input[type="submit"]', property: 'backgroundColor', source: 'button background', weight: 5 },
@@ -43,6 +46,7 @@ export async function readBrandStyle(): Promise<BrandStyle> {
     for (const el of elements) {
       const hex = toHex(getComputedStyle(el)[sample.property]);
       if (!hex || !isBrandLike(hex)) continue;
+      if (sample.property === 'color' && BROWSER_LINK_COLORS.has(hex)) continue;
       const entry = tally.get(hex) ?? { weight: 0, source: sample.source };
       entry.weight += sample.weight;
       tally.set(hex, entry);

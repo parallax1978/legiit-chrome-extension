@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "wxt",
-    "build": "npm run model:verify && wxt zip && node scripts/package-release.mjs",
+    "build": "npm run model:verify && npm run notices && wxt zip && node scripts/package-release.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -21,6 +21,8 @@
     "model:fetch": "node scripts/fetch-model.mjs",
     "model:verify": "node scripts/fetch-model.mjs --verify-only",
     "icons": "node scripts/make-icons.mjs",
+    "notices": "node scripts/make-notices.mjs",
+    "privacy:html": "node scripts/render-privacy-policy.mjs",
     "check": "npm run typecheck && npm run lint && npm test",
     "postinstall": "wxt prepare",
     "fixtures": "node scripts/build-fixtures.mjs"

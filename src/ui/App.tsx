@@ -68,11 +68,12 @@ export function App() {
     void currentGate(connected).then(setGate);
   }, [connected, tab]);
 
-  // Until the user picks a tab, open the one that fits the page.
+  // Until the user picks a tab, open the one that fits the page:
+  // Google results → Click Potential, an AI answer → Why Not Me, any other page → Instant Brief.
   const agent = access.status === 'ready' ? access.ping.agent : null;
   useEffect(() => {
     if (chosenByUser || agent === null) return;
-    setTab(agent === 'ai' ? 'why' : 'click');
+    setTab(agent === 'ai' ? 'why' : agent === 'page' ? 'brief' : 'click');
   }, [agent, chosenByUser]);
 
   // "Check the selected text" from the context menu.

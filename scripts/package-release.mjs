@@ -46,6 +46,10 @@ check(
 check((manifest.host_permissions ?? []).length === 2, `expected exactly two required hosts (found ${manifest.host_permissions})`);
 check((manifest.host_permissions ?? []).includes('https://web.archive.org/*'), 'web.archive.org must be a required host');
 check(!(manifest.host_permissions ?? []).some((h) => /[*]:\/\/[*]\/|<all_urls>|^https?:\/\/\*\//.test(h)), 'no broad host may be required at install');
+check(
+  JSON.stringify(manifest.optional_host_permissions) === JSON.stringify(['*://*/*']),
+  'optional_host_permissions must be exactly ["*://*/*"]: Chrome refuses a per-site request ("*://*.example.com/*") unless it fits inside one optional pattern',
+);
 check(manifest.web_accessible_resources === undefined, 'the package must not expose web-accessible resources');
 check(!Object.keys(manifest.commands ?? {}).some((c) => c.startsWith('dev-')), 'development commands must not ship');
 const csp = String(manifest.content_security_policy?.extension_pages);

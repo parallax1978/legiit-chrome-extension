@@ -30,9 +30,10 @@ test.describe('options page', () => {
     await competitor.getByTestId('brand-domains').fill('lakesidesmiles.example');
     await competitor.getByTestId('brand-domains').blur();
 
-    const stored = await lens.worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings as { myBrands: { name: string; domains: string[]; aliases: string[] }[]; competitors: { name: string }[] });
-    expect(stored.myBrands).toMatchObject([{ name: 'BrightPath Dental', domains: ['brightpathdental.example'], aliases: ['Bright Path Dental', 'BrightPath'] }]);
-    expect(stored.competitors).toMatchObject([{ name: 'Lakeside Smiles' }]);
+    // The page shows a change at once and stores it a moment later, so wait for storage to catch up.
+    const stored = () => lens.worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings as { myBrands: { name: string; domains: string[]; aliases: string[] }[]; competitors: { name: string; domains: string[] }[] });
+    await expect.poll(async () => (await stored()).myBrands).toMatchObject([{ name: 'BrightPath Dental', domains: ['brightpathdental.example'], aliases: ['Bright Path Dental', 'BrightPath'] }]);
+    await expect.poll(async () => (await stored()).competitors).toMatchObject([{ name: 'Lakeside Smiles', domains: ['lakesidesmiles.example'] }]);
 
     // The results page that was already open picks the brands up without a reload.
     await expect.poll(() => lens.stripText(serp.page)).toContain('You #6 · below the fold');
@@ -62,12 +63,13 @@ test.describe('options page', () => {
 
     await options.getByTestId('agency-logo-input').setInputFiles(join(ROOT, 'fixtures/site/assets/brightpath-logo.png'));
     await expect(options.getByTestId('agency-logo')).toHaveAttribute('src', /^data:image\/png;base64,/);
-    const agency = await lens.worker.evaluate(async () => ((await chrome.storage.local.get('settings')).settings as { agency: { name: string; logoDataUrl: string } }).agency);
-    expect(agency.name).toBe('North Star SEO');
-    expect(agency.logoDataUrl.startsWith('data:image/png;base64,')).toBe(true);
+    const agency = () => lens.worker.evaluate(async () => ((await chrome.storage.local.get('settings')).settings as { agency: { name: string; logoDataUrl: string | null } }).agency);
+    await expect.poll(async () => (await agency()).logoDataUrl ?? '').toMatch(/^data:image\/png;base64,/);
+    expect((await agency()).name).toBe('North Star SEO');
 
     await options.getByRole('button', { name: 'Remove logo' }).click();
     await expect(options.getByTestId('agency-logo')).toHaveCount(0);
+    await expect.poll(async () => (await agency()).logoDataUrl).toBeNull();
   });
 
   test('shows what is stored on the device and erases it on request', async ({ lens }) => {
@@ -90,7 +92,7 @@ test.describe('options page', () => {
     await options.getByTestId('erase-all').click();
     await expect(options.getByTestId('options-page')).toBeVisible();
     await expect(options.getByTestId('brand-mine')).toHaveCount(0);
-    expect(await lens.worker.evaluate(async () => Object.keys(await chrome.storage.local.get(null)))).toEqual([]);
+    await expect.poll(() => lens.worker.evaluate(async () => Object.keys(await chrome.storage.local.get(null)))).toEqual([]);
     expect(lens.extensionRequests()).toEqual([]);
   });
 

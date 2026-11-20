@@ -78,6 +78,8 @@ test.describe('Why Not Me on Google results', () => {
     await panel.getByTestId('scan-sources').click();
     await panel.waitForTimeout(1500);
     await expect(panel.getByTestId('scan-results')).toHaveCount(0);
+    // Chrome accepted the request as coming from the click (its prompt is open and waiting); it was not refused.
+    await expect(panel.getByTestId('scan-denied')).toHaveCount(0);
     expect(lens.extensionRequests()).toEqual([]);
   });
 });

@@ -96,6 +96,12 @@ export interface Lens {
   realSidePanelOpen(): Promise<boolean>;
   /** Reads the text of a file the extension offered as a download. */
   downloadText(page: Page, trigger: () => Promise<void>): Promise<{ name: string; text: string }>;
+  /**
+   * Everything that went wrong anywhere: `errors`, plus uncaught exceptions
+   * and unhandled promise rejections inside the service worker (which do not
+   * show up as console messages).
+   */
+  allErrors(): Promise<string[]>;
 }
 
 interface DomNode {
@@ -280,6 +286,17 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
       if (message.type() === 'error') errors.push(`[service worker] ${message.text()}`);
     });
     const extensionId = new URL(worker.url()).host;
+    // Uncaught errors in the service worker are not console messages: collect them inside the worker.
+    await worker.evaluate(() => {
+      const scope = self as unknown as { __lensErrors?: string[] } & typeof globalThis;
+      if (scope.__lensErrors) return;
+      const collected: string[] = (scope.__lensErrors = []);
+      scope.addEventListener('error', (event) => collected.push(`[service worker] uncaught: ${(event as ErrorEvent).message}`));
+      scope.addEventListener('unhandledrejection', (event) => {
+        const reason = (event as PromiseRejectionEvent).reason as { message?: string } | undefined;
+        collected.push(`[service worker] unhandled rejection: ${reason?.message ?? String(reason)}`);
+      });
+    });
 
     // Installing opens the onboarding page; wait for it so later "active tab" lookups are stable.
     const onboarding = context.pages().find((p) => p.url().includes('onboarding.html')) ?? (await context.waitForEvent('page', { predicate: (p) => p.url().includes('onboarding.html'), timeout: 15_000 }).catch(() => null));
@@ -287,6 +304,12 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
 
     const browser = context.browser();
     let cdp: CDPSession | null = null;
+    const tabIds = new WeakMap<Page, number>();
+    const activeTabId = () =>
+      worker.evaluate(async () => {
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        return tab?.id ?? -1;
+      });
 
     const lens: Lens = {
       context,
@@ -297,14 +320,23 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
       errors,
       legiit,
       async open(url) {
+        // Without the "tabs" permission the extension cannot match a tab to an address, so the new tab is
+        // recognised as the one that was not there before, once Chrome reports it as the active tab.
+        const before = await worker.evaluate(async () => (await chrome.tabs.query({})).map((tab) => tab.id));
         const page = await context.newPage();
         await page.goto(url, { waitUntil: 'load' });
         await page.bringToFront();
-        const tabId = await worker.evaluate(async () => {
-          const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-          return tab?.id ?? -1;
-        });
-        expect(tabId, 'tab id of the opened page').toBeGreaterThan(0);
+        let tabId = -1;
+        await expect
+          .poll(
+            async () => {
+              tabId = await activeTabId();
+              return tabId > 0 && !before.includes(tabId);
+            },
+            { message: 'the opened page becomes the active tab', timeout: 10_000 },
+          )
+          .toBe(true);
+        tabIds.set(page, tabId);
         return { page, tabId };
       },
       async openPanel(tabId, view) {
@@ -322,12 +354,28 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
       async invoke(page) {
         if (!browser) throw new Error('Browser handle is not available');
         // A toolbar click always lands on the tab the user is looking at; Chrome grants activeTab to the active tab only.
+        // Bringing a tab to the front is not instant on a busy machine, so wait until Chrome agrees.
         await page.bringToFront();
+        const expected = tabIds.get(page);
+        if (expected !== undefined) await expect.poll(activeTabId, { message: 'the page is the active tab before the action is triggered', timeout: 10_000 }).toBe(expected);
         cdp ??= await browser.newBrowserCDPSession();
         const { targetInfos } = await cdp.send('Target.getTargets', { filter: [{ type: 'tab' }] });
         const target = targetInfos.find((t) => t.type === 'tab' && t.url === page.url());
         if (!target) throw new Error(`No tab target for ${page.url()}`);
         await cdp.send('Extensions.triggerAction', { id: extensionId, targetId: target.targetId });
+        if (expected === undefined || !/^https?:/.test(page.url())) return;
+        // Chrome's own view of the result: from now on the extension may run a script in this tab.
+        // (Asked from the service worker, so the side panel's own logic is not involved.)
+        const granted = () =>
+          worker.evaluate(
+            (id) =>
+              chrome.scripting.executeScript({ target: { tabId: id }, func: () => true }).then(
+                () => true,
+                (error: Error) => error.message,
+              ),
+            expected,
+          );
+        await expect.poll(granted, { message: 'Chrome granted activeTab for the invoked tab', timeout: 5_000 }).toBe(true);
       },
       async setSettings(settings) {
         await worker.evaluate(async (value) => chrome.storage.local.set({ settings: value }), settings);
@@ -368,6 +416,10 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
         const [download] = await Promise.all([page.waitForEvent('download'), trigger()]);
         const path = await download.path();
         return { name: download.suggestedFilename(), text: readFileSync(path, 'utf8') };
+      },
+      async allErrors() {
+        const fromWorker = await worker.evaluate(() => (self as unknown as { __lensErrors?: string[] }).__lensErrors ?? ['[service worker] was restarted: its error log is gone']);
+        return [...errors, ...fromWorker];
       },
     };
 

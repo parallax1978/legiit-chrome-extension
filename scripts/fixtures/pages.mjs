@@ -486,6 +486,29 @@ export const SITE_PAGES = [
       }),
   },
   {
+    // The live version of the page whose history the Rewind fixtures describe (same title and headings as the latest capture).
+    file: 'services-teeth-whitening.html',
+    path: '/services/teeth-whitening',
+    html: () =>
+      sitePage({
+        path: '/services/teeth-whitening',
+        title: 'Teeth Whitening in South Austin | $299 In-Office | BrightPath Dental',
+        description: 'In-office and take-home teeth whitening in South Austin, from a dentist who never rushes.',
+        body: `<h1>Teeth Whitening in South Austin</h1>
+<p>A brighter smile in one unhurried visit. Our dentists check your teeth and gums first, protect your gums, and whiten in three short rounds so sensitivity stays low.</p>
+<p><a class="btn" href="/contact">Book a whitening visit</a></p>
+<h2>How it works</h2>
+<h3>In-office whitening</h3>
+<p>One ninety-minute appointment. Most patients leave four to six shades lighter, and we send you home with a touch-up kit.</p>
+<h3>Take-home trays</h3>
+<p>Custom trays made from a scan of your teeth, worn for thirty minutes a day over two weeks. Gentler, slower, and easy to top up later.</p>
+<h2>Before and after</h2>
+<p>We photograph your shade before and after every treatment, so you can see the change for yourself. Results typically last one to three years, depending on coffee, tea and red wine.</p>
+<h2>Pricing</h2>
+<p>In-office whitening is $299. Take-home trays are $189, and refills are $25. You will always see the price before we begin.</p>`,
+      }),
+  },
+  {
     file: 'pricing.html',
     path: '/pricing',
     html: () =>

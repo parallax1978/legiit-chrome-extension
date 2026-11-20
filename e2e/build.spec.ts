@@ -76,7 +76,8 @@ test.describe('manifest', () => {
 
   test('requires only web.archive.org and the Legiit API host; every other site is optional', () => {
     expect(manifest.host_permissions).toEqual(['https://web.archive.org/*', 'https://api.legiit.com/*']);
-    expect(manifest.optional_host_permissions).toEqual(['https://*/*', 'http://*/*']);
+    // One pattern for http and https: a site is requested as "*://*.example.com/*", which must fit inside a single optional pattern.
+    expect(manifest.optional_host_permissions).toEqual(['*://*/*']);
     expect(JSON.stringify(manifest)).not.toContain('<all_urls>');
   });
 
