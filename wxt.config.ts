@@ -136,6 +136,8 @@ export default defineConfig({
       // Readable, standard output for store review: no minification, no source maps needed.
       minify: false,
       sourcemap: false,
+      // Chrome preloads modules natively. Vite's polyfill would add a second fetch() call site to every page.
+      modulePreload: { polyfill: false },
     },
   }),
 

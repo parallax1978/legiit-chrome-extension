@@ -27,6 +27,8 @@ scope.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   }
   return nativeFetch(input, init);
 }) as typeof fetch;
+// transformers.js keeps its own reference to fetch, taken when the library was loaded (before the lines above ran).
+env.fetch = scope.fetch;
 
 export const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 const BATCH_SIZE = 16;
@@ -45,6 +47,8 @@ function load(): Promise<FeatureExtractionPipeline> {
     env.allowRemoteModels = false;
     env.allowLocalModels = true;
     env.localModelPath = new URL('/models/', packageOrigin).href;
+    // Never used (remote models are off); pointed at the package so that no code path can build a remote address.
+    env.remoteHost = new URL('/models/', packageOrigin).href;
     // The Cache API cannot store chrome-extension:// responses, and blob-URL module loading is against the extension CSP.
     env.useBrowserCache = false;
     env.useWasmCache = false;

@@ -29,34 +29,63 @@ test.describe('summary strip above Google results', () => {
   });
 
   test('is purely additive: Google markup, ads and results are untouched', async ({ lens }) => {
+    const SELECTORS = ['#tads', '#tadsb', '[data-text-ad]', '.YzCcne', '#Odp5De', '.g'];
     await lens.setSettings({ strip: { enabled: false, collapsed: false } });
-    const without = await lens.open(U.serpFull!);
-    const snapshot = (page: typeof without.page) =>
+    const { page } = await lens.open(U.serpFull!);
+    const snapshot = () =>
       page.evaluate(() => {
         const clone = document.body.cloneNode(true) as HTMLElement;
         clone.querySelector('[data-legiit-lens-strip]')?.remove();
         // The fixture's own stamped rectangles are part of its markup; they must survive unchanged too.
         return clone.innerHTML;
       });
-    const before = await snapshot(without.page);
-    await expect(without.page.locator('[data-legiit-lens-strip]')).toHaveCount(0);
+    const boxes = async () => {
+      const out: Record<string, { x: number; y: number; width: number; height: number }> = {};
+      for (const selector of SELECTORS) out[selector] = (await page.locator(selector).first().boundingBox())!;
+      return out;
+    };
+    const strip = page.locator('[data-legiit-lens-strip]');
+    await expect(strip).toHaveCount(0);
+    const markupBefore = await snapshot();
+    const boxesBefore = await boxes();
 
+    // Switching the strip on reaches the open page without a reload.
     await lens.setSettings({ strip: { enabled: true, collapsed: false } });
-    const withStrip = await lens.open(U.serpFull!);
-    await expect(withStrip.page.locator('[data-legiit-lens-strip]')).toBeAttached();
-    expect(await snapshot(withStrip.page)).toBe(before);
+    await expect(strip).toBeAttached();
+    expect(await snapshot()).toBe(markupBefore);
 
     // Ads and results are still rendered and visible; only their vertical position moved by the strip's height.
-    const stripHeight = (await withStrip.page.locator('[data-legiit-lens-strip]').boundingBox())!.height;
-    for (const selector of ['#tads', '#tadsb', '[data-text-ad]', '.YzCcne', '#Odp5De', '.g']) {
-      const a = (await without.page.locator(selector).first().boundingBox())!;
-      const b = (await withStrip.page.locator(selector).first().boundingBox())!;
+    const stripHeight = (await strip.boundingBox())!.height;
+    expect(stripHeight).toBeGreaterThan(20);
+    const boxesWith = await boxes();
+    for (const selector of SELECTORS) {
+      const a = boxesBefore[selector]!;
+      const b = boxesWith[selector]!;
       expect(b.width, selector).toBe(a.width);
       expect(b.height, selector).toBe(a.height);
       expect(b.x, selector).toBe(a.x);
       expect(b.y - a.y, selector).toBeCloseTo(stripHeight, 0);
-      expect(await withStrip.page.locator(selector).first().isVisible(), selector).toBe(true);
+      expect(await page.locator(selector).first().isVisible(), selector).toBe(true);
     }
+
+    // A page loaded with the strip on has the same Google markup as one loaded with it off.
+    const fresh = await lens.open(U.serpFull!);
+    await expect(fresh.page.locator('[data-legiit-lens-strip]')).toBeAttached();
+    expect(
+      await fresh.page.evaluate(() => {
+        const clone = document.body.cloneNode(true) as HTMLElement;
+        clone.querySelector('[data-legiit-lens-strip]')?.remove();
+        return clone.innerHTML;
+      }),
+    ).toBe(markupBefore);
+
+    // Switching it off removes it from both pages and everything is back where it was.
+    await lens.setSettings({ strip: { enabled: false, collapsed: false } });
+    await expect(strip).toHaveCount(0);
+    await expect(fresh.page.locator('[data-legiit-lens-strip]')).toHaveCount(0);
+    expect(await snapshot()).toBe(markupBefore);
+    await page.bringToFront();
+    expect(await boxes()).toEqual(boxesBefore);
   });
 
   test('measures positions as if the strip were not there', async ({ lens }) => {

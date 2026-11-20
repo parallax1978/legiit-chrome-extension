@@ -39,6 +39,10 @@ export interface SeenRequest {
   /** URL of the frame that made the request, or "service-worker". */
   from: string;
   served: 'fixture' | 'legiit-mock' | 'not-found' | 'blocked';
+  /** True when the request carried an Authorization header (the Legiit token). */
+  authorization: boolean;
+  /** The request body, when there was one. */
+  body: string | null;
 }
 
 export interface LensOptions {
@@ -238,6 +242,8 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
         resourceType: request.resourceType(),
         from: request.serviceWorker() ? 'service-worker' : (request.frame()?.url() ?? ''),
         served: 'not-found',
+        authorization: 'authorization' in request.headers(),
+        body: request.postData(),
       };
       requests.push(seen);
 

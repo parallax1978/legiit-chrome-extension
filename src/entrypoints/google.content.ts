@@ -43,7 +43,7 @@ async function start(): Promise<void> {
   const override = validatePack(config.selectorOverrides['google'], 'google');
   const pack: SelectorPack =
     override && compareVersions(override.version, bundledPack.version) > 0 ? override : (bundledPack as SelectorPack);
-  const matcher = new BrandMatcher(config.brands);
+  let matcher = new BrandMatcher(config.brands);
 
   const identity = (): string => {
     const params = new URLSearchParams(location.search);
@@ -161,6 +161,23 @@ async function start(): Promise<void> {
     }
   };
 
+  /** The user changed tracked brands or strip settings: apply them to this open page without a reload. */
+  const applyNewConfig = async (): Promise<void> => {
+    const next = (await send({ type: 'lens:get-content-config' })) as ContentConfig | undefined;
+    if (!next || typeof next !== 'object' || !('strip' in next)) return;
+    const collapsedChanged = next.strip.collapsed !== config.strip.collapsed;
+    config.brands = next.brands;
+    config.strip = next.strip;
+    config.autoSaveSnapshots = next.autoSaveSnapshots;
+    matcher = new BrandMatcher(config.brands);
+    if (collapsedChanged) {
+      // Rebuilt in its new state by the refresh below.
+      strip?.remove();
+      strip = null;
+    }
+    refresh();
+  };
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   const schedule = (delay: number): void => {
     clearTimeout(timer);
@@ -198,6 +215,7 @@ async function start(): Promise<void> {
       url: safeHttpUrl(location.href) ?? location.href,
       slots: selectorHealth(document, pack),
     }),
+    onConfigChanged: () => void applyNewConfig(),
     ...(import.meta.env.DEV ? { devSaveFixture: saveFixture } : {}),
   });
 

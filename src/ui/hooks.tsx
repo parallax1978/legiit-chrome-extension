@@ -23,22 +23,51 @@ const SettingsContext = createContext<SettingsValue | null>(null);
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
+  /** What the page shows right now, including changes that are still being stored. */
+  const latest = useRef(settings);
+  latest.current = settings;
+  /** Number of this page's own changes that are still being stored. */
+  const pending = useRef(0);
+
   useEffect(() => {
     let alive = true;
     void getSettings().then((s) => {
-      if (alive) {
-        setSettings(s);
-        setLoaded(true);
-      }
+      if (alive && pending.current === 0) setSettings(s);
+      if (alive) setLoaded(true);
     });
-    const stop = onSettingsChanged((s) => alive && setSettings(s));
+    // Changes made elsewhere (options page, panel, service worker). While this page has changes of its
+    // own on the way, the stored value is older than what is on screen: it is picked up when they finish.
+    const stop = onSettingsChanged((s) => {
+      if (alive && pending.current === 0) setSettings(s);
+    });
     return () => {
       alive = false;
       stop();
     };
   }, []);
+
   const update = useCallback(async (updater: (draft: Settings) => Settings | void) => {
-    setSettings(await updateSettings(updater));
+    // Show the change at once (controlled inputs must not lag behind the click), then store it.
+    const draft = structuredClone(latest.current);
+    const optimistic = updater(draft) ?? draft;
+    latest.current = optimistic;
+    setSettings(optimistic);
+    pending.current += 1;
+    let stored: Settings | null = null;
+    let failure: unknown = null;
+    try {
+      stored = await updateSettings(updater);
+    } catch (error) {
+      failure = error;
+    }
+    pending.current -= 1;
+    if (pending.current === 0) {
+      // The last change has landed: show exactly what is stored (also if a change was refused).
+      const settled = stored ?? (await getSettings());
+      latest.current = settled;
+      setSettings(settled);
+    }
+    if (failure) throw failure;
   }, []);
   const matcher = useMemo(() => new BrandMatcher(trackedBrands(settings)), [settings]);
   const value = useMemo(() => ({ settings, loaded, update, matcher }), [settings, loaded, update, matcher]);
@@ -71,6 +100,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [, bump] = useState(0);
 
+  /** True while this page itself is connecting or disconnecting: its own token change needs no reload. */
+  const changingRef = useRef(false);
+
   const reload = useCallback(async () => {
     setLoading(true);
     setConnection(await loadConnection());
@@ -80,17 +112,31 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void reload();
     // Another extension page (options, panel) connected or disconnected.
-    return onLegiitTokenChanged(() => void reload());
+    return onLegiitTokenChanged(() => {
+      if (!changingRef.current) void reload();
+    });
   }, [reload]);
 
   const value = useMemo<ConnectionValue>(
     () => ({
       connection,
       loading,
-      connect: async (token) => setConnection(await connectLegiit(token)),
+      connect: async (token) => {
+        changingRef.current = true;
+        try {
+          setConnection(await connectLegiit(token));
+        } finally {
+          changingRef.current = false;
+        }
+      },
       disconnect: async () => {
-        await disconnectLegiit();
-        setConnection(DISCONNECTED);
+        changingRef.current = true;
+        try {
+          await disconnectLegiit();
+          setConnection(DISCONNECTED);
+        } finally {
+          changingRef.current = false;
+        }
       },
       can: (method) => can(connection, method),
       refreshCapabilities: () => bump((n) => n + 1),

@@ -16,10 +16,10 @@ import { aiSiteForHost, isGoogleSearchHost } from '@/config/sites';
 import { computeClickPotential } from '@/features/click-potential/metrics';
 import { toSnapshot } from '@/features/click-potential/snapshot';
 import { buildSerpPresence, summarisePresence } from '@/features/why-not-me/presence';
-import { CONTENT_EVENT_TYPES, isRecord, type ContentConfig, type InvokeIntent, type InvokeSource, type PanelEvent } from '@/model/messages';
+import { CONTENT_EVENT_TYPES, isRecord, type ContentConfig, type InvokeIntent, type InvokeSource, type PanelEvent, type TabRequest } from '@/model/messages';
 import { parseOrNull, SerpDataSchema } from '@/model/schemas';
 import { saveSnapshot } from '@/storage/db';
-import { getSelectorOverrides, getSettings, restrictStorageToTrustedContexts, trackedBrands, updateSettings } from '@/storage/settings';
+import { getSelectorOverrides, getSettings, onSettingsChanged, restrictStorageToTrustedContexts, trackedBrands, updateSettings } from '@/storage/settings';
 
 const MENU_ANALYZE = 'lens-analyze-page';
 const MENU_SELECTION = 'lens-check-selection';
@@ -55,6 +55,20 @@ async function contentConfig(): Promise<ContentConfig> {
   };
 }
 
+/**
+ * Tells open Google results pages that settings changed, so the strip shows
+ * newly tracked brands without a reload. Without the "tabs" permission the
+ * tab list carries no URLs or titles; the message only reaches tabs that run
+ * one of this extension's content scripts, and it carries no data.
+ */
+async function broadcastConfigChanged(): Promise<void> {
+  const tabs = await chrome.tabs.query({}).catch(() => [] as chrome.tabs.Tab[]);
+  const message: TabRequest = { type: 'lens:config-changed' };
+  for (const tab of tabs) {
+    if (tab.id !== undefined) void chrome.tabs.sendMessage(tab.id, message).catch(() => undefined);
+  }
+}
+
 async function storeSnapshot(raw: unknown): Promise<{ ok: boolean }> {
   const serp = parseOrNull(SerpDataSchema, raw);
   if (!serp || !serp.recognised) return { ok: false };
@@ -82,6 +96,9 @@ export default defineBackground(() => {
 
   // Toolbar icon and the keyboard shortcut (_execute_action) both arrive here.
   chrome.action.onClicked.addListener((tab) => invoke(tab, 'action', 'analyze'));
+
+  // Tracked brands or strip settings changed in the panel or options page.
+  onSettingsChanged(() => void broadcastConfigChanged());
 
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId === MENU_ANALYZE) invoke(tab, 'context-menu', 'analyze');

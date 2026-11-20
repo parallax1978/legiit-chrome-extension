@@ -22,6 +22,8 @@ export interface AgentOptions {
   getSerp?: () => SerpData;
   getAnswer?: () => AnswerData;
   selectorHealth?: () => SelectorHealth;
+  /** Called when the user changed settings that affect this page (tracked brands, strip on/off). */
+  onConfigChanged?: () => void;
   /** Development builds only: saves the page as a test fixture. */
   devSaveFixture?: () => unknown;
 }
@@ -76,6 +78,9 @@ async function handle(request: TabRequest, options: AgentOptions): Promise<unkno
       return { applied: 0, missed: 0, method: 'none' };
     case 'lens:selector-health':
       return options.selectorHealth ? options.selectorHealth() : { error: 'No selector pack applies to this page' };
+    case 'lens:config-changed':
+      options.onConfigChanged?.();
+      return { ok: true };
     case 'lens:dev-save-fixture':
       return options.devSaveFixture ? options.devSaveFixture() : { error: 'Not available in this build' };
   }

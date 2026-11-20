@@ -93,12 +93,27 @@ export async function saveSettings(settings: Settings): Promise<Settings> {
   return valid;
 }
 
-/** Read-modify-write. The updater receives a copy it may mutate or replace. */
-export async function updateSettings(updater: (draft: Settings) => Settings | void): Promise<Settings> {
-  const current = await getSettings();
-  const draft = structuredClone(current);
-  const next = updater(draft) ?? draft;
-  return saveSettings(next);
+let updateQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Read-modify-write. The updater receives a copy it may mutate or replace.
+ *
+ * Updates are applied one at a time, so two changes made in quick succession
+ * never overwrite each other: within one page through a queue, and between
+ * extension pages and the service worker through a Web Lock (all of them
+ * share the extension's origin).
+ */
+export function updateSettings(updater: (draft: Settings) => Settings | void): Promise<Settings> {
+  const apply = async (): Promise<Settings> => {
+    const current = await getSettings();
+    const draft = structuredClone(current);
+    const next = updater(draft) ?? draft;
+    return saveSettings(next);
+  };
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  const run = updateQueue.then(() => (locks ? (locks.request('legiit-lens-settings', apply) as Promise<Settings>) : apply()));
+  updateQueue = run.catch(() => undefined);
+  return run;
 }
 
 export function onSettingsChanged(listener: (settings: Settings) => void): () => void {

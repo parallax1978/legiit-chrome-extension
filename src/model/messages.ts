@@ -26,6 +26,8 @@ export type TabRequest =
   | { type: 'lens:highlight'; groups: HighlightGroup[] }
   | { type: 'lens:clear-highlight' }
   | { type: 'lens:selector-health' }
+  /** Settings changed (tracked brands, strip on/off): re-read the content configuration. */
+  | { type: 'lens:config-changed' }
   | { type: 'lens:dev-save-fixture' };
 
 export const TAB_REQUEST_TYPES: readonly TabRequest['type'][] = [
@@ -38,6 +40,7 @@ export const TAB_REQUEST_TYPES: readonly TabRequest['type'][] = [
   'lens:highlight',
   'lens:clear-highlight',
   'lens:selector-health',
+  'lens:config-changed',
   'lens:dev-save-fixture',
 ];
 

@@ -29,17 +29,25 @@ function BrandEditor({ brand, kind, onChange, onRemove }: { brand: StoredBrand; 
   const [name, setName] = useState(brand.name);
   const [domains, setDomains] = useState(brand.domains.join(', '));
   const [aliases, setAliases] = useState(brand.aliases.join(', '));
-  useEffect(() => {
-    setName(brand.name);
-    setDomains(brand.domains.join(', '));
-    setAliases(brand.aliases.join(', '));
-  }, [brand]);
+  // Each field follows its own stored value, so saving one field never resets another that is being typed in.
+  const storedDomains = brand.domains.join(', ');
+  const storedAliases = brand.aliases.join(', ');
+  useEffect(() => setName(brand.name), [brand.name]);
+  useEffect(() => setDomains(storedDomains), [storedDomains]);
+  useEffect(() => setAliases(storedAliases), [storedAliases]);
+
+  /** The brand as currently typed (the stored copy lags behind by one save). */
+  const typed = (): StoredBrand => ({
+    ...brand,
+    name: name.trim() || brand.name,
+    domains: [...new Set(splitList(domains).map((d) => normalizeDomainInput(d)).filter((d): d is string => d !== null))],
+    aliases: [...new Set(splitList(aliases))].slice(0, 30),
+  });
 
   const commit = () => {
-    const cleanDomains = [...new Set(splitList(domains).map((d) => normalizeDomainInput(d)).filter((d): d is string => d !== null))];
-    const next: StoredBrand = { ...brand, name: name.trim() || brand.name, domains: cleanDomains, aliases: [...new Set(splitList(aliases))].slice(0, 30) };
+    const next = typed();
     if (JSON.stringify(next) !== JSON.stringify(brand)) onChange(next);
-    else setDomains(cleanDomains.join(', '));
+    else setDomains(next.domains.join(', '));
   };
 
   return (
@@ -64,7 +72,10 @@ function BrandEditor({ brand, kind, onChange, onRemove }: { brand: StoredBrand; 
           <SaveToLegiit
             method="addCompetitor"
             label="Add to Command Center"
-            payload={() => ({ name: brand.name, domain: brand.domains[0] ?? null })}
+            payload={() => {
+              const current = typed();
+              return { name: current.name, domain: current.domains[0] ?? null };
+            }}
             send={(payload, businessId) => connection.client!.addCompetitor(businessId, payload)}
           />
         </div>
@@ -76,11 +87,16 @@ function BrandEditor({ brand, kind, onChange, onRemove }: { brand: StoredBrand; 
 function BrandsSection() {
   const { settings, update } = useSettings();
   const list = (kind: 'mine' | 'competitor') => (kind === 'mine' ? settings.myBrands : settings.competitors);
-  const write = (kind: 'mine' | 'competitor', next: StoredBrand[]) =>
+  /** Applies a change to the stored list (not to the copy on screen), so edits made elsewhere are kept. */
+  const edit = (kind: 'mine' | 'competitor', change: (brands: StoredBrand[]) => StoredBrand[]) =>
     update((draft) => {
-      if (kind === 'mine') draft.myBrands = next;
-      else draft.competitors = next;
+      if (kind === 'mine') draft.myBrands = change(draft.myBrands);
+      else draft.competitors = change(draft.competitors);
     });
+  const add = (kind: 'mine' | 'competitor') => {
+    const fresh: StoredBrand = { id: randomId('brand'), name: '', domains: [], aliases: [], source: 'manual' };
+    void edit(kind, (brands) => [...brands, fresh]);
+  };
   const section = (kind: 'mine' | 'competitor', title: string, hint: string, addLabel: string) => (
     <Card title={title} testId={`brands-${kind}`}>
       <p className="small muted">{hint}</p>
@@ -90,13 +106,13 @@ function BrandsSection() {
             key={brand.id}
             brand={brand}
             kind={kind}
-            onChange={(next) => void write(kind, list(kind).map((b) => (b.id === brand.id ? next : b)))}
-            onRemove={() => void write(kind, list(kind).filter((b) => b.id !== brand.id))}
+            onChange={(next) => void edit(kind, (brands) => brands.map((b) => (b.id === brand.id ? next : b)))}
+            onRemove={() => void edit(kind, (brands) => brands.filter((b) => b.id !== brand.id))}
           />
         ))}
       </div>
       <div className="row">
-        <Button small onClick={() => void write(kind, [...list(kind), { id: randomId('brand'), name: '', domains: [], aliases: [], source: 'manual' }])} data-testid={`add-${kind}`}>
+        <Button small onClick={() => add(kind)} data-testid={`add-${kind}`}>
           {addLabel}
         </Button>
       </div>
@@ -214,6 +230,13 @@ function LegiitSection() {
     }
   };
 
+  const onDisconnect = async () => {
+    setNote(null);
+    await disconnect();
+    // Nothing from the account stays behind: brands, competitors, focus keywords and avatars that were pre-filled.
+    await update((draft) => clearBusinessDetails(draft));
+  };
+
   const chooseBusiness = async (id: string) => {
     setNote(null);
     if (!client) return;
@@ -265,9 +288,10 @@ function LegiitSection() {
             </div>
           )}
           <div className="row">
-            <Button small variant="danger" onClick={() => void disconnect()} data-testid="legiit-disconnect">
+            <Button small variant="danger" onClick={() => void onDisconnect()} data-testid="legiit-disconnect">
               Disconnect
             </Button>
+            <span className="small muted">Removes the token and everything pre-filled from Command Center from this device.</span>
           </div>
         </>
       ) : (
@@ -337,9 +361,12 @@ function AiSection() {
         <input
           type="checkbox"
           checked={settings.ai.chromePromptOptIn}
-          onChange={(e) => void update((draft) => {
-            draft.ai.chromePromptOptIn = e.target.checked;
-          })}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            void update((draft) => {
+              draft.ai.chromePromptOptIn = checked;
+            });
+          }}
           data-testid="ai-optin"
         />
         <span>
@@ -396,9 +423,12 @@ function PrivacySection() {
           <input
             type="checkbox"
             checked={settings.strip.enabled}
-            onChange={(e) => void update((draft) => {
-              draft.strip.enabled = e.target.checked;
-            })}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              void update((draft) => {
+                draft.strip.enabled = checked;
+              });
+            }}
             data-testid="strip-enabled"
           />
           <span>Show the summary strip above Google results</span>
@@ -406,9 +436,12 @@ function PrivacySection() {
         <Field label="Save Click Potential snapshots" hint="Snapshots are stored on this device only.">
           <select
             value={settings.snapshots.autoSave}
-            onChange={(e) => void update((draft) => {
-              draft.snapshots.autoSave = e.target.value as typeof settings.snapshots.autoSave;
-            })}
+            onChange={(e) => {
+              const mode = e.target.value as typeof settings.snapshots.autoSave;
+              void update((draft) => {
+                draft.snapshots.autoSave = mode;
+              });
+            }}
             data-testid="autosave"
           >
             <option value="panel">When I view a results page with this panel open</option>
