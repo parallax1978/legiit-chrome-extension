@@ -25,7 +25,7 @@ export function httpClient(token: string | null = 'demo-token'): { client: HttpL
   const calls: { url: string; init: RequestInit }[] = [];
   const inner = mockLegiitFetch(state);
   const client = new HttpLegiitClient({
-    baseUrl: 'https://api.legiit.com/',
+    baseUrl: 'https://lens.legiit.com/',
     auth: new StaticAuthProvider(token),
     fetch: (url, init = {}) => {
       calls.push({ url, init });

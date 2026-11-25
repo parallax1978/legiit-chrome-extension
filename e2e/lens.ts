@@ -27,7 +27,7 @@ export const scenario = JSON.parse(readFileSync(join(FIXTURES, 'scenario.json'),
   urls: Record<string, string>;
 };
 
-export const LEGIIT_ORIGIN = 'https://api.legiit.com';
+export const LEGIIT_ORIGIN = 'https://lens.legiit.com';
 export const WAYBACK_ORIGIN = 'https://web.archive.org';
 
 export interface SeenRequest {

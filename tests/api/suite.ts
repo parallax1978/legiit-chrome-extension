@@ -40,7 +40,7 @@ export const KIT_DIR = resolve(__dirname, '../../docs/legiit-api');
 export const EXAMPLES_DIR = resolve(KIT_DIR, 'examples');
 
 export interface ConformanceOptions {
-  /** Base URL of the API under test, for example https://staging-api.legiit.com (a path prefix is allowed). */
+  /** Base URL of the API under test, for example https://lens-staging.legiit.com (a path prefix is allowed). */
   baseUrl: () => string;
   /** A valid API token of a test account. */
   token: () => string;

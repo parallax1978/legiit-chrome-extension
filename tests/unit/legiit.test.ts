@@ -57,7 +57,7 @@ describe('HTTP client against the mock API', () => {
     const details = await client.getBusinessDetails('biz_brightpath');
     expect(details.competitors.map((c) => c.name)).toEqual(['Lakeside Smiles', 'Capitol Dental Care', 'Zilker Family Dentistry']);
     expect(details.focusKeywords).toContain('best dentist in austin');
-    expect(calls[0]!.url).toBe('https://api.legiit.com/v1/session');
+    expect(calls[0]!.url).toBe('https://lens.legiit.com/v1/session');
     expect(new Headers(calls[0]!.init.headers).get('authorization')).toBe('Bearer demo-token');
     expect(new Headers(calls[0]!.init.headers).get('x-legiit-client')).toBe('legiit-lens/9.9.9');
   });
@@ -66,7 +66,7 @@ describe('HTTP client against the mock API', () => {
     const { client, state, calls } = httpClient();
     const saved = await client.saveVisibilitySnapshot('biz_brightpath', snapshotPayload(snapshot));
     expect(saved).toEqual({ id: 'vis_1', url: 'https://app.legiit.example/command-center/visibility/vis_1' });
-    expect(calls[0]!.url).toBe('https://api.legiit.com/v1/businesses/biz_brightpath/visibility-snapshots');
+    expect(calls[0]!.url).toBe('https://lens.legiit.com/v1/businesses/biz_brightpath/visibility-snapshots');
     expect(calls[0]!.init.method).toBe('POST');
     expect(state.saved.visibilitySnapshots[0]!.payload).toEqual(snapshotPayload(snapshot));
 
@@ -97,7 +97,7 @@ describe('HTTP client against the mock API', () => {
   const answering = (respond: (url: string, init: RequestInit) => Response | Promise<Response>, options: Partial<HttpClientOptions> = {}) => {
     const calls: { url: string; init: RequestInit }[] = [];
     const client = new HttpLegiitClient({
-      baseUrl: 'https://api.legiit.com',
+      baseUrl: 'https://lens.legiit.com',
       auth: new StaticAuthProvider('t'),
       fetch: async (url, init = {}) => {
         calls.push({ url, init });
@@ -190,13 +190,13 @@ describe('HTTP client against the mock API', () => {
     expect(long).toMatchObject({ code: 'invalid-response', message: 'Legiit sent a reply that is too large to read' });
 
     for (const status of [301, 302, 303, 307, 308]) {
-      const fetchSpy = vi.fn(async () => new Response(null, { status, headers: { location: 'https://api.legiit.com/v1/session/' } }));
+      const fetchSpy = vi.fn(async () => new Response(null, { status, headers: { location: 'https://lens.legiit.com/v1/session/' } }));
       vi.stubGlobal('fetch', fetchSpy);
       try {
         await new TokenAuthProvider().store('demo-token');
         expect(await loadConnection()).toMatchObject({ status: 'disconnected', error: 'Could not reach Legiit: The Legiit API answered with a redirect instead of a reply' });
         expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect(fetchSpy.mock.calls[0]).toMatchObject(['https://api.legiit.com/v1/session', { redirect: 'manual', credentials: 'omit' }]);
+        expect(fetchSpy.mock.calls[0]).toMatchObject(['https://lens.legiit.com/v1/session', { redirect: 'manual', credentials: 'omit' }]);
         expect(await getLegiitToken()).toBe('demo-token');
       } finally {
         vi.unstubAllGlobals();
@@ -226,7 +226,7 @@ describe('HTTP client against the mock API', () => {
   });
 
   it('reports server errors, network errors and malformed replies', async () => {
-    const make = (fetch: () => Promise<Response>) => new HttpLegiitClient({ baseUrl: 'https://api.legiit.com', auth: new StaticAuthProvider('t'), fetch });
+    const make = (fetch: () => Promise<Response>) => new HttpLegiitClient({ baseUrl: 'https://lens.legiit.com', auth: new StaticAuthProvider('t'), fetch });
     await expect(make(async () => new Response('x', { status: 503 })).getSession()).rejects.toMatchObject({ code: 'server' });
     await expect(make(async () => { throw new TypeError('Failed to fetch'); }).getSession()).rejects.toMatchObject({ code: 'network', message: 'Could not reach Legiit: Failed to fetch' });
     await expect(make(async () => new Response('<html>', { status: 200 })).getSession()).rejects.toMatchObject({ code: 'invalid-response' });
@@ -539,8 +539,8 @@ describe('HTTP client against the mock API', () => {
     await client.saveGapList('biz 1/ü', gapPayload(presence, buildGapRows(presence)), { idempotencyKey: 'key-1' });
     await client.completeAI({ task: 'rewind', system: 's', prompt: 'p', maxOutputTokens: 700 });
     const [get, save, ai] = calls.map((c) => ({ url: c.url, method: c.init.method, cache: c.init.cache, headers: Object.fromEntries(new Headers(c.init.headers).entries()) }));
-    expect(get).toEqual({ url: 'https://api.legiit.com/v1/session', method: 'GET', cache: 'no-store', headers: { accept: 'application/json', authorization: 'Bearer t', 'x-legiit-client': 'legiit-lens/1.2.3' } });
-    expect(save).toMatchObject({ url: 'https://api.legiit.com/v1/businesses/biz%201%2F%C3%BC/gap-lists', method: 'POST', cache: 'no-store' });
+    expect(get).toEqual({ url: 'https://lens.legiit.com/v1/session', method: 'GET', cache: 'no-store', headers: { accept: 'application/json', authorization: 'Bearer t', 'x-legiit-client': 'legiit-lens/1.2.3' } });
+    expect(save).toMatchObject({ url: 'https://lens.legiit.com/v1/businesses/biz%201%2F%C3%BC/gap-lists', method: 'POST', cache: 'no-store' });
     expect(save!.headers).toEqual({ accept: 'application/json', authorization: 'Bearer t', 'content-type': 'application/json', 'idempotency-key': 'key-1', 'x-legiit-client': 'legiit-lens/1.2.3' });
     expect(Object.keys(ai!.headers).sort()).toEqual(['accept', 'authorization', 'content-type', 'x-legiit-client']);
     expect(typeof calls[1]!.init.body).toBe('string');
@@ -924,12 +924,12 @@ describe('connection', () => {
     expect(await hasLegiitAccess()).toBe(true);
     expect(await loadConnection(new Unreachable())).toMatchObject({ status: 'disconnected', tokenKept: true, error: 'Could not reach Legiit: Failed to fetch' });
     // The user switched the Legiit host off under the extension's site access in Chrome.
-    chromeMock.withheld.add('https://api.legiit.com/*');
+    chromeMock.withheld.add('https://lens.legiit.com/*');
     expect(await hasLegiitAccess()).toBe(false);
-    expect(await loadConnection(new Unreachable())).toMatchObject({ status: 'disconnected', tokenKept: true, error: 'Chrome is not letting Legiit Lens reach api.legiit.com. Click “Try again” to allow it.' });
+    expect(await loadConnection(new Unreachable())).toMatchObject({ status: 'disconnected', tokenKept: true, error: 'Chrome is not letting Legiit Lens reach lens.legiit.com. Click “Try again” to allow it.' });
     expect(await getLegiitToken()).toBe('demo-token');
     // At Connect the same reason is given, not just "failed to fetch".
-    await expect(connect('another-token', new Unreachable())).rejects.toMatchObject({ code: 'network', message: 'Chrome is not letting Legiit Lens reach api.legiit.com. Click Connect again and allow it.' });
+    await expect(connect('another-token', new Unreachable())).rejects.toMatchObject({ code: 'network', message: 'Chrome is not letting Legiit Lens reach lens.legiit.com. Click Connect again and allow it.' });
     expect(await getLegiitToken()).toBe('demo-token');
     // A click asks Chrome for exactly that host, and nothing is asked when it is already there.
     chromeMock.requestAnswer = false;
@@ -937,7 +937,7 @@ describe('connection', () => {
     chromeMock.requestAnswer = true;
     expect(await requestLegiitAccess()).toBe(true);
     expect(await requestLegiitAccess()).toBe(true);
-    expect(chromeMock.requested).toEqual([['https://api.legiit.com/*'], ['https://api.legiit.com/*']]);
+    expect(chromeMock.requested).toEqual([['https://lens.legiit.com/*'], ['https://lens.legiit.com/*']]);
     expect(await hasLegiitAccess()).toBe(true);
     await disconnect();
   });
@@ -973,7 +973,7 @@ describe('connection', () => {
       const connection: Connection = await connect('demo-token');
       expect(connection.session?.plan).toBe('agency');
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      expect(fetchSpy.mock.calls[0]![0]).toBe('https://api.legiit.com/v1/session');
+      expect(fetchSpy.mock.calls[0]![0]).toBe('https://lens.legiit.com/v1/session');
       expect(fetchSpy.mock.calls[0]![1]).toMatchObject({ credentials: 'omit', referrerPolicy: 'no-referrer' });
     } finally {
       vi.unstubAllGlobals();

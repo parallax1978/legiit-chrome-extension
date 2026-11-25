@@ -28,7 +28,7 @@ Nothing below is final brand material. Each item is marked so it cannot be mista
 | `promo/promo-marquee-1400x560.png` (optional slot) | Same | A 1400×560 PNG or JPEG |
 | `screenshots/*.png` | Real output of the extension, but on invented businesses (`.example` domains) and stand-in pages that only imitate the structure of Google and ChatGPT | Either keep them, or re-take on live pages once the selectors are verified. Store rules: 1 to 5 images, 1280×800 or 640×400, square corners, no padding |
 | `privacy-policy.md` / `.html` | Five fields in `[SQUARE BRACKETS — placeholder]`, highlighted yellow in the HTML: effective date, legal entity, link to Legiit's own privacy policy, contact e-mail, postal address | Edit the Markdown, then run `npm run privacy:html` |
-| Legiit API host `https://api.legiit.com` | An assumption; there is no real API yet | `src/config/constants.ts`, see `docs/DECISIONS.md` A-1 |
+| Legiit API host `https://lens.legiit.com` | Decided (D-88); the API is not live yet | `src/config/constants.ts`, see `docs/DECISIONS.md` A-1 |
 | Product name "Legiit Lens" | Working name | `PRODUCT_NAME` in `src/config/constants.ts`, then rebuild and regenerate images |
 
 To regenerate the generated assets:

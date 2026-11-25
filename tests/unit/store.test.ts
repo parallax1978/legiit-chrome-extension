@@ -133,7 +133,7 @@ describe('store images', () => {
 
   it('marks every placeholder as a placeholder', () => {
     const index = read('store/README.md');
-    for (const asset of ['icons/icon-16.png', 'promo/promo-small-440x280.png', 'promo/promo-marquee-1400x560.png', 'screenshots/*.png', 'privacy-policy.md', 'https://api.legiit.com', 'Legiit Lens']) {
+    for (const asset of ['icons/icon-16.png', 'promo/promo-small-440x280.png', 'promo/promo-marquee-1400x560.png', 'screenshots/*.png', 'privacy-policy.md', 'https://lens.legiit.com', 'Legiit Lens']) {
       expect(index, asset).toContain(asset);
     }
     expect(index).toContain('## Placeholders');

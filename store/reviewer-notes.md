@@ -21,7 +21,7 @@ PERMISSIONS
 - storage: settings on the device (chrome.storage.local, restricted to trusted contexts).
 - sidePanel: the main UI.
 - contextMenus: "Analyze this page" and "Check the selected text". A context-menu click is one of the gestures that grants activeTab.
-- Host permissions: only web.archive.org (Rewind) and api.legiit.com (used only if the user connects a Legiit account; otherwise never contacted).
+- Host permissions: only web.archive.org (Rewind) and lens.legiit.com (used only if the user connects a Legiit account; otherwise never contacted).
 - Content scripts: Google Search (/search on each Google country domain; match patterns cannot use a wildcard TLD) and chatgpt.com, gemini.google.com, perplexity.ai, copilot.microsoft.com. They only read the page the user opened. No automated queries are sent to Google or any AI site, and Google's ads and results are never hidden, moved or restyled. The strip is added above the results inside a closed shadow root.
 - optional_host_permissions (*://*/*): never granted at install and never requested as a wildcard. Specific sites are requested at the moment the user starts a scan, after the UI names them and says why. Granted sites are listed and removable under Settings > Privacy and data.
 
@@ -34,7 +34,7 @@ All JavaScript and WebAssembly is in the package. The build is not minified so i
 DATA
 - No analytics, no ads, no tracking, no remote logging.
 - Without a Legiit account the only network requests are to web.archive.org, to sites the user granted for a scan, and to the site the user builds a brief on (same-origin requests from that tab). All are plain GETs without cookies.
-- With a Legiit account connected, data is sent to api.legiit.com only when the user clicks a save button and confirms a dialog that shows the exact JSON.
+- With a Legiit account connected, data is sent to lens.legiit.com only when the user clicks a save button and confirms a dialog that shows the exact JSON.
 - Settings > Privacy and data lists the hosts contacted and offers "Erase everything".
 
 LEGIIT ACCOUNT (OPTIONAL)
@@ -46,6 +46,6 @@ Off by default. If the user opts in under Settings > AI and Chrome's on-device m
 
 ## Before pasting
 
-- Check the shortcut (Alt+Shift+L) and the Legiit host (api.legiit.com) still match the build.
+- Check the shortcut (Alt+Shift+L) and the Legiit host (lens.legiit.com) still match the build.
 - If the real Legiit API is live, add a test token and business for the reviewer, or keep the "not required for review" paragraph.
 - The steps were written against the code, not a live review. Walk through them once on live Google with the release build (`docs/QA.md`).

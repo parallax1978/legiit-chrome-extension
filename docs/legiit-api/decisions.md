@@ -10,7 +10,7 @@ The numbers are the numbers of section 11 in the developer guide ([README.md](RE
 
 | # | Question | Why it matters | Recommended answer | Your answer |
 | --- | --- | --- | --- | --- |
-| 1 | What is the web address of the new API? | The address is built into the extension. After the extension is in the Chrome Web Store, a change makes Chrome switch the extension off for every user until they approve the new address | `https://api.legiit.com` | |
+| 1 | What is the web address of the new API? | The address is built into the extension. After the extension is in the Chrome Web Store, a change makes Chrome switch the extension off for every user until they approve the new address | `https://lens.legiit.com` | **Decided: `https://lens.legiit.com`** |
 | 3 | A user sends a client brief to Command Center. What appears there? | The button in the extension is called "Open in Command Center", so the user expects to land on something | A new item of its own (a prospect) that shows the brief. When the user sends the same brief again, it replaces the first one | |
 | 4 | A user sends a content analysis to the content editor. What appears there? | Your developers must know where to put it | A note on the business with two lists: "Only on this page" and "Missing points" | |
 | 10 | A team member connects the extension. Which businesses can they save into? | It decides which businesses the extension offers to that person | Every business that this person may save into in Command Center: their own, and the ones shared with them | |
@@ -38,5 +38,5 @@ The numbers are the numbers of section 11 in the developer guide ([README.md](RE
 
 1. **Access to the repository.** Send your developers the link to `parallax1978/legiit-chrome-extension` on GitHub (branch `claude/trusting-johnson-vz4bsi`). If the repository is private, give them read access. The guide alone is not enough: the test tools are in the repository.
 2. **A contact.** Tell your developers who answers their questions about the extension.
-3. **A date.** Tell them when you plan to submit the extension to the Chrome Web Store. The web address of the API (question 1) must be final by then.
+3. **A date.** Tell them when you plan to submit the extension to the Chrome Web Store. The web address of the API is decided (question 1): it must work by then.
 4. **Sign-off.** The guide has a list called "Launch done" (section 1). When your developers say that it is complete, you confirm it.

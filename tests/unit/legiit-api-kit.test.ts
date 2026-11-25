@@ -275,7 +275,7 @@ describe('example replies that the mock server does not give', () => {
   const answeredWith = (status: number, body: unknown) => {
     const urls: string[] = [];
     const client = new HttpLegiitClient({
-      baseUrl: 'https://api.legiit.com',
+      baseUrl: 'https://lens.legiit.com',
       auth: new StaticAuthProvider(MOCK_TOKENS.valid),
       fetch: async (url) => {
         urls.push(url);
@@ -321,11 +321,11 @@ describe('example replies that the mock server does not give', () => {
     // The id the list gave is the id in the path of the next request, and the id of the details.
     const one = answeredWithExample('getBusinessDetails.integer-ids.response.json');
     const details = await one.client.getBusinessDetails(businesses[0]!.id);
-    expect(one.urls).toEqual(['https://api.legiit.com/v1/businesses/31']);
+    expect(one.urls).toEqual(['https://lens.legiit.com/v1/businesses/31']);
     expect(details).toEqual({ ...read<Record<string, unknown>>('getBusinessDetails.response.json'), id: '31' });
     const save = answeredWithExample('anySave.integer-id.response.json');
     expect(await save.client.addCompetitor(businesses[0]!.id, read('addCompetitor.request.json'))).toEqual({ id: '9041', url: 'https://app.legiit.example/command-center/competitors/9041' });
-    expect(save.urls).toEqual(['https://api.legiit.com/v1/businesses/31/competitors']);
+    expect(save.urls).toEqual(['https://lens.legiit.com/v1/businesses/31/competitors']);
   });
 
   it('a save reply with "url": null is a complete save, for each of the five saves', async () => {

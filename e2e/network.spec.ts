@@ -182,7 +182,7 @@ test.describe('network destinations', () => {
       (id) =>
         chrome.tabs.sendMessage(id, {
           type: 'lens:fetch-same-origin',
-          urls: ['https://www.lakesidesmiles.example/', 'https://web.archive.org/web/2024/https://example.com/', 'https://api.legiit.com/v1/session', 'javascript:alert(1)'],
+          urls: ['https://www.lakesidesmiles.example/', 'https://web.archive.org/web/2024/https://example.com/', 'https://lens.legiit.com/v1/session', 'javascript:alert(1)'],
         }) as Promise<{ pages: { ok: boolean; error: string | null }[] }>,
       tabId,
     );

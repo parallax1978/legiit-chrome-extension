@@ -30,9 +30,9 @@ describe('network policy', () => {
   });
 
   it('allows the configured Legiit origin only for legiit requests', () => {
-    expect(assertAllowed('https://api.legiit.com/v1/session', 'legiit').pathname).toBe('/v1/session');
+    expect(assertAllowed('https://lens.legiit.com/v1/session', 'legiit').pathname).toBe('/v1/session');
     expect(() => assertAllowed('https://legiit.com/v1/session', 'legiit')).toThrow(NetworkPolicyError);
-    expect(() => assertAllowed('https://api.legiit.com.evil.example/', 'legiit')).toThrow(NetworkPolicyError);
+    expect(() => assertAllowed('https://lens.legiit.com.evil.example/', 'legiit')).toThrow(NetworkPolicyError);
   });
 
   it('rejects non-http(s) schemes for every purpose', () => {

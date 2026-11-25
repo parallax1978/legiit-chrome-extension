@@ -81,7 +81,7 @@ export function installChromeMock(): ChromeMock {
     manifest_version: 3,
     name: 'Legiit Lens',
     version: '0.0.0-test',
-    host_permissions: ['https://web.archive.org/*', 'https://api.legiit.com/*'],
+    host_permissions: ['https://web.archive.org/*', 'https://lens.legiit.com/*'],
     content_scripts: [{ matches: ['https://www.google.com/search*', 'https://chatgpt.com/*'], js: ['x.js'] }],
   };
 

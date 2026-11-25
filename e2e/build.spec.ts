@@ -75,7 +75,7 @@ test.describe('manifest', () => {
   });
 
   test('requires only web.archive.org and the Legiit API host; every other site is optional', () => {
-    expect(manifest.host_permissions).toEqual(['https://web.archive.org/*', 'https://api.legiit.com/*']);
+    expect(manifest.host_permissions).toEqual(['https://web.archive.org/*', 'https://lens.legiit.com/*']);
     // One pattern for http and https: a site is requested as "*://*.example.com/*", which must fit inside a single optional pattern.
     expect(manifest.optional_host_permissions).toEqual(['*://*/*']);
     expect(JSON.stringify(manifest)).not.toContain('<all_urls>');
@@ -246,7 +246,7 @@ test.describe('network call sites in the package', () => {
     /** Hosts that appear as text in the package, and why. None is contacted except the first two. */
     const KNOWN: Record<string, string> = {
       'web.archive.org': 'Rewind: the Wayback Machine (required host)',
-      'api.legiit.com': 'Legiit Command Center API, only when connected (required host)',
+      'lens.legiit.com': 'Legiit Command Center API, only when connected (required host)',
       'chatgpt.com': 'content-script match and site list; read only',
       'gemini.google.com': 'content-script match and site list; read only',
       'perplexity.ai': 'content-script match and site list; read only',

@@ -18,7 +18,7 @@ export const SINGLE_PURPOSE =
  * Override at build time with the LEGIIT_API_BASE_URL environment variable
  * (the manifest host permission follows automatically).
  */
-export const DEFAULT_LEGIIT_API_BASE_URL = 'https://api.legiit.com';
+export const DEFAULT_LEGIIT_API_BASE_URL = 'https://lens.legiit.com';
 
 export const WAYBACK_ORIGIN = 'https://web.archive.org';
 

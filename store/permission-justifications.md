@@ -38,7 +38,7 @@ Adds two context-menu items: "Analyze this page with Legiit Lens" (opens the pan
 The Rewind feature shows how a page changed over time. When the user looks up a page, the extension requests that page's capture list and archived copies from the Internet Archive's Wayback Machine (web.archive.org) and compares them on the user's device. Only the address of the page being looked up is sent.
 ```
 
-## Host permission: api.legiit.com
+## Host permission: lens.legiit.com
 
 ```
 Used only if the user chooses to connect their Legiit account. It lets the extension read the user's own account data (their businesses and tracked competitors) and save a result to Legiit Command Center when the user clicks a save button and confirms a dialog that shows exactly what will be sent. With no account connected, the extension makes no request to this host.

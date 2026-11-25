@@ -52,8 +52,8 @@ info:
     - x-called-when: what the user does that causes the call.
     - x-extension-reaction: what the extension does with that reply.
 servers:
-  - url: https://api.legiit.com
-    description: Production. This host is assumed. It must be confirmed before the extension is submitted to the Chrome Web Store.
+  - url: https://lens.legiit.com
+    description: Production. Decided. It cannot change after the extension is in the Chrome Web Store.
   - url: http://localhost:8787
     description: The mock server in this repository (npm run mock).
 security:

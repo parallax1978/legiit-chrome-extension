@@ -83,7 +83,7 @@ All in `src/config/constants.ts`:
 | Constant | Default | Meaning |
 |---|---|---|
 | `PRODUCT_NAME` | `Legiit Lens` | Name everywhere, including the manifest |
-| `DEFAULT_LEGIIT_API_BASE_URL` | `https://api.legiit.com` | The Legiit API. **An assumption**; it becomes a required host in the manifest. Override at build time with `LEGIIT_API_BASE_URL` |
+| `DEFAULT_LEGIIT_API_BASE_URL` | `https://lens.legiit.com` | The Legiit API, decided with the Legiit team (D-88); it becomes a required host in the manifest. Override at build time with `LEGIIT_API_BASE_URL` |
 | `REQUIRE_ACCOUNT_AFTER_FREE_RUNS` | `false` | Account gating. `false` = off. A number = free runs before a Legiit account is required |
 | `SUGGESTED_SHORTCUT` | `Alt+Shift+L` | Keyboard shortcut that invokes the extension |
 | `MINIMUM_CHROME_VERSION` | `116` | |

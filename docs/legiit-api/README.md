@@ -5,7 +5,7 @@ Contract version `1.0.0-draft.4`, 20 November 2026. What changed: [section 13](#
 For the Legiit backend team. The Legiit Lens Chrome extension is finished and already calls this API. The API does not exist yet. This guide says what to build so that the extension works with it without another release.
 
 - **"We" and "us" in this guide** are the extension team: the people who built the extension and this kit. Send your questions, and the answers that this guide asks for, to the person who gave you the kit, or open an issue in the repository.
-- **Where the extension stands.** It is built and tested. The connection to Legiit is already in it, so it can be published before the API exists: a user without a token never causes a request, and a user who pastes a token is told that the Legiit API is not available yet. Ask the product owner for the date of the store submission. One thing must be final by then: the host of the API (decision 1).
+- **Where the extension stands.** It is built and tested. The connection to Legiit is already in it, so it can be published before the API exists: a user without a token never causes a request, and a user who pastes a token is told that the Legiit API is not available yet. Ask the product owner for the date of the store submission. The host of the API is decided: `lens.legiit.com` (decision 1). It must work by then.
 - **The decisions in [section 11](#11-decisions-we-need-from-legiit) are open**, and most of them are for Product or Legal, not for you. The product owner has them on one page: [`decisions.md`](decisions.md).
 
 | File | What it is |
@@ -91,7 +91,7 @@ The kit was tested by three test builds. Automated agents that had only this fol
 ### Before you start
 
 - Get the repository ("Get the tools" above).
-- **Thirteen decisions are open** ([section 11](#11-decisions-we-need-from-legiit)). Decisions 1, 3, 4 and 10 block the build: ask for them first. For the others, the table names what to build until someone decides.
+- **Twelve decisions are open** ([section 11](#11-decisions-we-need-from-legiit)); decision 1, the host, is taken. Decisions 3, 4 and 10 block the build: ask for them first. For the others, the table names what to build until someone decides.
 - Read sections 3 and 5 before you write the first route, and the part of section 8 for your framework.
 
 ### A build order
@@ -192,8 +192,7 @@ So a normal user causes a few requests per minute at most.
 
 ### Base URL
 
-- Production is assumed to be `https://api.legiit.com`. Every path starts with `/v1`.
-- A path prefix is fine, for example `https://legiit.com/api/lens` followed by `/v1/session`. Tell us the final base URL.
+- Production is `https://lens.legiit.com` (decision 1). Every path starts with `/v1`, at the root of the host: `https://lens.legiit.com/v1/session`.
 - **The host must be final before the extension is submitted to the Chrome Web Store.** It is written into the extension's manifest as a required host. Changing it later makes Chrome disable the extension for every user until they approve the new host.
 - HTTPS only in production.
 - **No redirects.** Answer on the URL that was called. The extension never follows a redirect: it reports "Could not reach Legiit". The usual causes are a framework that adds or removes a trailing slash, a redirect to a canonical host, and a redirect to a login page.
@@ -680,11 +679,11 @@ Every question here came up in one of the test builds.
 
 ## 11. Decisions we need from Legiit
 
-Most of these decisions are for Product or Legal. The product owner has them in plain words on one page: [`decisions.md`](decisions.md). Each row has a recommendation that can be built today. If nobody decides, the recommendation is what gets built. Decisions 1, 3, 4 and 10 block the build: ask for them before you start.
+Most of these decisions are for Product or Legal. The product owner has them in plain words on one page: [`decisions.md`](decisions.md). Each row has a recommendation that can be built today. If nobody decides, the recommendation is what gets built. Decision 1 is taken. Decisions 3, 4 and 10 block the build: ask for them before you start.
 
 | # | Decision | Our recommendation, and what to build until someone decides | Who | Blocks |
 | --- | --- | --- | --- | --- |
-| 1 | Where does the API live? | `https://api.legiit.com`, a host of its own. It cannot change after the extension is in the store | Engineering | The store submission |
+| 1 | Where does the API live? | **Decided:** `https://lens.legiit.com`, a host of its own. It cannot change after the extension is in the store | Engineering | The store submission |
 | 2 | Where do users create a token, and how long does it last? | A "Legiit Lens" page in Command Center's settings. Tokens do not expire; the user can revoke them | Product | Connecting |
 | 3 | What is a "workspace" made from a brief? | A new item of its own in Command Center (a prospect) that shows the brief. Sending the same brief again replaces it. If Legiit decides that a workspace is a business, list it among the user's businesses too | Product | Endpoint 8 |
 | 4 | What does the content editor make of a content analysis? | A note on the business with two lists: "Only on this page" and "Missing points" | Product | Endpoint 7 |
@@ -700,7 +699,7 @@ Most of these decisions are for Product or Legal. The product owner has them in 
 
 ### What we need back from you
 
-1. The final base URL of the API (decision 1), before the extension is submitted to the store.
+1. The host `lens.legiit.com` working with HTTPS (decision 1), before the extension is submitted to the store.
 2. The URL of the token page (section 6).
 3. The name of the company that runs the AI model, if it is not Legiit (decision 6).
 4. The staging host, and a test account with one business and a token (decisions 11 and 12).

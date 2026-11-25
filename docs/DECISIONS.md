@@ -317,13 +317,16 @@ Every endpoint gets one request without a token and one with an unknown token. E
 **D-87 · The guide shows the extension.**
 Backend developers have never seen the extension, and they write the messages that it shows. Five screenshots are taken from the built extension against the mock (`npm run screenshots:kit`): the settings after Connect, the dialog with the JSON, "Saved" with its link, a rejected save, and the side panel. Nothing is drawn or edited. The save in the images is a competitor, because its JSON has no time in it, so the files are the same on every run.
 
+**D-88 · The API host is lens.legiit.com.**
+Decided with the Legiit team on 25 November 2026. The owner did not want "api" in the name, and a random string was considered. A random name hides nothing: the host is in the manifest, in the permissions of the store listing, in the extension's code and in public certificate logs. It would also look suspicious in Chrome's permission prompt, and it could never change after the first submission. `lens.legiit.com` does not advertise an API, matches the product name, and keeps the host permission to one subdomain; a path under `legiit.com` would make Chrome ask for all of `legiit.com`, where users are logged in. The API's security rests on the token, the owner check on every business and the rate limits, not on its name.
+
 ---
 
 ## 3. Assumptions that a person must confirm
 
 | # | Assumption | Where to change it |
 |---|---|---|
-| A-1 | The Legiit API is at `https://api.legiit.com`. It is a **required host in the manifest**; changing a required host later re-prompts every user, so settle it before the first submission. | `DEFAULT_LEGIIT_API_BASE_URL` in `src/config/constants.ts`, or `LEGIIT_API_BASE_URL` at build time |
+| A-1 | **Confirmed on 25 November 2026 (D-88):** the Legiit API is at `https://lens.legiit.com`. It is a **required host in the manifest**; changing a required host later re-prompts every user, so it must not change after the first submission. | `DEFAULT_LEGIIT_API_BASE_URL` in `src/config/constants.ts`, or `LEGIIT_API_BASE_URL` at build time |
 | A-2 | The endpoint paths, payloads, capability names and bearer-token auth in `docs/legiit-api/openapi.yaml`. They were written from the brief's method list; the Legiit backend team builds the API from that contract (see `docs/legiit-api/README.md`). | `src/legiit/http-client.ts`, `src/legiit/types.ts`, `src/legiit/payloads.ts`, the contract |
 | A-3 | Command Center links returned by save endpoints (`url` in the response) are safe to show as "Open in Command Center". | `SaveToLegiit` in `src/ui/shared.tsx` |
 | A-4 | Product name "Legiit Lens", publisher "Legiit". | `src/config/constants.ts` |
