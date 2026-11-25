@@ -36,7 +36,7 @@ The numbers are the numbers of section 11 in the developer guide ([README.md](RE
 
 ## Four things only you can provide
 
-1. **Access to the repository.** Give your developers read access to `parallax1978/legiit-chrome-extension` on GitHub. The guide alone is not enough: the test tools are in the repository.
+1. **Access to the repository.** Send your developers the link to `parallax1978/legiit-chrome-extension` on GitHub (branch `claude/trusting-johnson-vz4bsi`). If the repository is private, give them read access. The guide alone is not enough: the test tools are in the repository.
 2. **A contact.** Tell your developers who answers their questions about the extension.
 3. **A date.** Tell them when you plan to submit the extension to the Chrome Web Store. The web address of the API (question 1) must be final by then.
 4. **Sign-off.** The guide has a list called "Launch done" (section 1). When your developers say that it is complete, you confirm it.

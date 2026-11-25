@@ -28,7 +28,7 @@ This folder is the specification. The mock server and the check are tools in the
 
 **This folder does not work alone.** The mock server, the check and the extension are in the repository that this folder belongs to.
 
-- The repository is `parallax1978/legiit-chrome-extension` on GitHub. It is private: ask the person who gave you this kit for read access. This folder is `docs/legiit-api/` in it.
+- The repository is `parallax1978/legiit-chrome-extension` on GitHub, branch `claude/trusting-johnson-vz4bsi`. This folder is `docs/legiit-api/` in it. If you cannot open the repository, ask the person who gave you this kit for access.
 - You need Node 22 or later. `npm install` in the repository installs everything: about 1 GB and a few minutes.
 - If you received only this folder, or a document made from it, you can read and plan. You cannot run `npm run mock` or `npm run api:check`, and you cannot build the extension. Get the repository before you start to build.
 
