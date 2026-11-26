@@ -6,7 +6,8 @@ import { PRODUCT_NAME } from '@/config/constants';
 import { LEGIIT_API_BASE_URL } from '@/config/runtime';
 import { guardedFetch } from '@/net/guarded-fetch';
 import { hasLegiitAccess } from '@/net/permissions';
-import { getLegiitToken, getPendingSignup, setPendingSignup, type PendingSignup } from '@/storage/settings';
+import { brandFromEmail } from '@/brands/from-email';
+import { getLegiitToken, getPendingSignup, setPendingSignup, updateSettings, type PendingSignup } from '@/storage/settings';
 import { StaticAuthProvider, TokenAuthProvider, type AuthProvider } from './auth';
 import { isUnavailable, LegiitError, METHOD_CAPABILITY, type LegiitClient, type LegiitMethod } from './client';
 import { HttpLegiitClient } from './http-client';
@@ -136,6 +137,13 @@ export async function startSignup(email: string, client: LegiitClient = createCl
   }
   const pending = { email: payload.email, sentAt: Date.now() };
   await setPendingSignup(pending);
+  // No question about "your brand": a company address names it. A brand the user already has stays.
+  const brand = brandFromEmail(payload.email);
+  if (brand) {
+    await updateSettings((settings) => {
+      if (settings.myBrands.length === 0) settings.myBrands.push({ id: 'from-email', name: brand.name, domains: [brand.domain], aliases: [], source: 'manual' });
+    });
+  }
   return pending;
 }
 

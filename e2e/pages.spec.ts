@@ -111,17 +111,22 @@ test.describe('options page', () => {
 });
 
 test.describe('onboarding page', () => {
-  test('explains what the extension does, reads and never sends, and leads to settings', async ({ lens }) => {
+  test('asks only for an email, and keeps what it does, reads and never sends one click away', async ({ lens }) => {
     const onboarding = await lens.openExtensionPage('onboarding.html');
     await expect(onboarding.getByTestId('onboarding')).toContainText('Shows how visible a web page or brand is in Google results and AI answers, and what explains it.');
     for (const feature of ['Click Potential', 'Why Not Me', 'Rewind', 'New or Noise', 'Instant Brief']) await expect(onboarding.getByTestId('onboarding-does')).toContainText(feature);
-    await expect(onboarding.getByTestId('onboarding-does')).toContainText('Everything works without an account.');
+    await expect(onboarding.getByTestId('onboarding-does')).toContainText('Your email opens every tool.');
+    await expect(onboarding.getByTestId('onboarding-signup')).toContainText('Enter your email to start');
+    await expect(onboarding.getByTestId('signup-email')).toBeVisible();
     await expect(onboarding.getByTestId('onboarding-reads')).toContainText('chatgpt.com, gemini.google.com, perplexity.ai and copilot.microsoft.com');
     await expect(onboarding.getByTestId('onboarding-reads')).toContainText('web.archive.org');
     await expect(onboarding.getByTestId('onboarding-never')).toContainText('No analytics, no tracking');
 
-    const [options] = await Promise.all([lens.context.waitForEvent('page'), onboarding.getByTestId('onboarding-settings').click()]);
-    await expect(options.getByTestId('options-page')).toBeVisible();
+    // One question on the page: the email. The rest is folded away until the user opens it.
+    await expect(onboarding.locator('input:visible')).toHaveCount(1);
+    await expect(onboarding.getByTestId('onboarding-never')).toBeHidden();
+    await onboarding.getByTestId('onboarding-details').locator('summary').click();
+    await expect(onboarding.getByTestId('onboarding-never')).toBeVisible();
     expect(lens.extensionRequests()).toEqual([]);
     expect(lens.errors).toEqual([]);
   });

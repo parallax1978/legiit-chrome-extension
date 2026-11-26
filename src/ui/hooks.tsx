@@ -107,7 +107,11 @@ interface ConnectionValue {
 
 const ConnectionContext = createContext<ConnectionValue | null>(null);
 
-export function ConnectionProvider({ children }: { children: ReactNode }) {
+/**
+ * @param checkSession False on a page that only signs up (the welcome page): it never reads the session by itself, so
+ *   it causes no request while it stays open in a tab, and it never races another page over a refused token.
+ */
+export function ConnectionProvider({ children, checkSession = true }: { children: ReactNode; checkSession?: boolean }) {
   const [connection, setConnection] = useState<Connection>(DISCONNECTED);
   const [loading, setLoading] = useState(true);
   const [signup, setSignup] = useState<PendingSignup | null>(null);
@@ -146,6 +150,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [settle]);
 
   useEffect(() => {
+    if (!checkSession) {
+      setLoading(false);
+      return;
+    }
     void reload();
     // Another extension page (options, panel) connected or disconnected. What was found missing belonged to the
     // session before: with a new token every feature gets its chance again.
@@ -154,7 +162,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       resetUnavailable();
       void reload();
     });
-  }, [reload]);
+  }, [reload, checkSession]);
 
   /** Stable, so effects can depend on it without running again. */
   const refreshCapabilities = useCallback(() => bump((n) => n + 1), []);

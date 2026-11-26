@@ -9,10 +9,20 @@ import { expect, LEGIIT_ORIGIN, scenario, test, type Lens } from './lens';
 
 const legiitRequests = (lens: Lens) => lens.requests.filter((r) => r.url.startsWith(LEGIIT_ORIGIN));
 
+/** The token field sits behind "I have a Legiit token": everyone else only sees the email box. */
+async function tokenField(page: Page) {
+  const link = page.getByTestId('legiit-have-token');
+  const field = page.getByTestId('legiit-token');
+  // Wait until the account card has rendered one or the other, then open the field if it is folded away.
+  await expect(link.or(field).first()).toBeVisible();
+  if (await link.isVisible()) await link.click();
+  return field;
+}
+
 /** Connects on the options page the way a user does: paste a token, press Connect. */
 async function connect(lens: Lens, token: string, business: string | null = 'biz_brightpath'): Promise<Page> {
   const options = await lens.openExtensionPage('options.html');
-  await options.getByTestId('legiit-token').fill(token);
+  await (await tokenField(options)).fill(token);
   await options.getByTestId('legiit-connect').click();
   await expect(options.getByTestId('legiit-connected')).toBeVisible();
   if (business) {
@@ -129,7 +139,7 @@ test.describe('without a Legiit account', () => {
     await expect(panel.getByTestId('wnm-gaps')).toBeVisible();
     await expect(panel.getByTestId('save-saveGapList')).toHaveCount(0);
     await panel.getByTestId('tab-settings').click();
-    await expect(panel.getByTestId('legiit-token')).toBeVisible();
+    await expect(panel.getByTestId('signup-email')).toBeVisible();
     await expect(panel.getByTestId('ai-provider')).toContainText('Built-in templates');
     expect(legiitRequests(lens)).toEqual([]);
     expect(lens.legiit.requests).toEqual([]);
@@ -137,7 +147,7 @@ test.describe('without a Legiit account', () => {
 
   test('a wrong token is reported and nothing is stored', async ({ lens }) => {
     const options = await lens.openExtensionPage('options.html');
-    await options.getByTestId('legiit-token').fill('invalid');
+    await (await tokenField(options)).fill('invalid');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-error')).toContainText('Legiit did not accept the token');
     await expect(options.getByTestId('legiit-connected')).toHaveCount(0);
@@ -156,7 +166,7 @@ test.describe('without a Legiit account', () => {
     await expect(options.getByTestId('legiit-error')).toHaveText('Your Legiit token was not accepted. Paste a new one to reconnect.');
     expect(legiitRequests(lens).map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['GET /v1/session']);
     // Connecting again clears it.
-    await options.getByTestId('legiit-token').fill('demo-token');
+    await (await tokenField(options)).fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-connected')).toBeVisible();
     await expect(options.getByTestId('legiit-error')).toHaveCount(0);
@@ -204,7 +214,7 @@ test.describe('without a Legiit account', () => {
     await lens.context.route('**/v1/session', (route) => (down ? route.fulfill({ status: 503, contentType: 'text/html', body: 'Service Unavailable' }) : route.fallback()));
     const options = await lens.openExtensionPage('options.html');
     await expect(options.getByTestId('legiit-error')).toHaveText('Legiit had a problem (503)');
-    await options.getByTestId('legiit-token').fill('demo-token');
+    await (await tokenField(options)).fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-connect')).toHaveText('Connect');
     await expect(options.getByTestId('legiit-error')).toHaveText('Legiit had a problem (503)');
@@ -226,7 +236,7 @@ test.describe('without a Legiit account', () => {
     // What was pre-filled is still there for now: the user did not disconnect.
     await expect(options.getByTestId('brand-mine')).toHaveCount(1);
     (lens.legiit.session as unknown as { user: { id: string } }).user.id = 'usr_another_account';
-    await options.getByTestId('legiit-token').fill('demo-token');
+    await (await tokenField(options)).fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-connected')).toBeVisible();
     await expect(options.getByTestId('legiit-business')).toHaveValue('');
@@ -387,7 +397,7 @@ test.describe('connected to Legiit', () => {
   test('disconnecting removes the token and stops all contact with Legiit', async ({ lens }) => {
     const options = await connect(lens, 'demo-token');
     await options.getByTestId('legiit-disconnect').click();
-    await expect(options.getByTestId('legiit-token')).toBeVisible();
+    await expect(options.getByTestId('signup-email')).toBeVisible();
     expect(await lens.worker.evaluate(async () => Object.keys(await chrome.storage.local.get('legiitAuth')))).toEqual([]);
     // Brands that came from Command Center are removed with the connection.
     await expect(options.getByTestId('brand-mine')).toHaveCount(0);
@@ -469,7 +479,7 @@ test.describe('an account with some endpoints switched off', () => {
     lens.legiit.session.capabilities = all;
     await options.getByTestId('legiit-disconnect').click();
     await expect(panel.getByTestId('connection-chip')).toHaveCount(0);
-    await options.getByTestId('legiit-token').fill('demo-token');
+    await (await tokenField(options)).fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-connected')).toBeVisible();
     await options.getByTestId('legiit-business').selectOption('biz_brightpath');
@@ -569,7 +579,7 @@ test.describe('an account with some endpoints switched off', () => {
     // The session lists "businesses", but the endpoint is not built: any 404 without the code "not_found".
     await lens.context.route('**/v1/businesses', (route) => route.fulfill({ status: 404, contentType: 'text/html', body: '<h1>Not Found</h1>' }));
     const options = await lens.openExtensionPage('options.html');
-    await options.getByTestId('legiit-token').fill('demo-token');
+    await (await tokenField(options)).fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-connected')).toBeVisible();
     await expect(options.getByTestId('legiit-business')).toHaveCount(0);
@@ -580,7 +590,7 @@ test.describe('an account with some endpoints switched off', () => {
   test('a business list that fails says so', async ({ lens }) => {
     await lens.context.route('**/v1/businesses', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }));
     const options = await lens.openExtensionPage('options.html');
-    await options.getByTestId('legiit-token').fill('demo-token');
+    await (await tokenField(options)).fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await expect(options.getByTestId('legiit-businesses-error')).toHaveText('Could not load your businesses: Legiit had a problem (500)');
     await expect(options.getByTestId('legiit-no-businesses')).toHaveCount(0);

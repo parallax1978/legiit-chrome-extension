@@ -196,6 +196,8 @@ function LegiitSection() {
   const { connection, loading, connect, retry, disconnect, can, refreshCapabilities, signup } = useConnection();
   const { settings, update } = useSettings();
   const [token, setToken] = useState('');
+  /** The token field is for people who already have a token; everyone else only sees the email box. */
+  const [showToken, setShowToken] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<LegiitBusiness[] | null>(null);
@@ -348,8 +350,13 @@ function LegiitSection() {
       ) : (
         <>
           {signup ? <VerifyCode /> : <SignUpForm />}
-          <p className="small muted">Or paste a token: create one under Account Settings → Legiit Lens API on legiit.com.</p>
-          <Field label="API token" hint="Paste a token from Legiit Command Center.">
+          {!showToken && !connection.tokenKept && !error && !connection.error ? (
+            <button type="button" className="link-button small" onClick={() => setShowToken(true)} data-testid="legiit-have-token">
+              I have a Legiit token
+            </button>
+          ) : (
+          <>
+          <Field label="API token" hint="Create one under Account Settings → Legiit Lens API on legiit.com.">
             <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" spellCheck={false} data-testid="legiit-token" />
           </Field>
           <div className="row">
@@ -382,6 +389,8 @@ function LegiitSection() {
                 <span className="small muted">Deletes the stored token and everything pre-filled from Command Center from this device.</span>
               </div>
             </>
+          )}
+          </>
           )}
         </>
       )}

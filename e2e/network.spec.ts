@@ -205,6 +205,7 @@ test.describe('network destinations', () => {
 
   test('connecting a Legiit account adds exactly one destination, the Legiit API', async ({ lens }) => {
     const options = await lens.openExtensionPage('options.html');
+    await options.getByTestId('legiit-have-token').click();
     await options.getByTestId('legiit-token').fill('demo-token');
     await options.getByTestId('legiit-connect').click();
     await options.getByTestId('legiit-business').selectOption('biz_brightpath');

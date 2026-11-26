@@ -71,6 +71,7 @@ test.beforeAll(() => {
 async function connect(lens: Lens): Promise<Page> {
   const settings = await lens.openExtensionPage('options.html');
   await settings.setViewportSize(SETTINGS_WINDOW);
+  await settings.getByTestId('legiit-have-token').click();
   await settings.getByTestId('legiit-token').fill(MOCK_TOKENS.valid);
   await settings.getByTestId('legiit-connect').click();
   await expect(settings.getByTestId('legiit-connected')).toContainText('Dana Whitfield · agency');

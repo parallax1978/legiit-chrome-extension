@@ -1061,3 +1061,27 @@ describe('signing up with an email address', () => {
     expect(await settings.getPendingSignup()).toBeNull();
   });
 });
+
+describe('the brand from the sign-up email', () => {
+  it('names a company address, and leaves free mail and odd input alone', async () => {
+    const { brandFromEmail } = await import('@/brands/from-email');
+    expect(brandFromEmail('chris@superstarseo.com')).toEqual({ name: 'Superstarseo', domain: 'superstarseo.com' });
+    expect(brandFromEmail('jordan@mail.brightpathdental.co.uk')).toEqual({ name: 'Brightpathdental', domain: 'brightpathdental.co.uk' });
+    expect(brandFromEmail('someone@gmail.com')).toBeNull();
+    expect(brandFromEmail('someone@Outlook.com')).toBeNull();
+    expect(brandFromEmail('no-at-sign')).toBeNull();
+  });
+
+  it('fills "My brands" when it is empty, and never replaces a brand the user has', async () => {
+    const { startSignup } = await import('@/legiit/connection');
+    const { MockLegiitClient: Mock } = await import('@/legiit/mock-client');
+    const settings = await import('@/storage/settings');
+    await startSignup('jordan@brightpathdental.com', new Mock());
+    expect((await settings.getSettings()).myBrands).toMatchObject([{ name: 'Brightpathdental', domains: ['brightpathdental.com'] }]);
+    await settings.updateSettings((s) => {
+      s.myBrands = [{ id: 'mine', name: 'BrightPath Dental', domains: ['brightpath.example'], aliases: [], source: 'manual' }];
+    });
+    await startSignup('jordan@another-company.com', new Mock());
+    expect((await settings.getSettings()).myBrands.map((b) => b.name)).toEqual(['BrightPath Dental']);
+  });
+});

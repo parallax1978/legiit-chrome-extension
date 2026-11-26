@@ -326,6 +326,9 @@ The owner's decision on 26 November 2026, replacing the brief's "everything work
 **D-90 · The email opens the tools; the code from the inbox creates the account.**
 The owner's decision on 26 November 2026, after D-89: an account created straight from a typed email lets anyone flood Legiit with fake accounts. The flow now follows Keywords Everywhere, the closest comparable SEO extension: `POST /v1/signups` keeps the address as a lead and emails a 6-digit code, and the tools open at once; `POST /v1/signups/verify` takes the code and only then creates the account (or connects the one the address already has) and returns a token. An address that nobody reads never becomes an account, so a flood adds leads and emails, not accounts, and existing customers connect with the code instead of a pasted token. `POST /v1/accounts` and its `409` are gone; the address waiting for its code is kept on the device (`legiitSignup`) until the code is verified or the user enters another address.
 
+**D-91 · One question: the email.**
+The owner's direction on 26 November 2026: setting up must not feel like a form. The welcome page shows the email box and one line on how to use the extension; what it does, reads and never sends is folded into one "details" block, still on the page for anyone who wants it. "Add your brand and competitors in Settings" is no longer a step: a company email address fills "My brands" by itself (jordan@brightpathdental.com gives "Brightpathdental" on brightpathdental.com; free mail providers give nothing, and a brand the user already has is never replaced). In Settings, the token field sits behind "I have a Legiit token", so a new user sees one box there too.
+
 ---
 
 ## 3. Assumptions that a person must confirm
