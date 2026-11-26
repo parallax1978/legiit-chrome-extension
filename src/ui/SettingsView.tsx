@@ -19,7 +19,7 @@ import { clearAllSettings, type StoredBrand } from '@/storage/settings';
 import { useAiProvider, useConnection, useSettings } from './hooks';
 import { Button, Card, Chip, ExtensionLink, Field, Notice, ProgressBar } from './kit';
 import { SaveToLegiit } from './shared';
-import { SignUpForm } from './SignUp';
+import { SignUpForm, VerifyCode } from './SignUp';
 
 const splitList = (value: string): string[] =>
   value
@@ -193,7 +193,7 @@ function AgencySection() {
 }
 
 function LegiitSection() {
-  const { connection, loading, connect, retry, disconnect, can, refreshCapabilities } = useConnection();
+  const { connection, loading, connect, retry, disconnect, can, refreshCapabilities, signup } = useConnection();
   const { settings, update } = useSettings();
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -347,9 +347,8 @@ function LegiitSection() {
         </>
       ) : (
         <>
-          <p>New to Legiit? Enter your email to create your free account.</p>
-          <SignUpForm />
-          <p className="small muted">Already have a Legiit account? Create a token under Account Settings → Legiit Lens API on legiit.com, and paste it here.</p>
+          {signup ? <VerifyCode /> : <SignUpForm />}
+          <p className="small muted">Or paste a token: create one under Account Settings → Legiit Lens API on legiit.com.</p>
           <Field label="API token" hint="Paste a token from Legiit Command Center.">
             <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" spellCheck={false} data-testid="legiit-token" />
           </Field>

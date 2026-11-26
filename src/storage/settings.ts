@@ -77,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = v.parse(SettingsSchema, {});
 const SETTINGS_KEY = 'settings';
 const AUTH_KEY = 'legiitAuth';
 const USAGE_KEY = 'usage';
+const SIGNUP_KEY = 'legiitSignup';
 const GATE_OFF_KEY = 'testing.noAccountGate';
 const SELECTOR_OVERRIDES_KEY = 'selectorOverrides';
 
@@ -148,6 +149,34 @@ export async function setLegiitToken(token: string | null): Promise<void> {
 export function onLegiitTokenChanged(listener: () => void): () => void {
   const handler = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
     if (area === 'local' && changes[AUTH_KEY]) listener();
+  };
+  chrome.storage.onChanged.addListener(handler);
+  return () => chrome.storage.onChanged.removeListener(handler);
+}
+
+/* ---------- The first screen's email address, until its code is verified ---------- */
+
+/** The address the first screen sent to Legiit. It opens the tools; its code, once verified, connects an account. */
+export interface PendingSignup {
+  email: string;
+  /** When the latest code was asked for (ms since 1970). */
+  sentAt: number;
+}
+
+export async function getPendingSignup(): Promise<PendingSignup | null> {
+  const stored = await chrome.storage.local.get(SIGNUP_KEY);
+  const value = stored[SIGNUP_KEY] as Partial<PendingSignup> | undefined;
+  return typeof value?.email === 'string' && value.email !== '' ? { email: value.email, sentAt: typeof value.sentAt === 'number' ? value.sentAt : 0 } : null;
+}
+
+export async function setPendingSignup(value: PendingSignup | null): Promise<void> {
+  if (value === null) await chrome.storage.local.remove(SIGNUP_KEY);
+  else await chrome.storage.local.set({ [SIGNUP_KEY]: value });
+}
+
+export function onPendingSignupChanged(listener: () => void): () => void {
+  const handler = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+    if (area === 'local' && changes[SIGNUP_KEY]) listener();
   };
   chrome.storage.onChanged.addListener(handler);
   return () => chrome.storage.onChanged.removeListener(handler);

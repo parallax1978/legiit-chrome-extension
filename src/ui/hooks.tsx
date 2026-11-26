@@ -3,12 +3,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { pickProvider, type AiProvider } from '@/ai/provider';
 import { BrandMatcher } from '@/brands/matcher';
 import { errorMessage, isAbortError } from '@/lib/async';
-import { can, connect as connectLegiit, disconnect as disconnectLegiit, DISCONNECTED, loadConnection, resetUnavailable, signUp as signUpLegiit, type Connection } from '@/legiit/connection';
+import { can, connect as connectLegiit, disconnect as disconnectLegiit, DISCONNECTED, loadConnection, resetUnavailable, startSignup as startSignupLegiit, verifySignup as verifySignupLegiit, type Connection } from '@/legiit/connection';
 import type { LegiitMethod } from '@/legiit/client';
 import type { InvokeIntent, PanelEvent } from '@/model/messages';
 import { requestLegiitAccess } from '@/net/permissions';
 import { activeTabId, pinnedTabId, probeTab, type Access } from '@/panel/tabs';
-import { DEFAULT_SETTINGS, getLegiitToken, getSettings, onLegiitTokenChanged, onSettingsChanged, trackedBrands, updateSettings, type Settings } from '@/storage/settings';
+import { DEFAULT_SETTINGS, getLegiitToken, getPendingSignup, getSettings, onLegiitTokenChanged, onPendingSignupChanged, onSettingsChanged, setPendingSignup, trackedBrands, updateSettings, type PendingSignup, type Settings } from '@/storage/settings';
 
 /* ------------------------------ Settings ------------------------------ */
 
@@ -88,8 +88,14 @@ interface ConnectionValue {
   loading: boolean;
   /** Resolves with the new connection, so the caller can tell which account it is. */
   connect: (token: string) => Promise<Connection>;
-  /** Creates a free Legiit account from an email address and connects with it. */
-  signUp: (email: string) => Promise<Connection>;
+  /** The first screen's email address, while its code is not verified yet. It opens the tools. */
+  signup: PendingSignup | null;
+  /** Sends the email address: Legiit keeps it and emails a code. The tools open once Legiit has it. */
+  startSignup: (email: string) => Promise<void>;
+  /** Sends the code from the email: connects the account Legiit creates (or already had) for the address. */
+  verifySignup: (code: string) => Promise<Connection>;
+  /** Forgets the email address, to enter another one. */
+  cancelSignup: () => Promise<void>;
   /** Checks the stored token again after a failed check. Call from a click: it may have to ask Chrome for access. */
   retry: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -104,6 +110,13 @@ const ConnectionContext = createContext<ConnectionValue | null>(null);
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState<Connection>(DISCONNECTED);
   const [loading, setLoading] = useState(true);
+  const [signup, setSignup] = useState<PendingSignup | null>(null);
+
+  useEffect(() => {
+    const read = () => void getPendingSignup().then(setSignup);
+    read();
+    return onPendingSignupChanged(read);
+  }, []);
   /** Goes up when an endpoint turned out to be missing: every consumer then asks `can` again. */
   const [revision, bump] = useState(0);
 
@@ -183,18 +196,28 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           changingRef.current = false;
         }
       },
-      signUp: async (email) => {
+      signup,
+      startSignup: async (email) => {
+        await requestLegiitAccess();
+        setSignup(await startSignupLegiit(email));
+      },
+      verifySignup: async (code) => {
         await requestLegiitAccess();
         changingRef.current = true;
         seq.current += 1;
         try {
-          const next = await signUpLegiit(email);
+          const next = await verifySignupLegiit(code);
           setConnection(next);
           setLoading(false);
+          setSignup(null);
           return next;
         } finally {
           changingRef.current = false;
         }
+      },
+      cancelSignup: async () => {
+        await setPendingSignup(null);
+        setSignup(null);
       },
       disconnect: async () => {
         changingRef.current = true;
@@ -212,7 +235,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     }),
     // `revision` is listed on purpose: `can` also reads which endpoints were found missing on this page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [connection, loading, refreshCapabilities, revision],
+    [connection, loading, refreshCapabilities, revision, signup],
   );
   return <ConnectionContext.Provider value={value}>{children}</ConnectionContext.Provider>;
 }

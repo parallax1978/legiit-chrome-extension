@@ -22,7 +22,7 @@
  *   a competitor is never stored twice (reference, endpoint 6)     → addCompetitor()
  *   a brief that is sent again replaces its workspace (endpoint 8) → createWorkspace()
  *   every reply carries the CORS headers (3)                       → CORS_HEADERS
- *   an email creates a free account and its token (endpoint 0)     → createAccount()
+ *   an email is kept and gets a code; the code gets a token (11, 12) → startSignup(), verifySignup()
  * The order of the checks is the one section 5 gives: token, body size, JSON syntax, endpoint and capability,
  * business, remembered reply, fields.
  * Everything that is "per user" (capabilities, remembered replies, briefs) is looked up by the user the token
@@ -98,6 +98,8 @@ export function createMockState() {
     nextId: 1,
     /** Accounts created from the extension's first screen: token → session. */
     accounts: new Map(),
+    /** Email addresses from the first screen (the leads), with their latest code: lower-case address → sign-up. */
+    signups: new Map(),
   };
 }
 
@@ -129,20 +131,51 @@ function sessionFor(state, token) {
 /** What a new free account of the mock gets: it has no business yet, so no feature that saves into one. */
 export const MOCK_NEW_ACCOUNT_CAPABILITIES = ['workspaces', 'industryPulse', 'ai'];
 
+/** The code the mock "emails". A real server sends a random 6-digit code, valid for 30 minutes. */
+export const MOCK_SIGNUP_CODE = '246810';
+
 /**
- * POST /v1/accounts: a free account from an email address, answered with a token for it. An email that already
- * has an account gets 409 and no token, so nobody can connect to another person's account by typing their email.
+ * POST /v1/signups: keeps the address as a lead and "emails" a code. No account is created here, and the reply is
+ * the same whether or not the address has an account.
  */
-function createAccount(state, body) {
-  const problem = problemWith('AccountRequest', body);
+function startSignup(state, body) {
+  const problem = problemWith('SignupRequest', body);
   if (problem) return error(422, 'invalid', problem);
-  const email = body.email.trim().toLowerCase();
-  const known = [state.session, state.limitedSession, ...state.accounts.values()].some((session) => (session.user.email ?? '').toLowerCase() === email);
-  if (known) return error(409, 'account_exists', 'This email already has a Legiit account: connect it with a token from Command Center.');
+  const email = body.email.trim();
+  state.signups.set(email.toLowerCase(), { email, code: MOCK_SIGNUP_CODE, wrong: 0 });
+  return json(202, { status: 'code_sent' });
+}
+
+/** The session of the account that an address already has, with its token, or null. */
+function accountOf(state, email) {
+  const key = email.toLowerCase();
+  if ((state.session.user.email ?? '').toLowerCase() === key) return MOCK_TOKENS.valid;
+  if ((state.limitedSession.user.email ?? '').toLowerCase() === key) return MOCK_TOKENS.limited;
+  for (const [token, session] of state.accounts) if ((session.user.email ?? '').toLowerCase() === key) return token;
+  return null;
+}
+
+/**
+ * POST /v1/signups/verify: the code proves the inbox. A new address gets a new free account (201), an address with
+ * an account gets a token for it (200). Five wrong codes end the sign-up.
+ */
+function verifySignup(state, body) {
+  const problem = problemWith('SignupVerification', body);
+  if (problem) return error(422, 'invalid', problem);
+  const key = body.email.trim().toLowerCase();
+  const signup = state.signups.get(key);
+  if (!signup || signup.wrong >= 5) return error(422, 'no_code', 'This code no longer works: ask for a new code.');
+  if (body.code !== signup.code) {
+    signup.wrong += 1;
+    return error(422, 'wrong_code', 'That code is not right: check the email and try again.');
+  }
+  state.signups.delete(key);
+  const existing = accountOf(state, key);
+  if (existing) return json(200, { token: existing });
   // Counted apart from the saved items, so that a new account does not change the ids of the examples.
   const n = state.accounts.size + 1;
-  const token = `lgt_mock_${String(n).padStart(4, '0')}_${email.replace(/[^a-z0-9]/g, '').slice(0, 24)}`;
-  state.accounts.set(token, { user: { id: `usr_new_${n}`, name: '', email: body.email.trim() }, plan: 'free', capabilities: [...MOCK_NEW_ACCOUNT_CAPABILITIES] });
+  const token = `lgt_mock_${String(n).padStart(4, '0')}_${key.replace(/[^a-z0-9]/g, '').slice(0, 24)}`;
+  state.accounts.set(token, { user: { id: `usr_new_${n}`, name: '', email: signup.email }, plan: 'free', capabilities: [...MOCK_NEW_ACCOUNT_CAPABILITIES] });
   return json(201, { token });
 }
 
@@ -180,17 +213,17 @@ function answer(state, request) {
   if (method === 'OPTIONS') return { status: 204, headers: {}, body: '' };
   if (path === '/' || path === '/health') return json(200, { ok: true, service: 'legiit-mock' });
 
-  // --- A new account. The one call without a token: the email address is all there is.
-  if (method === 'POST' && path === '/v1/accounts') {
+  // --- Signing up. The two calls without a token: the email address and the code are all there is.
+  if (method === 'POST' && (path === '/v1/signups' || path === '/v1/signups/verify')) {
     if (Buffer.byteLength(request.body ?? '', 'utf8') > MAX_REQUEST_BYTES) return error(413, 'too_large', 'The request body is larger than 1 MB');
-    let account;
+    let signup;
     try {
-      account = JSON.parse(request.body || 'null');
+      signup = JSON.parse(request.body || 'null');
     } catch {
       return error(400, 'bad_request', 'The body is not valid JSON');
     }
-    if (account === null || typeof account !== 'object' || Array.isArray(account)) return error(400, 'bad_request', 'A JSON object is required');
-    return createAccount(state, account);
+    if (signup === null || typeof signup !== 'object' || Array.isArray(signup)) return error(400, 'bad_request', 'A JSON object is required');
+    return path === '/v1/signups' ? startSignup(state, signup) : verifySignup(state, signup);
   }
 
   // --- The token. 401 is for the token and nothing else, and it always carries the error body.

@@ -6,11 +6,11 @@ import { PRODUCT_NAME } from '@/config/constants';
 import { LEGIIT_API_BASE_URL } from '@/config/runtime';
 import { guardedFetch } from '@/net/guarded-fetch';
 import { hasLegiitAccess } from '@/net/permissions';
-import { getLegiitToken } from '@/storage/settings';
+import { getLegiitToken, getPendingSignup, setPendingSignup, type PendingSignup } from '@/storage/settings';
 import { StaticAuthProvider, TokenAuthProvider, type AuthProvider } from './auth';
 import { isUnavailable, LegiitError, METHOD_CAPABILITY, type LegiitClient, type LegiitMethod } from './client';
 import { HttpLegiitClient } from './http-client';
-import { accountPayload } from './payloads';
+import { signupPayload, verificationPayload } from './payloads';
 import type { Capability, LegiitSession } from './types';
 
 export interface Connection {
@@ -113,28 +113,51 @@ export async function connect(token: string, client?: LegiitClient): Promise<Con
 /** Good enough to catch a typing mistake. The server decides whether the address is real. */
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Says what stops a sign-up call, in words for the first screen. */
+async function signupFailure(error: unknown, button: string): Promise<never> {
+  if (isUnavailable(error)) throw new LegiitError('unavailable', 'Signing up is not available yet. Try again later.', 404);
+  if (error instanceof LegiitError && error.code === 'network' && !(await hasLegiitAccess())) {
+    throw new LegiitError('network', `Chrome is not letting ${PRODUCT_NAME} reach ${new URL(LEGIIT_API_BASE_URL).host}. Click ${button} again and allow it.`);
+  }
+  throw error;
+}
+
 /**
- * Creates a free Legiit account from an email address and connects with the token Legiit returns. That token is
- * checked and stored like a pasted one. An email that already has an account gets no token: its owner connects
- * with a token from Command Center instead.
+ * The first screen: sends the email address to Legiit, which keeps it and emails a code to it. Once Legiit has it,
+ * the address is remembered on the device and the tools open. No account exists yet.
  */
-export async function signUp(email: string, client: LegiitClient = createClient()): Promise<Connection> {
-  const payload = accountPayload(email);
+export async function startSignup(email: string, client: LegiitClient = createClient()): Promise<PendingSignup> {
+  const payload = signupPayload(email);
   if (!EMAIL_SHAPE.test(payload.email)) throw new LegiitError('rejected', 'Enter your email address, for example name@company.com.');
+  try {
+    await client.startSignup(payload);
+  } catch (error) {
+    return signupFailure(error, 'Start');
+  }
+  const pending = { email: payload.email, sentAt: Date.now() };
+  await setPendingSignup(pending);
+  return pending;
+}
+
+/**
+ * The code from the email: Legiit creates the account if there is none (or finds the existing one) and returns a
+ * token, which is checked and stored like a pasted one.
+ */
+export async function verifySignup(code: string, client?: LegiitClient): Promise<Connection> {
+  const pending = await getPendingSignup();
+  if (pending === null) throw new LegiitError('rejected', 'Enter your email address first.');
+  const payload = verificationPayload(pending.email, code);
+  if (payload.code === '') throw new LegiitError('rejected', 'Enter the code from the email.');
   let token: string;
   try {
-    ({ token } = await client.createAccount(payload));
+    ({ token } = await (client ?? createClient()).verifySignup(payload));
   } catch (error) {
-    if (error instanceof LegiitError && error.status === 409) {
-      throw new LegiitError('rejected', 'This email already has a Legiit account. Connect it with your token under Settings.', 409);
-    }
-    if (isUnavailable(error)) throw new LegiitError('unavailable', 'Creating an account is not available yet. Try again later.', 404);
-    if (error instanceof LegiitError && error.code === 'network' && !(await hasLegiitAccess())) {
-      throw new LegiitError('network', `Chrome is not letting ${PRODUCT_NAME} reach ${new URL(LEGIIT_API_BASE_URL).host}. Click Start again and allow it.`);
-    }
-    throw error;
+    return signupFailure(error, 'Verify');
   }
-  return connect(token);
+  // The token is checked with its own client, as a pasted one is (a test passes its double instead).
+  const connection = await connect(token, client);
+  await setPendingSignup(null);
+  return connection;
 }
 
 export async function disconnect(): Promise<void> {

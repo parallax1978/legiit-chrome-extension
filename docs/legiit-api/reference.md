@@ -30,7 +30,8 @@ How to read the tables:
 | 8 | [`POST /v1/workspaces/from-brief`](#8-post-v1workspacesfrom-brief) | Creates a workspace for a new client from a brief the extension wrote. | `workspaces` |
 | 9 | [`GET /v1/industry-pulse`](#9-get-v1industry-pulse) | Returns dated search-industry events, such as Google algorithm updates. | `industryPulse` |
 | 10 | [`POST /v1/ai/completions`](#10-post-v1aicompletions) | Rewrites a summary with Legiit's language model. | `ai` |
-| 11 | [`POST /v1/accounts`](#11-post-v1accounts) | Creates a free Legiit account from an email address and returns a token for it. | always on |
+| 11 | [`POST /v1/signups`](#11-post-v1signups) | Takes the email address from the extension's first screen and emails a 6-digit code to it. | always on |
+| 12 | [`POST /v1/signups/verify`](#12-post-v1signupsverify) | Checks the 6-digit code, creates the account if there is none, and returns a token for it. | always on |
 
 ## 1. GET /v1/session
 
@@ -1575,38 +1576,39 @@ File: `examples/completeAI.response.json`.
 
 Shortened here (`text`: first 300 of 715 characters shown). Complete file: `examples/completeAI.brief.response.json`.
 
-## 11. POST /v1/accounts
+## 11. POST /v1/signups
 
-Creates a free Legiit account from an email address and returns a token for it.
+Takes the email address from the extension's first screen and emails a 6-digit code to it.
 
 | Item | Value |
 | --- | --- |
 | Capability | none: always available |
-| Called when | The user types an email on the extension's first screen (or under Settings) and clicks Start. The extension asks for it before any feature runs. |
-| Success | `201` |
-| Errors | `400`, `409`, `413`, `422`, `429`, `5xx`. See [Errors](#errors). |
-| Operation id | `createAccount` |
+| Called when | The user types an email address on the extension's first screen (or under Settings) and clicks Start, or clicks "Send a new code". |
+| Success | `202` |
+| Errors | `400`, `413`, `422`, `429`, `5xx`. See [Errors](#errors). |
+| Operation id | `startSignup` |
 
-The extension's first screen asks for one thing: an email address. This call turns it into a
-free Legiit account, so the user can start at once. It is the only call without a token.
+The extension's first screen asks for one thing: an email address. This call receives it.
+Store the address as a lead (source "Legiit Lens"), whether or not it ever becomes an account.
+Then email a 6-digit code to it. Create no account here: an account is created only when the
+code comes back (POST /v1/signups/verify), so an address that nobody reads never becomes one.
 
-For a new email: create the account (no password yet), answer 201 with a token for it, and send
-a welcome email with a link to set a password. The extension stores the token as if it had been
-pasted, checks it with GET /v1/session, and the user is connected.
+The extension opens its tools as soon as you answer 202. The user can then enter the code at
+any time to connect a Legiit account.
 
-For an email that already has an account: answer 409 with the code "account_exists", and no
-token. Its owner connects with a token from Account Settings → Legiit Lens API. A token here would
-let anyone connect to another person's account by typing their email.
+Answer the same way for an address that already has a Legiit account: send it a code too.
+The code proves that the person reads that inbox, so verifying it connects their existing
+account. Do not say in this reply whether the address has an account.
 
-What a new account gets is the `capabilities` of its session: Legiit's decision (README,
-"Decisions"). A new account has no business yet, so the saves into a business stay hidden until
-it has one.
+This call needs no token, so anyone can send it. Limit it per IP address and per email address
+(for example: one code per address per minute, five per hour). A code is valid for 30
+minutes; a new code replaces the old one.
 
 ### Request body
 
-What the extension's first screen sends to create a free account.
+What the extension's first screen sends.
 
-JSON Schema of this body: [`schemas/createAccount.request.schema.json`](schemas/createAccount.request.schema.json).
+JSON Schema of this body: [`schemas/startSignup.request.schema.json`](schemas/startSignup.request.schema.json).
 
 | Field | Type | Always sent | Limits | Meaning |
 | --- | --- | --- | --- | --- |
@@ -1620,19 +1622,88 @@ JSON Schema of this body: [`schemas/createAccount.request.schema.json`](schemas/
 }
 ```
 
-File: `examples/createAccount.request.json`. As sent, without white space: 34 bytes.
+File: `examples/startSignup.request.json`. As sent, without white space: 34 bytes.
 
-### Response 201
+### Response 202
 
-The account was created. The token works like one created in Command Center.
+The address was stored and a code is on its way.
 
-What the extension does: Stores the token, checks it with GET /v1/session, and opens the features.
+What the extension does: Opens the tools, and asks for the code from the email to connect a Legiit account.
 
-The reply to a new account.
+The reply to a new sign-up. The extension reads nothing from it: any JSON object with status 202 will do.
 
 | Field | Type | Required | Limits | Meaning |
 | --- | --- | --- | --- | --- |
-| `token` | string | yes | 1 to 4,096 chars | A token for the new account, in the same form as one created in Command Center: printable ASCII without spaces. The extension stores it and sends it with every later request. |
+| `status` | string | no |  | For your logs, for example "code_sent". Not read. |
+
+**Example response**
+
+```json
+{
+  "status": "code_sent"
+}
+```
+
+File: `examples/startSignup.response.json`.
+
+## 12. POST /v1/signups/verify
+
+Checks the 6-digit code, creates the account if there is none, and returns a token for it.
+
+| Item | Value |
+| --- | --- |
+| Capability | none: always available |
+| Called when | The user types the 6-digit code from the email into the extension and clicks Verify. |
+| Success | `201` or `200` |
+| Errors | `400`, `413`, `422`, `429`, `5xx`. See [Errors](#errors). |
+| Operation id | `verifySignup` |
+
+The user types the code from the email into the extension. If it is the latest code sent to
+this address and is not older than 30 minutes:
+
+- for an address without a Legiit account: create a free account (no password yet), send a
+  welcome email with a link to set a password, and answer 201 with a token for it;
+- for an address that already has an account: answer 200 with a new token for that account.
+
+The extension stores the token as if it had been pasted, checks it with GET /v1/session, and
+the user is connected.
+
+A wrong code: answer 422 with a message the user can act on. After five wrong codes for one
+address, the code no longer works: say so, and the user asks for a new one.
+
+### Request body
+
+The code from the email, with the address it was sent to.
+
+JSON Schema of this body: [`schemas/verifySignup.request.schema.json`](schemas/verifySignup.request.schema.json).
+
+| Field | Type | Always sent | Limits | Meaning |
+| --- | --- | --- | --- | --- |
+| `email` | string | yes | 3 to 254 chars | The address that the user entered on the first screen, sent again unchanged. |
+| `code` | string | yes | 1 to 20 chars | The code as the user typed it, with spaces and dashes removed. It should be the 6 digits you emailed, but check it yourself. For example: `246810`. |
+
+**Example request**
+
+```json
+{
+  "email": "jordan.lee@example.com",
+  "code": "246810"
+}
+```
+
+File: `examples/verifySignup.request.json`. As sent, without white space: 50 bytes.
+
+### Response 201 or 200
+
+A new account was created for the address.
+
+What the extension does: Stores the token, checks it with GET /v1/session, and connects.
+
+The reply to a verified code.
+
+| Field | Type | Required | Limits | Meaning |
+| --- | --- | --- | --- | --- |
+| `token` | string | yes | 1 to 4,096 chars | A token for the account, in the same form as one created in Command Center: printable ASCII without spaces. The extension stores it and sends it with every later request. |
 
 **Example response**
 
@@ -1642,7 +1713,7 @@ The reply to a new account.
 }
 ```
 
-File: `examples/createAccount.response.json`.
+File: `examples/verifySignup.response.json`.
 
 ## Shared parameters and responses
 

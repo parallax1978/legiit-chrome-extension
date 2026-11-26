@@ -4,11 +4,11 @@ Paste into the "Additional instructions / notes for reviewers" field at submissi
 
 ```
 WHAT IT IS
-Legiit Lens is an SEO analysis tool. Single purpose: it shows how visible a web page or brand is in Google results and AI answers, and what explains it. All five features serve that purpose. The first screen asks for an email address and creates a free Legiit account; then every feature works.
+Legiit Lens is an SEO analysis tool. Single purpose: it shows how visible a web page or brand is in Google results and AI answers, and what explains it. All five features serve that purpose. The first screen asks for an email address; then every feature works. A code from the email connects a free Legiit account.
 
 HOW TO TEST (about 5 minutes)
 
-1. After install an onboarding page opens. Pin the extension. The first time the side panel opens, it asks for an email address: enter any address you can receive mail at and click Start. A free Legiit account is created for it.
+1. After install an onboarding page opens. Pin the extension. The first time the side panel opens, it asks for an email address: enter any address you can receive mail at and click Start. The tools open. To connect a free Legiit account, type the 6-digit code from the email and click Verify.
 2. Click Potential: search anything on google.com. A thin "Legiit Lens" strip appears above the results (it can be hidden). Click "Open panel" on the strip: the side panel shows where the first organic result starts and what fills the first screen.
 3. Why Not Me: in the panel open Settings and add a brand and a competitor (name + domain). Go back to the results page and open the "Why Not Me" tab. "Scan sources" asks Chrome for permission to read the specific cited sites it lists; you can decline.
 4. Access to other pages: open any normal website and look at the panel. It says it has no access. Click the toolbar icon (or press Alt+Shift+L, or right-click > "Analyze this page with Legiit Lens"): the panel now shows that page. This is activeTab; there is no standing access to all sites.
@@ -21,7 +21,7 @@ PERMISSIONS
 - storage: settings on the device (chrome.storage.local, restricted to trusted contexts).
 - sidePanel: the main UI.
 - contextMenus: "Analyze this page" and "Check the selected text". A context-menu click is one of the gestures that grants activeTab.
-- Host permissions: only web.archive.org (Rewind) and lens.legiit.com (the Legiit account: created from the email on the first screen, then used for saves the user confirms).
+- Host permissions: only web.archive.org (Rewind) and lens.legiit.com (the Legiit account: the first screen's email and code, then saves the user confirms).
 - Content scripts: Google Search (/search on each Google country domain; match patterns cannot use a wildcard TLD) and chatgpt.com, gemini.google.com, perplexity.ai, copilot.microsoft.com. They only read the page the user opened. No automated queries are sent to Google or any AI site, and Google's ads and results are never hidden, moved or restyled. The strip is added above the results inside a closed shadow root.
 - optional_host_permissions (*://*/*): never granted at install and never requested as a wildcard. Specific sites are requested at the moment the user starts a scan, after the UI names them and says why. Granted sites are listed and removable under Settings > Privacy and data.
 
@@ -33,13 +33,13 @@ All JavaScript and WebAssembly is in the package. The build is not minified so i
 
 DATA
 - No analytics, no ads, no tracking, no remote logging.
-- The email address entered on the first screen is sent once to lens.legiit.com to create the user's free Legiit account. The extension then reads the account (name, plan, businesses) from that host.
+- The email address entered on the first screen is sent to lens.legiit.com, which emails a code; the code the user types is sent there too and connects the user's free Legiit account. The extension then reads the account (name, plan, businesses) from that host.
 - Data the user analyzes is sent to lens.legiit.com only when the user clicks a save button and confirms a dialog that shows the exact JSON.
 - Other requests go only to web.archive.org, to sites the user granted for a scan, and to the site the user builds a brief on (same-origin requests from that tab). All are plain GETs without cookies.
 - Settings > Privacy and data lists the hosts contacted and offers "Erase everything".
 
 LEGIIT ACCOUNT
-The first screen creates a free account from an email address. Someone who already has a Legiit account connects it under Settings with an API token from Legiit Command Center instead.
+The code from the email creates a free account for the address, or connects the one it already has. Someone who already has a Legiit account connects it under Settings with an API token from Legiit Command Center instead.
 
 CHROME BUILT-IN AI (OPTIONAL)
 Off by default. If the user opts in under Settings > AI and Chrome's on-device model is available, summaries can be rewritten on the device with the Prompt API. No permission is needed for it and no data leaves the device.

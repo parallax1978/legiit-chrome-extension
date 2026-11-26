@@ -7,18 +7,19 @@ import { LegiitError, type LegiitClient, type SaveOptions } from './client';
 import { MAX_REPLY_BYTES, MAX_REQUEST_BYTES, TIMEOUT_MS } from './limits';
 import { ALL_CAPABILITIES } from './types';
 import type {
-  AccountRequest,
+  AccountToken,
   AiCompletionRequest,
   AiCompletionResponse,
   CompetitorPayload,
   ContentEditorPayload,
-  CreatedAccount,
   GapListPayload,
   IndustryPulse,
   LegiitBusiness,
   LegiitBusinessDetails,
   LegiitSession,
   SaveResult,
+  SignupRequest,
+  SignupVerification,
   VisibilitySnapshotPayload,
   WorkspaceFromBriefPayload,
 } from './types';
@@ -140,8 +141,11 @@ const BusinessDetailsSchema = v.pipe(
  * A link that cannot be opened is no link: one that is too long to be whole, a relative path, a host without a
  * scheme, another scheme. It reads as absent, so the user sees "Saved" and not a label that looks like a link.
  */
+/** A reply that is read for its status only. */
+const AnyObjectSchema = v.looseObject({});
+
 /** A token as the extension stores it: printable ASCII without spaces, at most 4,096 characters. */
-const CreatedAccountSchema = v.object({
+const AccountTokenSchema = v.object({
   token: v.pipe(v.string(), v.trim(), v.regex(/^[\x21-\x7E]{1,4096}$/)),
 });
 
@@ -217,7 +221,7 @@ interface RequestOptions {
   idempotencyKey?: string;
   /** The path names a business: only there does a 404 with the code "not_found" mean "this business is gone". */
   businessScoped?: boolean;
-  /** Sent without a token: creating an account is the one call that has none yet. */
+  /** Sent without a token: the two sign-up calls come before there is one. */
   anonymous?: boolean;
 }
 
@@ -350,8 +354,12 @@ export class HttpLegiitClient implements LegiitClient {
     return this.request('POST', path, SaveResultSchema, { body: payload, idempotencyKey: options?.idempotencyKey, businessScoped });
   }
 
-  createAccount(payload: AccountRequest): Promise<CreatedAccount> {
-    return this.request('POST', '/v1/accounts', CreatedAccountSchema, { body: payload, anonymous: true });
+  async startSignup(payload: SignupRequest): Promise<void> {
+    await this.request('POST', '/v1/signups', AnyObjectSchema, { body: payload, anonymous: true });
+  }
+
+  verifySignup(payload: SignupVerification): Promise<AccountToken> {
+    return this.request('POST', '/v1/signups/verify', AccountTokenSchema, { body: payload, anonymous: true });
   }
 
   getSession(): Promise<LegiitSession> {

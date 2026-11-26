@@ -12,7 +12,7 @@ import type { GapRow } from '@/features/why-not-me/gap';
 import type { Presence } from '@/features/why-not-me/presence';
 import { cleanText, cutText, wellFormedDeep } from '@/lib/sanitize';
 import { clip, clipDomain, clipUrl, LIMITS } from './limits';
-import type { AccountRequest, CompetitorPayload, ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
+import type { SignupRequest, SignupVerification, CompetitorPayload, ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
 
 const round = (value: number, digits = 4): number => Number(value.toFixed(digits));
 const within = (value: number, min: number, max: number): number => Math.min(Math.max(Math.round(value), min), max);
@@ -135,9 +135,14 @@ export function contentEditorPayload(input: {
 const competitorDomains = (domains: readonly (string | null)[]): string[] =>
   [...new Set(domains.filter((d): d is string => typeof d === 'string' && d !== '' && d.length <= LIMITS.domain))].slice(0, LIMITS.brandDomains);
 
-/** The first screen's request for a free account: the email as typed, without spaces around it. */
-export function accountPayload(email: string): AccountRequest {
+/** The first screen's email address, as typed, without spaces around it. */
+export function signupPayload(email: string): SignupRequest {
   return wellFormedDeep({ email: clip(email.trim(), LIMITS.email) });
+}
+
+/** The code from the email, with spaces and dashes removed, and the address it was sent to. */
+export function verificationPayload(email: string, code: string): SignupVerification {
+  return wellFormedDeep({ email: clip(email.trim(), LIMITS.email), code: clip(code.replace(/[\s-]/g, ''), LIMITS.signupCode) });
 }
 
 /** A competitor as it is sent to Legiit: when added to a business, and inside a brief. */

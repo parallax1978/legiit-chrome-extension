@@ -7,7 +7,7 @@ import { prunePageCache } from '@/storage/db';
 import { useConnection, useTarget } from './hooks';
 import { Card, Chip, Notice } from './kit';
 import { SettingsView } from './SettingsView';
-import { SignUpForm } from './SignUp';
+import { SignUpForm, VerifyCode } from './SignUp';
 import { ClickPotentialTab } from './tabs/ClickPotentialTab';
 import { InstantBriefTab } from './tabs/InstantBriefTab';
 import { NewOrNoiseTab } from './tabs/NewOrNoiseTab';
@@ -57,7 +57,7 @@ export function App() {
   const [tab, setTab] = useState<TabId>(initialTab);
   const [chosenByUser, setChosenByUser] = useState(new URLSearchParams(location.search).has('view'));
   const { access, intent } = useTarget();
-  const { connection } = useConnection();
+  const { connection, signup } = useConnection();
   const [gate, setGate] = useState<GateState | null>(null);
   const connected = connection.status === 'connected';
 
@@ -65,9 +65,11 @@ export function App() {
     void prunePageCache().catch(() => undefined);
   }, []);
 
+  // The tools open as soon as Legiit has the email address; the account follows with the code.
+  const unlocked = connected || signup !== null;
   useEffect(() => {
-    void currentGate(connected).then(setGate);
-  }, [connected, tab]);
+    void currentGate(unlocked).then(setGate);
+  }, [unlocked, tab]);
 
   // Until the user picks a tab, open the one that fits the page:
   // Google results → Click Potential, an AI answer → Why Not Me, any other page → Instant Brief.
@@ -118,18 +120,24 @@ export function App() {
       </div>
       <main className="content" role="tabpanel" data-testid={`panel-${tab}`}>
         {gated ? (
-          gate?.limit === 0 ? (
-            <Card title="Enter your email to start" testId="gate">
-              <SignUpForm onUseToken={() => choose('settings')} />
-            </Card>
-          ) : (
-            <Card title="Create your free account to continue" testId="gate">
-              <Notice tone="warn">You have used your {gate?.limit} free runs. Enter your email to keep going.</Notice>
-              <SignUpForm onUseToken={() => choose('settings')} />
-            </Card>
-          )
+          <Card title={gate?.limit === 0 ? 'Enter your email to start' : 'Enter your email to keep going'} testId="gate">
+            {gate?.limit !== 0 && <Notice tone="warn">You have used your {gate?.limit} free runs.</Notice>}
+            <SignUpForm />
+            <p className="small muted">
+              Already have a Legiit account? Enter its email: the code connects it.{' '}
+              <button type="button" className="link-button" onClick={() => choose('settings')} data-testid="signup-use-token">
+                Or paste a token in Settings
+              </button>
+              .
+            </p>
+          </Card>
         ) : (
           <>
+            {!connected && signup && tab !== 'settings' && (
+              <Card title="Connect your free Legiit account" testId="verify-card">
+                <VerifyCode />
+              </Card>
+            )}
             {tab === 'click' && <ClickPotentialTab />}
             {tab === 'why' && <WhyNotMeTab onOpenSettings={() => choose('settings')} />}
             {tab === 'rewind' && <RewindTab />}

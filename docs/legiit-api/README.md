@@ -5,7 +5,7 @@ Contract version `1.0.0-draft.5`, 26 November 2026. What changed: [section 13](#
 For the Legiit backend team. The Legiit Lens Chrome extension is finished and already calls this API. The API does not exist yet. This guide says what to build so that the extension works with it without another release.
 
 - **"We" and "us" in this guide** are the extension team: the people who built the extension and this kit. Send your questions, and the answers that this guide asks for, to the person who gave you the kit, or open an issue in the repository.
-- **Where the extension stands.** It is built and tested, and the API is live. The extension's first screen asks for an email address and creates a free Legiit account (endpoint 11), so nobody can use the extension while that endpoint is down. Ask the product owner for the date of the store submission. The host of the API is decided: `lens.legiit.com` (decision 1). It must work by then.
+- **Where the extension stands.** It is built and tested, and the API is live. The extension's first screen asks for an email address (endpoint 11) and then opens the tools; a 6-digit code from the email connects a free Legiit account (endpoint 12). Nobody gets past the first screen while endpoint 11 is down. Ask the product owner for the date of the store submission. The host of the API is decided: `lens.legiit.com` (decision 1). It must work by then.
 - **The decisions in [section 11](#11-decisions-we-need-from-legiit) are open**, and most of them are for Product or Legal, not for you. The product owner has them on one page: [`decisions.md`](decisions.md).
 
 | File | What it is |
@@ -34,7 +34,7 @@ This folder is the specification. The mock server and the check are tools in the
 
 ### What the extension does
 
-Legiit Lens adds a side panel to Chrome: a panel that opens next to the page. It measures the page that is open and shows the result in five tabs. A sixth tab holds the settings. The first screen asks for an email address and creates a free Legiit account from it (endpoint 11); after that every tool works. The tabs also get buttons that send a result to Legiit, as far as the account's plan includes them:
+Legiit Lens adds a side panel to Chrome: a panel that opens next to the page. It measures the page that is open and shows the result in five tabs. A sixth tab holds the settings. The first screen asks for an email address (endpoint 11), and then every tool works. A 6-digit code from the email connects a free Legiit account (endpoint 12). Once it is connected, the tabs get buttons that send a result to Legiit, as far as the account's plan includes them:
 
 | Tab | What the user sees | What it sends to Legiit |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ The Settings tab, which also opens as a page of its own, holds the token, the ch
 
 ## 1. What to build
 
-Eleven HTTPS endpoints, and pages in Command Center.
+Twelve HTTPS endpoints, and pages in Command Center.
 
 | # | Method and path | What it does | Capability |
 | --- | --- | --- | --- |
@@ -66,7 +66,8 @@ Eleven HTTPS endpoints, and pages in Command Center.
 | 8 | `POST /v1/workspaces/from-brief` | Creates a workspace from a client brief | `workspaces` |
 | 9 | `GET /v1/industry-pulse` | Returns dated search-industry events | `industryPulse` |
 | 10 | `POST /v1/ai/completions` | Rewrites a summary with Legiit's AI | `ai` |
-| 11 | `POST /v1/accounts` | Creates a free account from an email address and returns a token for it. The only call without a token | always on |
+| 11 | `POST /v1/signups` | Keeps the email address of the first screen as a lead and emails a 6-digit code to it. No token | always on |
+| 12 | `POST /v1/signups/verify` | Checks the code, creates the account if there is none, and returns a token. No token | always on |
 
 Besides the API, Command Center needs:
 
@@ -111,7 +112,7 @@ You can ship endpoint by endpoint. The extension shows only the features whose c
 | 8 | Industry Pulse (endpoint 9) | 7 |
 | 9 | AI (endpoint 10) | 6 |
 | 10 | The pages behind `url`, then the launch list below | 9, 11, 13 |
-| 11 | Accounts from the extension (endpoint 11). Needed before the extension is published: without it nobody gets past the first screen | 14 |
+| 11 | Sign-up from the extension (endpoints 11 and 12). Needed before the extension is published: without endpoint 11 nobody gets past the first screen | 14 |
 
 Run `npm run api:check` after every step. Checks for a capability that you do not list yet are skipped.
 
@@ -158,7 +159,7 @@ sequenceDiagram
     E->>A: GET /v1/industry-pulse
 ```
 
-- **The first screen asks for an email.** Before the user clicks Start, the extension never contacts the API. The account it creates is connected at once; someone who already has a Legiit account connects with a token instead.
+- **The first screen asks for an email.** Before the user clicks Start, the extension never contacts the API. The tools open as soon as Legiit has the address. The code from the email connects an account: a new one, or the one the address already has.
 - **A POST is sent only after the user has seen the exact JSON body and confirmed it.** The extension never sends anything in the background. This is a promise in the extension's privacy policy.
 - **Nothing is polled and nothing is retried automatically.**
 - **The extension only writes.** It never reads a saved item back, never edits one and never deletes one.
@@ -180,7 +181,8 @@ What causes a request:
 
 | The user… | Requests |
 | --- | --- |
-| enters an email on the first screen and clicks Start | `POST /v1/accounts`, then `GET /v1/session` with the new token |
+| enters an email on the first screen and clicks Start, or "Send a new code" | `POST /v1/signups` |
+| enters the code from the email and clicks Verify | `POST /v1/signups/verify`, then `GET /v1/session` with the new token |
 | clicks Connect, or "Try again" | `GET /v1/session` |
 | opens the side panel or the settings page while a token is stored | `GET /v1/session` |
 | has other extension pages open when the token changes | `GET /v1/session` from each of them |
@@ -202,7 +204,7 @@ So a normal user causes a few requests per minute at most.
 
 ### Authentication
 
-- Every request except `POST /v1/accounts` carries `Authorization: Bearer <token>`: the word `Bearer`, one space, the token. The token is the only credential. The word `Bearer` is case-insensitive.
+- Every request except the two sign-up calls (`POST /v1/signups` and `POST /v1/signups/verify`) carries `Authorization: Bearer <token>`: the word `Bearer`, one space, the token. The token is the only credential. The word `Bearer` is case-insensitive.
 - No cookies are sent. There is nothing to protect against CSRF: exempt these routes from CSRF checks.
 - A token is printable ASCII without spaces, at most 4,096 characters. The extension refuses to store anything else.
 - **Answer `401` only when the token itself is bad, as JSON with the error body.** A `401` with the error body on `GET /v1/session` makes the extension delete the token. Nothing in front of the API (a gateway, a proxy, HTTP Basic auth on a staging site) may answer `401` for a valid token, and it must never use that JSON shape. When the token cannot be checked because something of yours is down (the database, a login service), answer `503`.
@@ -403,15 +405,18 @@ When several errors apply at once, any order passes the check. The mock answers 
 
 ## 6. What Command Center needs besides the API
 
-### Accounts created from the extension
+### Sign-up from the extension
 
-Endpoint 11. The first screen of the extension has one field, an email address, and a Start button.
+Endpoints 11 and 12. The first screen of the extension has one field, an email address, and a Start button.
 
-- **A new email:** create a free account without a password, answer `201` with a token for it, and send a welcome email with a link to set a password. Keep the email as a lead with the source "Legiit Lens".
-- **An email that already has an account:** answer `409` with the code `account_exists` and no token. The extension tells its owner to connect with a token from the token page.
+1. **Start (endpoint 11):** keep the address as a lead with the source "Legiit Lens", and email a 6-digit code to it. Create no account. Answer `202`. The extension opens its tools at once.
+2. **The code (endpoint 12):** the user types the code into the extension. If it is right, create a free account (no password yet) and answer `201` with a token, or, for an address that already has an account, answer `200` with a new token for that account. Send a new account a welcome email with a link to set a password.
+
+- **An account exists only after a code came back,** so an address that nobody reads never becomes one. A flood of sign-ups adds leads and emails, not accounts.
+- **Answer Start the same way whether or not the address has an account.** The code proves that the person reads that inbox, so it can connect an existing account too.
+- **Limit both calls per IP address and per email address,** for example one code per address per minute and five per hour. A code is valid for 30 minutes, a new code replaces the old one, and after five wrong codes the code stops working.
 - **A new account has no business yet,** so the saves into a business stay hidden until it has one. Which features it gets is decision 14.
-- Limit sign-ups per IP address: the endpoint needs no token, so anyone can call it.
-- The conformance check does not call this endpoint, because every call creates an account. Test it yourself (section 9).
+- The conformance check does not call these endpoints: every call sends an email. Test them yourself (section 9).
 
 ### A page for API tokens
 
@@ -618,7 +623,7 @@ To see it pass, run it against the mock in a second terminal:
 npm run api:check -- http://localhost:8787 demo-token
 ```
 
-The check does not cover everything. Test these yourself: the sign-up endpoint (a new email gets `201` and a token, an existing one `409`, a text that is no email `422`); rate limiting; a body larger than 1 MB; a body near 1 MB on the snapshot, competitor, content-analysis and AI endpoints (the check sends its large bodies to the gap-list and the workspace endpoint only); the same `Idempotency-Key` after a `429` or a `5xx` (the check tries it after a `422` only); a token that was revoked or has expired (the check uses a token that never existed); an endpoint whose capability is off, if you did not run the check with an account on a smaller plan; whether a save is really stored and shown (the check reads back competitors only); whether the links you return open a real page; what the AI endpoint does when the model is slow or returns broken JSON; and everything in section 7.
+The check does not cover everything. Test these yourself: the sign-up (Start answers `202` and an email with a code arrives; the right code gets `201` and a token for a new address, `200` and a token for an address with an account; a wrong code `422`); rate limiting; a body larger than 1 MB; a body near 1 MB on the snapshot, competitor, content-analysis and AI endpoints (the check sends its large bodies to the gap-list and the workspace endpoint only); the same `Idempotency-Key` after a `429` or a `5xx` (the check tries it after a `422` only); a token that was revoked or has expired (the check uses a token that never existed); an endpoint whose capability is off, if you did not run the check with an account on a smaller plan; whether a save is really stored and shown (the check reads back competitors only); whether the links you return open a real page; what the AI endpoint does when the model is slow or returns broken JSON; and everything in section 7.
 
 ### Check with the real extension
 
@@ -632,7 +637,7 @@ In PowerShell, set the variable first: `$env:LEGIIT_API_BASE_URL='https://your-s
 
 Then open `chrome://extensions`, switch on Developer mode, choose "Load unpacked" and select the `dist` folder. Use this build to count requests too: in development mode (`npm run dev`) every read is sent twice.
 
-1. Open the side panel for the first time. It asks for an email: enter a new one and click Start. The tools open, and "Legiit connected" appears. In the extension's settings, click Disconnect, paste a token of your test account and click Connect. Your name and plan appear.
+1. Open the side panel for the first time. It asks for an email: enter a new one and click Start. The tools open. Type the code from the email and click Verify: "Legiit connected" appears. In the extension's settings, click Disconnect, paste a token of your test account and click Connect. Your name and plan appear.
 2. Choose a business. Its brand appears under "My brands" and its competitors under "Competitors", marked "From Command Center".
 3. In Settings, under "Competitors", click "Add a competitor", type a name, then click "Add to Command Center", read the JSON, click "Send to Legiit". "Saved" appears with a link that opens the item.
 4. Open the website of any business and click the extension's icon. On the Instant Brief tab click "Build brief", then "Open in Command Center", and send. The link lands in the new workspace. With the `ai` capability on, also click "Improve drafts with Legiit AI".
@@ -709,7 +714,7 @@ Most of these decisions are for Product or Legal. The product owner has them in 
 | 11 | Is there a test account for Google's reviewers? | Yes: one account with one business and a token, ready when the API goes live. No default: Product has to create it | Product | The launch |
 | 12 | Is there a staging server for testing? | Yes, on its own host, without HTTP Basic auth in front | Engineering | Testing |
 | 13 | Who at Legiit may open saved items, and in which tools? | Nobody in normal work. Support tools and admin screens show that an item exists, not what is in it. Opening an item needs the user's consent, a security reason or a legal duty | Product, Legal | The launch |
-| 14 | What does a new free account get? | The features that need no business: `ai`, `industryPulse` and `workspaces`. A welcome email with a link to set a password | Product | Endpoint 11 |
+| 14 | What does a new free account get? | The features that need no business: `ai`, `industryPulse` and `workspaces`. A welcome email with a link to set a password | Product | Endpoint 12 |
 
 ### What we need back from you
 
@@ -741,7 +746,7 @@ This is contract version `1.0.0-draft.5` of 26 November 2026.
 
 **You can build on it.** It describes what the finished extension sends and accepts, and that cannot change without a new release of the extension. "Draft" means that wording, examples and advice can still improve when a reader finds a gap. The contract becomes `1.0.0` when your API passes the check with it.
 
-Changes in `1.0.0-draft.5`: a new endpoint, `POST /v1/accounts` (endpoint 11). The first screen of the extension now asks for an email address and creates a free account with it. Nothing else changed.
+Changes in `1.0.0-draft.5`: two new endpoints, `POST /v1/signups` and `POST /v1/signups/verify` (endpoints 11 and 12). The first screen of the extension now asks for an email address, and a code from the email connects a free account. Nothing else changed.
 
 Changes in `1.0.0-draft.4`. No field, no type and no limit of a request changed: an API that was built from `1.0.0-draft.3` stays valid.
 

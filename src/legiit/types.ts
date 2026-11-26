@@ -57,14 +57,20 @@ export interface SaveResult {
   url: string | null;
 }
 
-/** What the first screen sends to create a free Legiit account. */
-export interface AccountRequest {
+/** What the first screen sends: the email address, which Legiit keeps as a lead and sends a code to. */
+export interface SignupRequest {
   /** As the user typed it, without spaces around it. */
   email: string;
 }
 
-/** The answer to a new account: a token for it, used like a pasted one. */
-export interface CreatedAccount {
+/** The code from the email, with the address it was sent to. */
+export interface SignupVerification {
+  email: string;
+  code: string;
+}
+
+/** The answer to a verified code: a token for the account, used like a pasted one. */
+export interface AccountToken {
   token: string;
 }
 

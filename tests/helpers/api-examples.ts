@@ -13,7 +13,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createMockState, handleMockRequest, MOCK_TOKENS } from '@@/mock-server/handlers.mjs';
+import { createMockState, handleMockRequest, MOCK_SIGNUP_CODE, MOCK_TOKENS } from '@@/mock-server/handlers.mjs';
 import { briefRewriteRequest } from '@/ai/brief-rewrite';
 import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
 import { legiitAiPayload } from '@/ai/provider';
@@ -35,7 +35,7 @@ import { answerFromPastedText } from '@/answers/read';
 import { buildAnswerPresence, buildSerpPresence, summarisePresence } from '@/features/why-not-me/presence';
 import { analysePage, pickSerpTargets } from '@/features/why-not-me/scan';
 import { extractMainContent } from '@/extract/main-content';
-import { accountPayload, competitorPayload, contentEditorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
+import { competitorPayload, contentEditorPayload, gapPayload, signupPayload, snapshotPayload, verificationPayload, workspacePayload } from '@/legiit/payloads';
 import { DenseVectors, EMBEDDING_PASSAGE_THRESHOLD, EMBEDDING_SAME_THRESHOLD, LexicalEngine, type SimilarityEngine, type Vectors } from '@/similarity/engine';
 import { getPack } from '@/selectors';
 import { parseSerp } from '@/serp/parse';
@@ -254,7 +254,6 @@ export async function buildExampleRequests(): Promise<Record<string, unknown>> {
   );
 
   return {
-    'createAccount.request.json': accountPayload('jordan.lee@example.com'),
     'saveVisibilitySnapshot.request.json': snapshotPayload(snapshot, scenarioBrands),
     'saveVisibilitySnapshot.no-organic-results.request.json': snapshotPayload(bare, domainOnly),
     'saveGapList.request.json': gapPayload(presence, rows),
@@ -267,6 +266,8 @@ export async function buildExampleRequests(): Promise<Record<string, unknown>> {
     'createWorkspaceFromBrief.little-found.request.json': workspacePayload(sparse, briefToMarkdown(sparse, { name: '', logoDataUrl: null })),
     'completeAI.request.json': legiitAiPayload({ task: 'click-potential', instruction: SUMMARY_INSTRUCTIONS['click-potential'], facts: explanation, fallback: explanation }),
     'completeAI.brief.request.json': legiitAiPayload(briefRewriteRequest(brief)),
+    'startSignup.request.json': signupPayload('jordan.lee@example.com'),
+    'verifySignup.request.json': verificationPayload('jordan.lee@example.com', MOCK_SIGNUP_CODE),
   };
 }
 

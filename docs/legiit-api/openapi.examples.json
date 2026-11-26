@@ -2117,22 +2117,22 @@
     }
    }
   },
-  "/v1/accounts": {
+  "/v1/signups": {
    "post": {
-    "operationId": "createAccount",
+    "operationId": "startSignup",
     "tags": [
      "Account"
     ],
-    "summary": "Creates a free Legiit account from an email address and returns a token for it.",
-    "description": "The extension's first screen asks for one thing: an email address. This call turns it into a\nfree Legiit account, so the user can start at once. It is the only call without a token.\n\nFor a new email: create the account (no password yet), answer 201 with a token for it, and send\na welcome email with a link to set a password. The extension stores the token as if it had been\npasted, checks it with GET /v1/session, and the user is connected.\n\nFor an email that already has an account: answer 409 with the code \"account_exists\", and no\ntoken. Its owner connects with a token from Account Settings → Legiit Lens API. A token here would\nlet anyone connect to another person's account by typing their email.\n\nWhat a new account gets is the `capabilities` of its session: Legiit's decision (README,\n\"Decisions\"). A new account has no business yet, so the saves into a business stay hidden until\nit has one.\n",
-    "x-called-when": "The user types an email on the extension's first screen (or under Settings) and clicks Start. The extension asks for it before any feature runs.",
+    "summary": "Takes the email address from the extension's first screen and emails a 6-digit code to it.",
+    "description": "The extension's first screen asks for one thing: an email address. This call receives it.\nStore the address as a lead (source \"Legiit Lens\"), whether or not it ever becomes an account.\nThen email a 6-digit code to it. Create no account here: an account is created only when the\ncode comes back (POST /v1/signups/verify), so an address that nobody reads never becomes one.\n\nThe extension opens its tools as soon as you answer 202. The user can then enter the code at\nany time to connect a Legiit account.\n\nAnswer the same way for an address that already has a Legiit account: send it a code too.\nThe code proves that the person reads that inbox, so verifying it connects their existing\naccount. Do not say in this reply whether the address has an account.\n\nThis call needs no token, so anyone can send it. Limit it per IP address and per email address\n(for example: one code per address per minute, five per hour). A code is valid for 30\nminutes; a new code replaces the old one.\n",
+    "x-called-when": "The user types an email address on the extension's first screen (or under Settings) and clicks Start, or clicks \"Send a new code\".",
     "security": [],
     "requestBody": {
      "required": true,
      "content": {
       "application/json": {
        "schema": {
-        "$ref": "#/components/schemas/AccountRequest"
+        "$ref": "#/components/schemas/SignupRequest"
        },
        "examples": {
         "typical": {
@@ -2146,13 +2146,90 @@
      }
     },
     "responses": {
-     "201": {
-      "description": "The account was created. The token works like one created in Command Center.",
-      "x-extension-reaction": "Stores the token, checks it with GET /v1/session, and opens the features.",
+     "202": {
+      "description": "The address was stored and a code is on its way.",
+      "x-extension-reaction": "Opens the tools, and asks for the code from the email to connect a Legiit account.",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/CreatedAccount"
+         "$ref": "#/components/schemas/SignupStarted"
+        },
+        "examples": {
+         "typical": {
+          "summary": "typical",
+          "value": {
+           "status": "code_sent"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/TooLarge"
+     },
+     "422": {
+      "$ref": "#/components/responses/Invalid"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     },
+     "5XX": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/v1/signups/verify": {
+   "post": {
+    "operationId": "verifySignup",
+    "tags": [
+     "Account"
+    ],
+    "summary": "Checks the 6-digit code, creates the account if there is none, and returns a token for it.",
+    "description": "The user types the code from the email into the extension. If it is the latest code sent to\nthis address and is not older than 30 minutes:\n\n- for an address without a Legiit account: create a free account (no password yet), send a\n  welcome email with a link to set a password, and answer 201 with a token for it;\n- for an address that already has an account: answer 200 with a new token for that account.\n\nThe extension stores the token as if it had been pasted, checks it with GET /v1/session, and\nthe user is connected.\n\nA wrong code: answer 422 with a message the user can act on. After five wrong codes for one\naddress, the code no longer works: say so, and the user asks for a new one.\n",
+    "x-called-when": "The user types the 6-digit code from the email into the extension and clicks Verify.",
+    "security": [],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SignupVerification"
+       },
+       "examples": {
+        "typical": {
+         "summary": "typical",
+         "value": {
+          "email": "jordan.lee@example.com",
+          "code": "246810"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "The address already had an account. The token is a new token for it.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AccountToken"
+        }
+       }
+      }
+     },
+     "201": {
+      "description": "A new account was created for the address.",
+      "x-extension-reaction": "Stores the token, checks it with GET /v1/session, and connects.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AccountToken"
         },
         "examples": {
          "typical": {
@@ -2167,16 +2244,6 @@
      },
      "400": {
       "$ref": "#/components/responses/BadRequest"
-     },
-     "409": {
-      "description": "The email already has a Legiit account. Answer with the error body and the code \"account_exists\", and no token. The extension then says that this email already has a Legiit account, and that its owner connects it with a token under Settings.",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/Error"
-        }
-       }
-      }
      },
      "413": {
       "$ref": "#/components/responses/TooLarge"
@@ -2466,9 +2533,9 @@
    }
   },
   "schemas": {
-   "AccountRequest": {
+   "SignupRequest": {
     "type": "object",
-    "description": "What the extension's first screen sends to create a free account.",
+    "description": "What the extension's first screen sends.",
     "required": [
      "email"
     ],
@@ -2484,9 +2551,44 @@
      }
     }
    },
-   "CreatedAccount": {
+   "SignupStarted": {
     "type": "object",
-    "description": "The reply to a new account.",
+    "description": "The reply to a new sign-up. The extension reads nothing from it: any JSON object with status 202 will do.",
+    "properties": {
+     "status": {
+      "type": "string",
+      "description": "For your logs, for example \"code_sent\". Not read."
+     }
+    }
+   },
+   "SignupVerification": {
+    "type": "object",
+    "description": "The code from the email, with the address it was sent to.",
+    "required": [
+     "email",
+     "code"
+    ],
+    "properties": {
+     "email": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 254,
+      "description": "The address that the user entered on the first screen, sent again unchanged."
+     },
+     "code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "description": "The code as the user typed it, with spaces and dashes removed. It should be the 6 digits you emailed, but check it yourself.",
+      "x-examples": [
+       "246810"
+      ]
+     }
+    }
+   },
+   "AccountToken": {
+    "type": "object",
+    "description": "The reply to a verified code.",
     "required": [
      "token"
     ],
@@ -2495,7 +2597,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 4096,
-      "description": "A token for the new account, in the same form as one created in Command Center: printable ASCII without spaces. The extension stores it and sends it with every later request."
+      "description": "A token for the account, in the same form as one created in Command Center: printable ASCII without spaces. The extension stores it and sends it with every later request."
      }
     }
    },

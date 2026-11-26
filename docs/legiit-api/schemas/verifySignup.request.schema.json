@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.5, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "title": "Request body of POST /v1/signups/verify",
+  "type": "object",
+  "description": "The code from the email, with the address it was sent to.",
+  "required": [
+    "email",
+    "code"
+  ],
+  "properties": {
+    "email": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 254,
+      "description": "The address that the user entered on the first screen, sent again unchanged."
+    },
+    "code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "description": "The code as the user typed it, with spaces and dashes removed. It should be the 6 digits you emailed, but check it yourself.",
+      "examples": [
+        "246810"
+      ]
+    }
+  }
+}

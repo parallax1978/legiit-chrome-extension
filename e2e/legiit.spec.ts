@@ -4,6 +4,7 @@
  * these tests also check the extension against docs/legiit-api/openapi.yaml.
  */
 import type { Page } from '@playwright/test';
+import { MOCK_SIGNUP_CODE } from '../mock-server/handlers.mjs';
 import { expect, LEGIIT_ORIGIN, scenario, test, type Lens } from './lens';
 
 const legiitRequests = (lens: Lens) => lens.requests.filter((r) => r.url.startsWith(LEGIIT_ORIGIN));
@@ -42,11 +43,11 @@ async function reviewAndSend(lens: Lens, panel: Page, method: string): Promise<u
   return shown;
 }
 
-test.describe('the first screen: an email creates a free account', () => {
+test.describe('the first screen: an email opens the tools, its code connects the account', () => {
   /** The feature tests switch the first screen off; these tests switch it back on. */
   const withFirstScreen = (lens: Lens) => lens.worker.evaluate(() => chrome.storage.local.remove('testing.noAccountGate'));
 
-  test('asks for an email before any feature runs, creates the account and connects', async ({ lens }) => {
+  test('asks for an email, opens the tools at once, and connects a new account with the code', async ({ lens }) => {
     await withFirstScreen(lens);
     const { tabId } = await lens.open(scenario.urls.serpFull!);
     const panel = await lens.openPanel(tabId, 'click');
@@ -54,28 +55,63 @@ test.describe('the first screen: an email creates a free account', () => {
     await expect(panel.getByTestId('cp-organic')).toHaveCount(0);
     // Nothing is sent before the user clicks Start.
     expect(legiitRequests(lens)).toHaveLength(0);
+
     await panel.getByTestId('signup-email').fill('  jordan.lee@example.com ');
     await panel.getByTestId('signup-start').click();
-    await expect(panel.getByTestId('connection-chip')).toBeVisible();
+    // The tools open as soon as Legiit has the address. No account exists yet.
     await expect(panel.getByTestId('cp-organic')).toBeVisible();
-    const signup = legiitRequests(lens).find((r) => r.url.endsWith('/v1/accounts'));
-    expect(signup).toMatchObject({ method: 'POST', authorization: false });
-    expect(JSON.parse(signup!.body ?? 'null')).toEqual({ email: 'jordan.lee@example.com' });
+    await expect(panel.getByTestId('verify-email')).toHaveText('jordan.lee@example.com');
+    await expect(panel.getByTestId('connection-chip')).toHaveCount(0);
+    expect(lens.legiit.accounts.size).toBe(0);
+    const started = legiitRequests(lens).filter((r) => r.url.endsWith('/v1/signups'));
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ method: 'POST', authorization: false });
+    expect(JSON.parse(started[0]!.body ?? 'null')).toEqual({ email: 'jordan.lee@example.com' });
+
+    // A wrong code is refused with Legiit's message, and changes nothing.
+    await panel.getByTestId('verify-code').fill('000000');
+    await panel.getByTestId('verify-submit').click();
+    await expect(panel.getByTestId('verify-error')).toContainText('code is not right');
+    expect(lens.legiit.accounts.size).toBe(0);
+
+    // The code from the email creates the account and connects it.
+    await panel.getByTestId('verify-code').fill(MOCK_SIGNUP_CODE);
+    await panel.getByTestId('verify-submit').click();
+    await expect(panel.getByTestId('connection-chip')).toBeVisible();
+    await expect(panel.getByTestId('verify-card')).toHaveCount(0);
+    expect(lens.legiit.accounts.size).toBe(1);
+    const verified = legiitRequests(lens).filter((r) => r.url.endsWith('/v1/signups/verify'));
+    expect(verified.every((r) => !r.authorization)).toBe(true);
     // The new account's token is used from then on.
     expect(legiitRequests(lens).filter((r) => r.url.endsWith('/v1/session')).every((r) => r.authorization)).toBe(true);
   });
 
-  test('an email that already has an account is told to connect with a token, and nothing is stored', async ({ lens }) => {
+  test('the code of an address that already has an account connects that account', async ({ lens }) => {
     await withFirstScreen(lens);
     const { tabId } = await lens.open(scenario.urls.serpFull!);
     const panel = await lens.openPanel(tabId, 'click');
     await panel.getByTestId('signup-email').fill('dana@northstarseo.example');
     await panel.getByTestId('signup-start').click();
-    await expect(panel.getByTestId('signup-error')).toContainText('already has a Legiit account');
-    await expect(panel.getByTestId('gate')).toBeVisible();
-    expect(await lens.worker.evaluate(async () => (await chrome.storage.local.get('legiitAuth'))['legiitAuth'] ?? null)).toBeNull();
-    await panel.getByTestId('signup-use-token').click();
-    await expect(panel.getByTestId('legiit-token')).toBeVisible();
+    await expect(panel.getByTestId('verify-code')).toBeVisible();
+    await panel.getByTestId('verify-code').fill(MOCK_SIGNUP_CODE);
+    await panel.getByTestId('verify-submit').click();
+    await expect(panel.getByTestId('connection-chip')).toBeVisible();
+    // No new account: the existing one is connected, with its features.
+    expect(lens.legiit.accounts.size).toBe(0);
+    await expect(panel.getByTestId('save-saveVisibilitySnapshot')).toBeVisible();
+    await panel.getByTestId('tab-settings').click();
+    await expect(panel.getByTestId('legiit-connected')).toContainText('Dana Whitfield');
+  });
+
+  test('"Use another email" goes back to the first screen', async ({ lens }) => {
+    await withFirstScreen(lens);
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    await panel.getByTestId('signup-email').fill('jordan.lee@example.com');
+    await panel.getByTestId('signup-start').click();
+    await expect(panel.getByTestId('cp-organic')).toBeVisible();
+    await panel.getByTestId('verify-change-email').click();
+    await expect(panel.getByTestId('gate')).toContainText('Enter your email to start');
   });
 });
 

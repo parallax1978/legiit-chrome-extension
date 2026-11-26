@@ -8,7 +8,7 @@ This policy describes what the extension reads, what it stores, and what leaves 
 
 ## The short version
 
-- To start, you enter your email address. It is sent to Legiit to create your free Legiit account. **Nothing you analyze is sent to us** unless you choose to send it.
+- To start, you enter your email address. It is sent to Legiit, which emails you a code that connects your free Legiit account. **Nothing you analyze is sent to us** unless you choose to send it.
 - It reads only pages you open or ask it to read. It never sends searches to Google or prompts to AI sites.
 - Your tracked brands, history and briefs are stored on your device.
 - There is no analytics, no advertising and no tracking in the extension.
@@ -38,7 +38,7 @@ All of this is kept in your browser's storage for the extension. It is not synce
 
 ## What leaves your device
 
-**Your email address, once.** When you click Start on the first screen, the extension sends the email address you entered to Legiit, which creates your free Legiit account and returns a token for it. Legiit may email you about your account. If the address already has a Legiit account, no account is created, and you connect it with a token instead.
+**Your email address, and the code you type.** When you click Start on the first screen, the extension sends the email address you entered to Legiit. Legiit keeps it and emails you a 6-digit code. When you type that code into the extension, it is sent to Legiit, which creates your free Legiit account (or finds the one your address already has) and returns a token that connects the extension to it. Legiit may email you about your account.
 
 **Other websites.** Besides Legiit, the extension contacts only:
 

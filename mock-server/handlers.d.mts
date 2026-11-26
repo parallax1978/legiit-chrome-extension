@@ -34,11 +34,19 @@ export interface MockState {
   requests: { method: string; path: string; idempotencyKey: string | null }[];
   replies: Map<string, MockResponse>;
   nextId: number;
+  /** Accounts created from the extension's first screen: token → session. */
+  accounts: Map<string, { user: { id: string; name: string; email: string }; plan: string; capabilities: string[] }>;
+  /** Email addresses from the first screen, with their latest code: lower-case address → sign-up. */
+  signups: Map<string, { email: string; code: string; wrong: number }>;
 }
 
 export const MOCK_TOKENS: { valid: string; invalid: string; limited: string };
 /** A business of the second user alone ("limited-token"): the first user's token cannot reach it. */
 export const MOCK_OTHER_BUSINESS_ID: string;
 export const CORS_HEADERS: Record<string, string>;
+/** What a new free account of the mock gets. */
+export const MOCK_NEW_ACCOUNT_CAPABILITIES: string[];
+/** The code the mock "emails" for every sign-up. */
+export const MOCK_SIGNUP_CODE: string;
 export function createMockState(): MockState;
 export function handleMockRequest(state: MockState, request: MockRequest): MockResponse;

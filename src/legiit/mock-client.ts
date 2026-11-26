@@ -13,19 +13,20 @@ import pulse from '@@/fixtures/legiit/industry-pulse.json';
 import session from '@@/fixtures/legiit/session.json';
 import { LegiitError, METHOD_CAPABILITY, type LegiitClient, type LegiitMethod, type SaveOptions } from './client';
 import type {
-  AccountRequest,
+  AccountToken,
   AiCompletionRequest,
   AiCompletionResponse,
   Capability,
   CompetitorPayload,
   ContentEditorPayload,
-  CreatedAccount,
   GapListPayload,
   IndustryPulse,
   LegiitBusiness,
   LegiitBusinessDetails,
   LegiitSession,
   SaveResult,
+  SignupRequest,
+  SignupVerification,
   VisibilitySnapshotPayload,
   WorkspaceFromBriefPayload,
 } from './types';
@@ -68,11 +69,16 @@ export class MockLegiitClient implements LegiitClient {
     return all[businessId]!;
   }
 
-  async createAccount(payload: AccountRequest): Promise<CreatedAccount> {
-    this.calls.push({ method: 'createAccount', args: [payload] });
-    if (payload.email.trim().toLowerCase() === ((session as LegiitSession).user.email ?? '').toLowerCase()) {
-      throw new LegiitError('rejected', 'Legiit rejected the request (409): This email already has a Legiit account.', 409);
-    }
+  /** The code this test double accepts. */
+  static readonly CODE = '246810';
+
+  async startSignup(payload: SignupRequest): Promise<void> {
+    this.calls.push({ method: 'startSignup', args: [payload] });
+  }
+
+  async verifySignup(payload: SignupVerification): Promise<AccountToken> {
+    this.calls.push({ method: 'verifySignup', args: [payload] });
+    if (payload.code !== MockLegiitClient.CODE) throw new LegiitError('rejected', 'Legiit rejected the request (422): That code is not right. Check the email and try again.', 422);
     return { token: 'demo-token' };
   }
 
