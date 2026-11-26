@@ -35,7 +35,7 @@ import { answerFromPastedText } from '@/answers/read';
 import { buildAnswerPresence, buildSerpPresence, summarisePresence } from '@/features/why-not-me/presence';
 import { analysePage, pickSerpTargets } from '@/features/why-not-me/scan';
 import { extractMainContent } from '@/extract/main-content';
-import { competitorPayload, contentEditorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
+import { accountPayload, competitorPayload, contentEditorPayload, gapPayload, snapshotPayload, workspacePayload } from '@/legiit/payloads';
 import { DenseVectors, EMBEDDING_PASSAGE_THRESHOLD, EMBEDDING_SAME_THRESHOLD, LexicalEngine, type SimilarityEngine, type Vectors } from '@/similarity/engine';
 import { getPack } from '@/selectors';
 import { parseSerp } from '@/serp/parse';
@@ -254,6 +254,7 @@ export async function buildExampleRequests(): Promise<Record<string, unknown>> {
   );
 
   return {
+    'createAccount.request.json': accountPayload('jordan.lee@example.com'),
     'saveVisibilitySnapshot.request.json': snapshotPayload(snapshot, scenarioBrands),
     'saveVisibilitySnapshot.no-organic-results.request.json': snapshotPayload(bare, domainOnly),
     'saveGapList.request.json': gapPayload(presence, rows),

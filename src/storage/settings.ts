@@ -77,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = v.parse(SettingsSchema, {});
 const SETTINGS_KEY = 'settings';
 const AUTH_KEY = 'legiitAuth';
 const USAGE_KEY = 'usage';
+const GATE_OFF_KEY = 'testing.noAccountGate';
 const SELECTOR_OVERRIDES_KEY = 'selectorOverrides';
 
 export function parseSettings(raw: unknown): Settings {
@@ -158,6 +159,16 @@ export async function getRunCount(): Promise<number> {
   const stored = await chrome.storage.local.get(USAGE_KEY);
   const value = stored[USAGE_KEY] as { runs?: unknown } | undefined;
   return typeof value?.runs === 'number' && Number.isFinite(value.runs) ? value.runs : 0;
+}
+
+/**
+ * The end-to-end tests of the features run without an account. They set this key, which no screen of the extension
+ * sets. Any gate in an extension can be passed by someone who edits its storage, so the key gives nobody more than
+ * that already does.
+ */
+export async function gateSwitchedOffForTests(): Promise<boolean> {
+  const stored = await chrome.storage.local.get(GATE_OFF_KEY);
+  return stored[GATE_OFF_KEY] === true;
 }
 
 export async function incrementRunCount(): Promise<number> {

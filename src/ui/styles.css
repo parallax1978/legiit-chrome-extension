@@ -65,6 +65,7 @@ h3 { font-size: 13px; }
 p { margin: 0 0 8px; }
 p:last-child { margin-bottom: 0; }
 a { color: var(--accent); }
+.link-button { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 ul, ol { margin: 0; padding-left: 18px; }
 li { margin: 2px 0; }
 small, .small { font-size: 12px; }

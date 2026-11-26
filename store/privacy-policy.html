@@ -34,11 +34,11 @@
 <p>This policy describes what the extension reads, what it stores, and what leaves your device.</p>
 <h2>The short version</h2>
 <ul>
-  <li>Legiit Lens works without an account. Used that way, <strong>nothing you analyze is sent to us</strong>.</li>
+  <li>To start, you enter your email address. It is sent to Legiit to create your free Legiit account. <strong>Nothing you analyze is sent to us</strong> unless you choose to send it.</li>
   <li>It reads only pages you open or ask it to read. It never sends searches to Google or prompts to AI sites.</li>
   <li>Your tracked brands, history and briefs are stored on your device.</li>
   <li>There is no analytics, no advertising and no tracking in the extension.</li>
-  <li>If you connect a Legiit account, data is sent to Legiit only when you click a save action, and you are shown exactly what will be sent before it goes.</li>
+  <li>Data you analyze is sent to Legiit only when you click a save or AI action, and you are shown exactly what will be sent before it goes.</li>
 </ul>
 <h2>What the extension reads</h2>
 <p><strong>Google results pages you open.</strong> On Google Search pages the extension reads the results on your screen: the position and size of ads, AI Overviews, local results and organic results, their titles and addresses, your search keyword, and the place name Google prints on the page. It shows a summary strip above the results.</p>
@@ -52,16 +52,17 @@
   <li>Snapshots of Google results pages: keyword, date and time, window size, the place name shown by Google, and where each result appeared. A snapshot is saved when you view a results page with the panel open, or when you press Save. You can change this in Settings.</li>
   <li>Client briefs you build.</li>
   <li>Caches of pages and archive captures the extension fetched, so repeat lookups are fast.</li>
-  <li>If you connect a Legiit account: your API token.</li>
+  <li>Your Legiit API token, which connects the extension to your account.</li>
 </ul>
 <p>All of this is kept in your browser's storage for the extension. It is not synced to your Google account and is not readable by websites. You can delete it at any time in Settings → Privacy and data (&quot;Clear history&quot;, &quot;Clear caches&quot;, &quot;Erase everything&quot;), or by removing the extension.</p>
 <h2>What leaves your device</h2>
-<p><strong>Without a Legiit account: nothing is sent to Legiit.</strong> The extension contacts only:</p>
+<p><strong>Your email address, once.</strong> When you click Start on the first screen, the extension sends the email address you entered to Legiit, which creates your free Legiit account and returns a token for it. Legiit may email you about your account. If the address already has a Legiit account, no account is created, and you connect it with a token instead.</p>
+<p><strong>Other websites.</strong> Besides Legiit, the extension contacts only:</p>
 <ul>
   <li><strong>web.archive.org</strong>, when you look up a page's history. The request contains the address of the page you are looking up. The Internet Archive's own privacy policy applies to that request.</li>
   <li><strong>Websites you allowed for a scan or comparison</strong>, and the website you build a brief on. These receive ordinary page requests from your browser, without cookies and without a referrer. They can see your IP address, as with any visit.</li>
 </ul>
-<p><strong>With a Legiit account connected:</strong></p>
+<p><strong>Legiit, with your account:</strong></p>
 <ul>
   <li>The extension reads your own account data from Legiit (your name, plan, businesses, their tracked competitors, focus keywords and customer profiles) to pre-fill its settings, and Legiit's list of notable search-industry dates.</li>
   <li>When you click <strong>Save to Command Center</strong>, <strong>Send to content editor</strong>, <strong>Open in Command Center</strong>, <strong>Add to Command Center</strong> or <strong>Rewrite with Legiit AI</strong>, the extension shows the exact data it will send and sends it only after you confirm. Depending on the action this can include: a search keyword and the results measured on that page; a list of pages, the brands they mention and the contact links found on those pages; sentences from a page you analyzed; or a client brief with the business details found on a website.</li>

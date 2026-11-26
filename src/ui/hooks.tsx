@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { pickProvider, type AiProvider } from '@/ai/provider';
 import { BrandMatcher } from '@/brands/matcher';
 import { errorMessage, isAbortError } from '@/lib/async';
-import { can, connect as connectLegiit, disconnect as disconnectLegiit, DISCONNECTED, loadConnection, resetUnavailable, type Connection } from '@/legiit/connection';
+import { can, connect as connectLegiit, disconnect as disconnectLegiit, DISCONNECTED, loadConnection, resetUnavailable, signUp as signUpLegiit, type Connection } from '@/legiit/connection';
 import type { LegiitMethod } from '@/legiit/client';
 import type { InvokeIntent, PanelEvent } from '@/model/messages';
 import { requestLegiitAccess } from '@/net/permissions';
@@ -88,6 +88,8 @@ interface ConnectionValue {
   loading: boolean;
   /** Resolves with the new connection, so the caller can tell which account it is. */
   connect: (token: string) => Promise<Connection>;
+  /** Creates a free Legiit account from an email address and connects with it. */
+  signUp: (email: string) => Promise<Connection>;
   /** Checks the stored token again after a failed check. Call from a click: it may have to ask Chrome for access. */
   retry: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -177,6 +179,19 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           setConnection((current) => (kept ? (current.status === 'connected' ? current : { ...current, tokenKept: true }) : DISCONNECTED));
           setLoading(false);
           throw error;
+        } finally {
+          changingRef.current = false;
+        }
+      },
+      signUp: async (email) => {
+        await requestLegiitAccess();
+        changingRef.current = true;
+        seq.current += 1;
+        try {
+          const next = await signUpLegiit(email);
+          setConnection(next);
+          setLoading(false);
+          return next;
         } finally {
           changingRef.current = false;
         }

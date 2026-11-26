@@ -10,6 +10,7 @@ import { getLegiitToken } from '@/storage/settings';
 import { StaticAuthProvider, TokenAuthProvider, type AuthProvider } from './auth';
 import { isUnavailable, LegiitError, METHOD_CAPABILITY, type LegiitClient, type LegiitMethod } from './client';
 import { HttpLegiitClient } from './http-client';
+import { accountPayload } from './payloads';
 import type { Capability, LegiitSession } from './types';
 
 export interface Connection {
@@ -107,6 +108,33 @@ export async function connect(token: string, client?: LegiitClient): Promise<Con
     }
     throw error;
   }
+}
+
+/** Good enough to catch a typing mistake. The server decides whether the address is real. */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Creates a free Legiit account from an email address and connects with the token Legiit returns. That token is
+ * checked and stored like a pasted one. An email that already has an account gets no token: its owner connects
+ * with a token from Command Center instead.
+ */
+export async function signUp(email: string, client: LegiitClient = createClient()): Promise<Connection> {
+  const payload = accountPayload(email);
+  if (!EMAIL_SHAPE.test(payload.email)) throw new LegiitError('rejected', 'Enter your email address, for example name@company.com.');
+  let token: string;
+  try {
+    ({ token } = await client.createAccount(payload));
+  } catch (error) {
+    if (error instanceof LegiitError && error.status === 409) {
+      throw new LegiitError('rejected', 'This email already has a Legiit account. Connect it with your token under Settings.', 409);
+    }
+    if (isUnavailable(error)) throw new LegiitError('unavailable', 'Creating an account is not available yet. Try again later.', 404);
+    if (error instanceof LegiitError && error.code === 'network' && !(await hasLegiitAccess())) {
+      throw new LegiitError('network', `Chrome is not letting ${PRODUCT_NAME} reach ${new URL(LEGIIT_API_BASE_URL).host}. Click Start again and allow it.`);
+    }
+    throw error;
+  }
+  return connect(token);
 }
 
 export async function disconnect(): Promise<void> {

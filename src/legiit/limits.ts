@@ -15,6 +15,8 @@ import { cutText } from '@/lib/sanitize';
 export const LIMITS = {
   url: 2048,
   domain: 255,
+  /** An email address (RFC 5321 allows 254 characters). */
+  email: 254,
   /** Display name of a tracked brand or competitor (also the Settings limit). */
   brandName: 160,
   /** Domains of one brand or competitor. */

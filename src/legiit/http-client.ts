@@ -7,10 +7,12 @@ import { LegiitError, type LegiitClient, type SaveOptions } from './client';
 import { MAX_REPLY_BYTES, MAX_REQUEST_BYTES, TIMEOUT_MS } from './limits';
 import { ALL_CAPABILITIES } from './types';
 import type {
+  AccountRequest,
   AiCompletionRequest,
   AiCompletionResponse,
   CompetitorPayload,
   ContentEditorPayload,
+  CreatedAccount,
   GapListPayload,
   IndustryPulse,
   LegiitBusiness,
@@ -138,6 +140,11 @@ const BusinessDetailsSchema = v.pipe(
  * A link that cannot be opened is no link: one that is too long to be whole, a relative path, a host without a
  * scheme, another scheme. It reads as absent, so the user sees "Saved" and not a label that looks like a link.
  */
+/** A token as the extension stores it: printable ASCII without spaces, at most 4,096 characters. */
+const CreatedAccountSchema = v.object({
+  token: v.pipe(v.string(), v.trim(), v.regex(/^[\x21-\x7E]{1,4096}$/)),
+});
+
 const SaveResultSchema = v.object({
   id: id(200),
   url: v.fallback(
@@ -210,6 +217,8 @@ interface RequestOptions {
   idempotencyKey?: string;
   /** The path names a business: only there does a 404 with the code "not_found" mean "this business is gone". */
   businessScoped?: boolean;
+  /** Sent without a token: creating an account is the one call that has none yet. */
+  anonymous?: boolean;
 }
 
 /** The body of a reply as text. A reply beyond the size limit is not read. */
@@ -267,7 +276,7 @@ export class HttpLegiitClient implements LegiitClient {
     schema: TSchema,
     options: RequestOptions = {},
   ): Promise<v.InferOutput<TSchema>> {
-    const auth = await this.options.auth.headers();
+    const auth = options.anonymous ? {} : await this.options.auth.headers();
     if (!auth) throw new LegiitError('unauthorised', 'Not connected to Legiit');
 
     const body = options.body === undefined ? undefined : JSON.stringify(options.body);
@@ -339,6 +348,10 @@ export class HttpLegiitClient implements LegiitClient {
 
   private save(path: string, payload: unknown, options: SaveOptions | undefined, businessScoped: boolean): Promise<SaveResult> {
     return this.request('POST', path, SaveResultSchema, { body: payload, idempotencyKey: options?.idempotencyKey, businessScoped });
+  }
+
+  createAccount(payload: AccountRequest): Promise<CreatedAccount> {
+    return this.request('POST', '/v1/accounts', CreatedAccountSchema, { body: payload, anonymous: true });
   }
 
   getSession(): Promise<LegiitSession> {

@@ -286,6 +286,8 @@ export const test = base.extend<LensOptions & { lens: Lens }>({
       if (message.type() === 'error') errors.push(`[service worker] ${message.text()}`);
     });
     const extensionId = new URL(worker.url()).host;
+    // The feature tests run without an account. The first screen (an email for a free account) has its own tests.
+    await worker.evaluate(() => chrome.storage.local.set({ 'testing.noAccountGate': true }));
     // Uncaught errors in the service worker are not console messages: collect them inside the worker.
     await worker.evaluate(() => {
       const scope = self as unknown as { __lensErrors?: string[] } & typeof globalThis;

@@ -23,11 +23,11 @@ export const DEFAULT_LEGIIT_API_BASE_URL = 'https://lens.legiit.com';
 export const WAYBACK_ORIGIN = 'https://web.archive.org';
 
 /**
- * Account gating. `false` (the default) never asks for an account.
- * Set to a number N to ask users to connect a Legiit account after N free
- * feature runs.
+ * Account gating. 0 (shipped): the first screen asks for an email address and
+ * creates a free Legiit account before any feature runs. A number N asks after
+ * N free feature runs. `false` never asks.
  */
-export const REQUIRE_ACCOUNT_AFTER_FREE_RUNS = false as number | false;
+export const REQUIRE_ACCOUNT_AFTER_FREE_RUNS = 0 as number | false;
 
 /** Oldest Chrome the extension supports (sidePanel.open needs 116). */
 export const MINIMUM_CHROME_VERSION = '116';

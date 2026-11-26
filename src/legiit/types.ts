@@ -57,6 +57,17 @@ export interface SaveResult {
   url: string | null;
 }
 
+/** What the first screen sends to create a free Legiit account. */
+export interface AccountRequest {
+  /** As the user typed it, without spaces around it. */
+  email: string;
+}
+
+/** The answer to a new account: a token for it, used like a pasted one. */
+export interface CreatedAccount {
+  token: string;
+}
+
 /** Where a result sits relative to the fold (the bottom edge of the first screen). */
 export type FoldCode = 'above' | 'partly' | 'below';
 

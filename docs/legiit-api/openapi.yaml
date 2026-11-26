@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Legiit Command Center API for Legiit Lens
-  version: 1.0.0-draft.4
+  version: 1.0.0-draft.5
   summary: The API the Legiit Lens Chrome extension calls. To be built by the Legiit backend team.
   description: |
     The extension is finished and calls exactly this API. The API does not exist yet.
@@ -453,6 +453,55 @@ paths:
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '5XX': { $ref: '#/components/responses/ServerError' }
+  /v1/accounts:
+    post:
+      operationId: createAccount
+      tags: [Account]
+      summary: Creates a free Legiit account from an email address and returns a token for it.
+      description: |
+        The extension's first screen asks for one thing: an email address. This call turns it into a
+        free Legiit account, so the user can start at once. It is the only call without a token.
+
+        For a new email: create the account (no password yet), answer 201 with a token for it, and send
+        a welcome email with a link to set a password. The extension stores the token as if it had been
+        pasted, checks it with GET /v1/session, and the user is connected.
+
+        For an email that already has an account: answer 409 with the code "account_exists", and no
+        token. Its owner connects with a token from Account Settings → Legiit Lens API. A token here would
+        let anyone connect to another person's account by typing their email.
+
+        What a new account gets is the `capabilities` of its session: Legiit's decision (README,
+        "Decisions"). A new account has no business yet, so the saves into a business stay hidden until
+        it has one.
+      x-called-when: >-
+        The user types an email on the extension's first screen (or under Settings) and clicks Start.
+        The extension asks for it before any feature runs.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountRequest' }
+      responses:
+        '201':
+          description: The account was created. The token works like one created in Command Center.
+          x-extension-reaction: Stores the token, checks it with GET /v1/session, and opens the features.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreatedAccount' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: >-
+            The email already has a Legiit account. Answer with the error body and the code
+            "account_exists", and no token. The extension then says that this email already has a
+            Legiit account, and that its owner connects it with a token under Settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
 components:
   securitySchemes:
     bearerToken:
@@ -615,6 +664,32 @@ components:
         built". A body is optional and is not shown.
       x-extension-reaction: Shows "Legiit had a problem" with the status code. Never retries by itself; the user can click again.
   schemas:
+    AccountRequest:
+      type: object
+      description: What the extension's first screen sends to create a free account.
+      required: [email]
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          description: >-
+            The email address as the user typed it, without spaces around it. The extension checks only
+            that it looks like name@domain.tld: check it yourself, and compare addresses
+            case-insensitively.
+          x-examples: [jordan.lee@example.com]
+    CreatedAccount:
+      type: object
+      description: The reply to a new account.
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: >-
+            A token for the new account, in the same form as one created in Command Center: printable
+            ASCII without spaces. The extension stores it and sends it with every later request.
     Error:
       type: object
       description: >-

@@ -2,7 +2,7 @@
  "openapi": "3.1.0",
  "info": {
   "title": "Legiit Command Center API for Legiit Lens",
-  "version": "1.0.0-draft.4",
+  "version": "1.0.0-draft.5",
   "summary": "The API the Legiit Lens Chrome extension calls. To be built by the Legiit backend team.",
   "description": "Generated from openapi.yaml and examples/ by scripts/build-api-reference.mjs. Do not edit: change openapi.yaml.\n\nThe extension is finished and calls exactly this API. The API does not exist yet.\nRead README.md first: it tells you what to build, in which order, and how to test it.\nThe changes from one version of this file to the next are listed in README.md, section\n\"Version and changes\".\n\nThis file decides field names, types and limits: if two files of the kit disagree, this\nfile is right. reference.md, openapi.examples.json and the files in schemas/ are generated\nfrom it. The mock server and the conformance check read it when they run.\n\nRules for every request (they are not repeated per endpoint)\n- Every request carries `Authorization: Bearer <token>`, `Accept: application/json` and\n  `X-Legiit-Client: legiit-lens/<version>`. A POST also carries `Content-Type: application/json`.\n  No cookies are sent. X-Legiit-Client is for your logs: do not require it.\n- Only GET and POST are used. There are no query strings.\n- A request body is one JSON object in UTF-8 of at most 1,048,576 bytes. Accept that much.\n- Answer in JSON, on the URL that was called. The extension never follows a redirect.\n- Send `Cache-Control: no-store` with every reply, so that no proxy and no cache keeps a\n  copy of a user's data.\n- The extension waits 20 seconds for a reply, 60 seconds for POST /v1/ai/completions,\n  and never retries by itself.\n\nConventions used in this file\n- This is OpenAPI 3.1: every schema is JSON Schema 2020-12, and a type can be a list such\n  as [string, 'null']. Use tools that read OpenAPI 3.1.\n- Request schemas describe exactly what the extension sends. Every required field is in\n  every request. A field with no value is sent as null, \"\" or [], as its description says;\n  these are valid values. One field can be absent: responseSchema of the AI request.\n- Reply schemas describe what you must return. The extension ignores fields it\n  does not know, so you may add fields.\n- Ignore request fields you do not know: a later extension version may add fields.\n- enum is a closed list. x-values lists the values this version uses for a field that a\n  later version may extend: store such a value as text and accept one you do not know.\n- Sentences such as \"null exactly when…\" or \"always the number of…\" describe what the\n  extension sends. You can rely on them; do not reject a request because of them.\n- Text lengths are counted in UTF-16 code units (the \"length\" of a JavaScript\n  string). A text within its limit in that count is also within it counted in\n  characters, so a check that counts characters (not bytes) never refuses a valid request.\n- A value over its limit is shortened by the extension, not refused: text is cut and ends with \"…\",\n  a list keeps its first entries, a URL is cut at 2,048 characters. So a value at exactly its\n  maximum can be a shortened copy.\n- Every integer in a request fits a signed 32-bit column.\n- x-uses, in a response schema, is how much of a value the extension uses. More is\n  allowed and is cut by the extension.\n- x-examples: some values that a field can have. It is not a list of allowed values.\n- x-capability: the capability the extension needs before it shows this feature.\n- x-called-when: what the user does that causes the call.\n- x-extension-reaction: what the extension does with that reply.\n"
  },
@@ -2116,6 +2116,82 @@
      }
     }
    }
+  },
+  "/v1/accounts": {
+   "post": {
+    "operationId": "createAccount",
+    "tags": [
+     "Account"
+    ],
+    "summary": "Creates a free Legiit account from an email address and returns a token for it.",
+    "description": "The extension's first screen asks for one thing: an email address. This call turns it into a\nfree Legiit account, so the user can start at once. It is the only call without a token.\n\nFor a new email: create the account (no password yet), answer 201 with a token for it, and send\na welcome email with a link to set a password. The extension stores the token as if it had been\npasted, checks it with GET /v1/session, and the user is connected.\n\nFor an email that already has an account: answer 409 with the code \"account_exists\", and no\ntoken. Its owner connects with a token from Account Settings → Legiit Lens API. A token here would\nlet anyone connect to another person's account by typing their email.\n\nWhat a new account gets is the `capabilities` of its session: Legiit's decision (README,\n\"Decisions\"). A new account has no business yet, so the saves into a business stay hidden until\nit has one.\n",
+    "x-called-when": "The user types an email on the extension's first screen (or under Settings) and clicks Start. The extension asks for it before any feature runs.",
+    "security": [],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AccountRequest"
+       },
+       "examples": {
+        "typical": {
+         "summary": "typical",
+         "value": {
+          "email": "jordan.lee@example.com"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "The account was created. The token works like one created in Command Center.",
+      "x-extension-reaction": "Stores the token, checks it with GET /v1/session, and opens the features.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CreatedAccount"
+        },
+        "examples": {
+         "typical": {
+          "summary": "typical",
+          "value": {
+           "token": "lgt_mock_0001_jordanleeexamplecom"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "409": {
+      "description": "The email already has a Legiit account. Answer with the error body and the code \"account_exists\", and no token. The extension then says that this email already has a Legiit account, and that its owner connects it with a token under Settings.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "413": {
+      "$ref": "#/components/responses/TooLarge"
+     },
+     "422": {
+      "$ref": "#/components/responses/Invalid"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     },
+     "5XX": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -2390,6 +2466,39 @@
    }
   },
   "schemas": {
+   "AccountRequest": {
+    "type": "object",
+    "description": "What the extension's first screen sends to create a free account.",
+    "required": [
+     "email"
+    ],
+    "properties": {
+     "email": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 254,
+      "description": "The email address as the user typed it, without spaces around it. The extension checks only that it looks like name@domain.tld: check it yourself, and compare addresses case-insensitively.",
+      "x-examples": [
+       "jordan.lee@example.com"
+      ]
+     }
+    }
+   },
+   "CreatedAccount": {
+    "type": "object",
+    "description": "The reply to a new account.",
+    "required": [
+     "token"
+    ],
+    "properties": {
+     "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "description": "A token for the new account, in the same form as one created in Command Center: printable ASCII without spaces. The extension stores it and sends it with every later request."
+     }
+    }
+   },
    "Error": {
     "type": "object",
     "description": "The JSON body of every 4xx reply, including the ones your framework produces by itself (validation, throttling, authorisation, a missing record, a body that is too large). Two exceptions: a 404 or 405 that means \"this endpoint is not available\" can have any body or none, and a 413 that a proxy sends by itself can be the proxy's own page.",

@@ -8,11 +8,11 @@ This policy describes what the extension reads, what it stores, and what leaves 
 
 ## The short version
 
-- Legiit Lens works without an account. Used that way, **nothing you analyze is sent to us**.
+- To start, you enter your email address. It is sent to Legiit to create your free Legiit account. **Nothing you analyze is sent to us** unless you choose to send it.
 - It reads only pages you open or ask it to read. It never sends searches to Google or prompts to AI sites.
 - Your tracked brands, history and briefs are stored on your device.
 - There is no analytics, no advertising and no tracking in the extension.
-- If you connect a Legiit account, data is sent to Legiit only when you click a save action, and you are shown exactly what will be sent before it goes.
+- Data you analyze is sent to Legiit only when you click a save or AI action, and you are shown exactly what will be sent before it goes.
 
 ## What the extension reads
 
@@ -32,18 +32,20 @@ This policy describes what the extension reads, what it stores, and what leaves 
 - Snapshots of Google results pages: keyword, date and time, window size, the place name shown by Google, and where each result appeared. A snapshot is saved when you view a results page with the panel open, or when you press Save. You can change this in Settings.
 - Client briefs you build.
 - Caches of pages and archive captures the extension fetched, so repeat lookups are fast.
-- If you connect a Legiit account: your API token.
+- Your Legiit API token, which connects the extension to your account.
 
 All of this is kept in your browser's storage for the extension. It is not synced to your Google account and is not readable by websites. You can delete it at any time in Settings → Privacy and data ("Clear history", "Clear caches", "Erase everything"), or by removing the extension.
 
 ## What leaves your device
 
-**Without a Legiit account: nothing is sent to Legiit.** The extension contacts only:
+**Your email address, once.** When you click Start on the first screen, the extension sends the email address you entered to Legiit, which creates your free Legiit account and returns a token for it. Legiit may email you about your account. If the address already has a Legiit account, no account is created, and you connect it with a token instead.
+
+**Other websites.** Besides Legiit, the extension contacts only:
 
 - **web.archive.org**, when you look up a page's history. The request contains the address of the page you are looking up. The Internet Archive's own privacy policy applies to that request.
 - **Websites you allowed for a scan or comparison**, and the website you build a brief on. These receive ordinary page requests from your browser, without cookies and without a referrer. They can see your IP address, as with any visit.
 
-**With a Legiit account connected:**
+**Legiit, with your account:**
 
 - The extension reads your own account data from Legiit (your name, plan, businesses, their tracked competitors, focus keywords and customer profiles) to pre-fill its settings, and Legiit's list of notable search-industry dates.
 - When you click **Save to Command Center**, **Send to content editor**, **Open in Command Center**, **Add to Command Center** or **Rewrite with Legiit AI**, the extension shows the exact data it will send and sends it only after you confirm. Depending on the action this can include: a search keyword and the results measured on that page; a list of pages, the brands they mention and the contact links found on those pages; sentences from a page you analyzed; or a client brief with the business details found on a website.

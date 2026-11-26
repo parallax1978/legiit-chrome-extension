@@ -12,7 +12,7 @@ import type { GapRow } from '@/features/why-not-me/gap';
 import type { Presence } from '@/features/why-not-me/presence';
 import { cleanText, cutText, wellFormedDeep } from '@/lib/sanitize';
 import { clip, clipDomain, clipUrl, LIMITS } from './limits';
-import type { CompetitorPayload, ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
+import type { AccountRequest, CompetitorPayload, ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
 
 const round = (value: number, digits = 4): number => Number(value.toFixed(digits));
 const within = (value: number, min: number, max: number): number => Math.min(Math.max(Math.round(value), min), max);
@@ -134,6 +134,11 @@ export function contentEditorPayload(input: {
 
 const competitorDomains = (domains: readonly (string | null)[]): string[] =>
   [...new Set(domains.filter((d): d is string => typeof d === 'string' && d !== '' && d.length <= LIMITS.domain))].slice(0, LIMITS.brandDomains);
+
+/** The first screen's request for a free account: the email as typed, without spaces around it. */
+export function accountPayload(email: string): AccountRequest {
+  return wellFormedDeep({ email: clip(email.trim(), LIMITS.email) });
+}
 
 /** A competitor as it is sent to Legiit: when added to a business, and inside a brief. */
 export function competitorPayload(brand: { name: string; domains: readonly (string | null)[] }): CompetitorPayload {

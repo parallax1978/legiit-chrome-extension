@@ -7,6 +7,7 @@ import { prunePageCache } from '@/storage/db';
 import { useConnection, useTarget } from './hooks';
 import { Card, Chip, Notice } from './kit';
 import { SettingsView } from './SettingsView';
+import { SignUpForm } from './SignUp';
 import { ClickPotentialTab } from './tabs/ClickPotentialTab';
 import { InstantBriefTab } from './tabs/InstantBriefTab';
 import { NewOrNoiseTab } from './tabs/NewOrNoiseTab';
@@ -117,11 +118,16 @@ export function App() {
       </div>
       <main className="content" role="tabpanel" data-testid={`panel-${tab}`}>
         {gated ? (
-          <Card title="Connect a Legiit account to continue" testId="gate">
-            <Notice tone="warn">
-              You have used your {gate?.limit} free runs. Connect a Legiit account under Settings to keep going.
-            </Notice>
-          </Card>
+          gate?.limit === 0 ? (
+            <Card title="Enter your email to start" testId="gate">
+              <SignUpForm onUseToken={() => choose('settings')} />
+            </Card>
+          ) : (
+            <Card title="Create your free account to continue" testId="gate">
+              <Notice tone="warn">You have used your {gate?.limit} free runs. Enter your email to keep going.</Notice>
+              <SignUpForm onUseToken={() => choose('settings')} />
+            </Card>
+          )
         ) : (
           <>
             {tab === 'click' && <ClickPotentialTab />}

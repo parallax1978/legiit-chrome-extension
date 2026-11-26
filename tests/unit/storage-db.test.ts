@@ -141,12 +141,24 @@ describe('caches', () => {
 });
 
 describe('account gating', () => {
-  it('is off by default: never gated, and nothing is counted', async () => {
-    expect(gateState(1_000_000, false)).toEqual({ gated: false, enabled: false, runsUsed: 1_000_000, limit: null, remaining: null });
-    await recordRun();
-    await recordRun();
+  it('ships asking for an account before the first run, and lets a connected user through', async () => {
+    expect(await currentGate(false)).toMatchObject({ gated: true, limit: 0, runsUsed: 0 });
+    expect((await currentGate(true)).gated).toBe(false);
+  });
+
+  it('when switched off, is never gated and counts nothing', async () => {
+    expect(gateState(1_000_000, false, false)).toEqual({ gated: false, enabled: false, runsUsed: 1_000_000, limit: null, remaining: null });
+    await recordRun(false);
+    await recordRun(false);
     expect(await getRunCount()).toBe(0);
+    expect((await currentGate(false, false)).gated).toBe(false);
+  });
+
+  it('is off for the end-to-end tests of the features, which set their own key', async () => {
+    await chrome.storage.local.set({ 'testing.noAccountGate': true });
     expect((await currentGate(false)).gated).toBe(false);
+    await chrome.storage.local.remove('testing.noAccountGate');
+    expect((await currentGate(false)).gated).toBe(true);
   });
 
   it('asks for an account after N free runs when the flag is set', async () => {

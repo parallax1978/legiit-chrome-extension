@@ -4,7 +4,7 @@ A Chrome extension (Manifest V3) for SEO professionals and agencies.
 
 > Shows how visible a web page or brand is in Google results and AI answers, and what explains it.
 
-Everything works without an account and runs on the device. A Legiit account is optional and only adds saving to Legiit Command Center.
+The first screen asks for an email address and creates a free Legiit account from it (`POST /v1/accounts`). After that every tool runs on the device; saving to Legiit Command Center depends on the account's plan.
 
 "Legiit Lens" is a working name, set in one place: `PRODUCT_NAME` in `src/config/constants.ts`.
 

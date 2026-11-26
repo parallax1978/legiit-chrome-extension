@@ -320,6 +320,9 @@ Backend developers have never seen the extension, and they write the messages th
 **D-88 · The API host is lens.legiit.com.**
 Decided with the Legiit team on 25 November 2026. The owner did not want "api" in the name, and a random string was considered. A random name hides nothing: the host is in the manifest, in the permissions of the store listing, in the extension's code and in public certificate logs. It would also look suspicious in Chrome's permission prompt, and it could never change after the first submission. `lens.legiit.com` does not advertise an API, matches the product name, and keeps the host permission to one subdomain; a path under `legiit.com` would make Chrome ask for all of `legiit.com`, where users are logged in. The API's security rests on the token, the owner check on every business and the rate limits, not on its name.
 
+**D-89 · The first screen creates a free Legiit account from an email address.**
+The owner's decision on 26 November 2026, replacing the brief's "everything works without an account": the extension is meant to bring people to Legiit, and an optional token page did not. The first screen asks for one thing, an email address. `POST /v1/accounts` creates a free account without a password and returns a token, which is checked and stored like a pasted one, and the user is connected at once. An address that already has an account gets `409` and no token, so typing someone's email never connects to their account; its owner connects with a token under Settings. The gate is `REQUIRE_ACCOUNT_AFTER_FREE_RUNS = 0`; the end-to-end tests of the features set a storage key that switches it off, and the first screen has its own tests. Nothing is sent before the user clicks Start. The privacy policy, the store's data form (personally identifiable information: yes, the email) and the reviewer notes say so.
+
 ---
 
 ## 3. Assumptions that a person must confirm

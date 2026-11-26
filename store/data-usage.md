@@ -25,7 +25,7 @@ There is no analytics, no advertising, no error reporting and no account of our 
 
 | Category (verify the label in the dashboard) | Answer | Why |
 |---|---|---|
-| Personally identifiable information | **No** | The extension does not ask for or collect the user's name, address, e-mail or ID. When connected, it displays the account name returned by Legiit and keeps it in memory only. *If counsel considers that "collection", answer Yes and describe it as "account name shown when connected".* |
+| Personally identifiable information | **Yes** | The e-mail address the user enters on the first screen, sent to Legiit to create the user's free Legiit account. When connected, the extension also displays the account name returned by Legiit and keeps it in memory only. |
 | Health information | **No** | |
 | Financial and payment information | **No** | |
 | Authentication information | **Yes** | The Legiit API token the user pastes, stored on the device and sent only to the Legiit API |

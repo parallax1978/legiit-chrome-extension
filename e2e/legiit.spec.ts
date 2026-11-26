@@ -42,6 +42,43 @@ async function reviewAndSend(lens: Lens, panel: Page, method: string): Promise<u
   return shown;
 }
 
+test.describe('the first screen: an email creates a free account', () => {
+  /** The feature tests switch the first screen off; these tests switch it back on. */
+  const withFirstScreen = (lens: Lens) => lens.worker.evaluate(() => chrome.storage.local.remove('testing.noAccountGate'));
+
+  test('asks for an email before any feature runs, creates the account and connects', async ({ lens }) => {
+    await withFirstScreen(lens);
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    await expect(panel.getByTestId('gate')).toContainText('Enter your email to start');
+    await expect(panel.getByTestId('cp-organic')).toHaveCount(0);
+    // Nothing is sent before the user clicks Start.
+    expect(legiitRequests(lens)).toHaveLength(0);
+    await panel.getByTestId('signup-email').fill('  jordan.lee@example.com ');
+    await panel.getByTestId('signup-start').click();
+    await expect(panel.getByTestId('connection-chip')).toBeVisible();
+    await expect(panel.getByTestId('cp-organic')).toBeVisible();
+    const signup = legiitRequests(lens).find((r) => r.url.endsWith('/v1/accounts'));
+    expect(signup).toMatchObject({ method: 'POST', authorization: false });
+    expect(JSON.parse(signup!.body ?? 'null')).toEqual({ email: 'jordan.lee@example.com' });
+    // The new account's token is used from then on.
+    expect(legiitRequests(lens).filter((r) => r.url.endsWith('/v1/session')).every((r) => r.authorization)).toBe(true);
+  });
+
+  test('an email that already has an account is told to connect with a token, and nothing is stored', async ({ lens }) => {
+    await withFirstScreen(lens);
+    const { tabId } = await lens.open(scenario.urls.serpFull!);
+    const panel = await lens.openPanel(tabId, 'click');
+    await panel.getByTestId('signup-email').fill('dana@northstarseo.example');
+    await panel.getByTestId('signup-start').click();
+    await expect(panel.getByTestId('signup-error')).toContainText('already has a Legiit account');
+    await expect(panel.getByTestId('gate')).toBeVisible();
+    expect(await lens.worker.evaluate(async () => (await chrome.storage.local.get('legiitAuth'))['legiitAuth'] ?? null)).toBeNull();
+    await panel.getByTestId('signup-use-token').click();
+    await expect(panel.getByTestId('legiit-token')).toBeVisible();
+  });
+});
+
 test.describe('without a Legiit account', () => {
   test('never contacts Legiit and shows no save actions', async ({ lens }) => {
     await lens.trackScenarioBrands();

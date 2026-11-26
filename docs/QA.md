@@ -173,7 +173,7 @@ On a machine that does not: the opt-in says why and nothing else changes.
 
 ## 12. Privacy checks
 
-- [ ] Use every feature without a Legiit account, with the panel's and the service worker's Network tabs open. Destinations seen: web.archive.org, the sites you granted, the site you built a brief on. Nothing else.
+- [ ] Open the side panel in a fresh profile: it asks for an email address, and nothing is sent before Start. Start with a new address: a free account is created and every tool opens. Then use every feature with the panel's and the service worker's Network tabs open. Destinations seen: lens.legiit.com, web.archive.org, the sites you granted, the site you built a brief on. Nothing else.
 - [ ] Settings → "Network activity from this window" lists the same hosts.
 - [ ] "Clear history", "Clear caches" and "Erase everything" do what they say (check Application → IndexedDB and Extension storage in DevTools).
 - [ ] After "Erase everything", granted sites are gone from `chrome://extensions` → Details → Site access.

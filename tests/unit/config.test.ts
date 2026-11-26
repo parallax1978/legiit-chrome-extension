@@ -18,8 +18,8 @@ describe('product constants', () => {
     expect(SINGLE_PURPOSE.length).toBeLessThanOrEqual(132);
   });
 
-  it('ships with account gating off', () => {
-    expect(REQUIRE_ACCOUNT_AFTER_FREE_RUNS).toBe(false);
+  it('ships asking for an email before the first run', () => {
+    expect(REQUIRE_ACCOUNT_AFTER_FREE_RUNS).toBe(0);
   });
 
   it('points the Legiit client at an https origin', () => {

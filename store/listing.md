@@ -61,7 +61,7 @@ PERMISSIONS
 
 Lens reads Google Search pages and the four assistants named above so it can measure them, and web.archive.org for page history. On any other page it has access only after you click its icon, and only for that page.
 
-Everything works without an account. Connecting a Legiit account adds saving to Legiit Command Center.
+Start with your email: the extension creates your free Legiit account, and every tool is ready. Saving to Legiit Command Center depends on your Legiit plan.
 ```
 
 ## Images

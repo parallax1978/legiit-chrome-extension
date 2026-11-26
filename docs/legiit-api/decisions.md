@@ -33,6 +33,7 @@ The numbers are the numbers of section 11 in the developer guide ([README.md](RE
 | 11 | Is there a test account for Google's reviewers? | Google may test the connection to Legiit before it approves the extension | Yes: one account with one business and a token | |
 | 12 | Is there a test server for the developers? | They need it to test without touching real accounts | Yes, with its own web address, and without a password prompt in front of it | |
 | 13 | Who at Legiit may open what users saved, and in which tools? | The privacy policy promises that people at Legiit do not read saved items | Nobody in normal work. Support sees that an item exists, not what is in it. Opening an item needs the user's consent, a security reason or a legal duty | |
+| 14 | What does someone get who signs up with their email in the extension? | The extension creates a free Legiit account from the email on its first screen | The tools that need no business in Command Center: AI rewrites, Industry Pulse dates and workspaces from briefs. Plus a welcome email with a link to set a password | |
 
 ## Four things only you can provide
 

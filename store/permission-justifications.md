@@ -41,7 +41,7 @@ The Rewind feature shows how a page changed over time. When the user looks up a 
 ## Host permission: lens.legiit.com
 
 ```
-Used only if the user chooses to connect their Legiit account. It lets the extension read the user's own account data (their businesses and tracked competitors) and save a result to Legiit Command Center when the user clicks a save button and confirms a dialog that shows exactly what will be sent. With no account connected, the extension makes no request to this host.
+The Legiit API. The extension's first screen sends the email address the user enters to this host, to create the user's free Legiit account. After that it reads the user's own account data (their businesses and tracked competitors) and saves a result to Legiit Command Center when the user clicks a save button and confirms a dialog that shows exactly what will be sent.
 ```
 
 ## Content scripts: Google Search domains

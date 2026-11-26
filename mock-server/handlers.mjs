@@ -22,6 +22,7 @@
  *   a competitor is never stored twice (reference, endpoint 6)     → addCompetitor()
  *   a brief that is sent again replaces its workspace (endpoint 8) → createWorkspace()
  *   every reply carries the CORS headers (3)                       → CORS_HEADERS
+ *   an email creates a free account and its token (endpoint 0)     → createAccount()
  * The order of the checks is the one section 5 gives: token, body size, JSON syntax, endpoint and capability,
  * business, remembered reply, fields.
  * Everything that is "per user" (capabilities, remembered replies, briefs) is looked up by the user the token
@@ -95,6 +96,8 @@ export function createMockState() {
     /** Idempotency-Key → the reply that was given the first time. */
     replies: new Map(),
     nextId: 1,
+    /** Accounts created from the extension's first screen: token → session. */
+    accounts: new Map(),
   };
 }
 
@@ -120,7 +123,27 @@ function tokenOf(headers) {
 function sessionFor(state, token) {
   if (token === MOCK_TOKENS.valid) return state.session;
   if (token === MOCK_TOKENS.limited) return state.limitedSession;
-  return null;
+  return state.accounts.get(token) ?? null;
+}
+
+/** What a new free account of the mock gets: it has no business yet, so no feature that saves into one. */
+export const MOCK_NEW_ACCOUNT_CAPABILITIES = ['workspaces', 'industryPulse', 'ai'];
+
+/**
+ * POST /v1/accounts: a free account from an email address, answered with a token for it. An email that already
+ * has an account gets 409 and no token, so nobody can connect to another person's account by typing their email.
+ */
+function createAccount(state, body) {
+  const problem = problemWith('AccountRequest', body);
+  if (problem) return error(422, 'invalid', problem);
+  const email = body.email.trim().toLowerCase();
+  const known = [state.session, state.limitedSession, ...state.accounts.values()].some((session) => (session.user.email ?? '').toLowerCase() === email);
+  if (known) return error(409, 'account_exists', 'This email already has a Legiit account: connect it with a token from Command Center.');
+  // Counted apart from the saved items, so that a new account does not change the ids of the examples.
+  const n = state.accounts.size + 1;
+  const token = `lgt_mock_${String(n).padStart(4, '0')}_${email.replace(/[^a-z0-9]/g, '').slice(0, 24)}`;
+  state.accounts.set(token, { user: { id: `usr_new_${n}`, name: '', email: body.email.trim() }, plan: 'free', capabilities: [...MOCK_NEW_ACCOUNT_CAPABILITIES] });
+  return json(201, { token });
 }
 
 /** A domain as it is compared: lower case, without scheme, "www." and path. A subdomain is a different domain. */
@@ -156,6 +179,19 @@ function answer(state, request) {
   // A preflight is answered on every path, without asking for a token. The health page is not part of the contract.
   if (method === 'OPTIONS') return { status: 204, headers: {}, body: '' };
   if (path === '/' || path === '/health') return json(200, { ok: true, service: 'legiit-mock' });
+
+  // --- A new account. The one call without a token: the email address is all there is.
+  if (method === 'POST' && path === '/v1/accounts') {
+    if (Buffer.byteLength(request.body ?? '', 'utf8') > MAX_REQUEST_BYTES) return error(413, 'too_large', 'The request body is larger than 1 MB');
+    let account;
+    try {
+      account = JSON.parse(request.body || 'null');
+    } catch {
+      return error(400, 'bad_request', 'The body is not valid JSON');
+    }
+    if (account === null || typeof account !== 'object' || Array.isArray(account)) return error(400, 'bad_request', 'A JSON object is required');
+    return createAccount(state, account);
+  }
 
   // --- The token. 401 is for the token and nothing else, and it always carries the error body.
   const token = tokenOf(request.headers);

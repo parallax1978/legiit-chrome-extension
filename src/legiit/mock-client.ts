@@ -13,11 +13,13 @@ import pulse from '@@/fixtures/legiit/industry-pulse.json';
 import session from '@@/fixtures/legiit/session.json';
 import { LegiitError, METHOD_CAPABILITY, type LegiitClient, type LegiitMethod, type SaveOptions } from './client';
 import type {
+  AccountRequest,
   AiCompletionRequest,
   AiCompletionResponse,
   Capability,
   CompetitorPayload,
   ContentEditorPayload,
+  CreatedAccount,
   GapListPayload,
   IndustryPulse,
   LegiitBusiness,
@@ -64,6 +66,14 @@ export class MockLegiitClient implements LegiitClient {
     const all = details as Record<string, LegiitBusinessDetails>;
     if (!Object.hasOwn(all, businessId)) throw new LegiitError('rejected', 'Legiit could not find it (404): No such business', 404);
     return all[businessId]!;
+  }
+
+  async createAccount(payload: AccountRequest): Promise<CreatedAccount> {
+    this.calls.push({ method: 'createAccount', args: [payload] });
+    if (payload.email.trim().toLowerCase() === ((session as LegiitSession).user.email ?? '').toLowerCase()) {
+      throw new LegiitError('rejected', 'Legiit rejected the request (409): This email already has a Legiit account.', 409);
+    }
+    return { token: 'demo-token' };
   }
 
   async getSession(): Promise<LegiitSession> {

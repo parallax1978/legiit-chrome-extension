@@ -1,10 +1,10 @@
 /**
- * Optional account gating, controlled by one config flag
- * (REQUIRE_ACCOUNT_AFTER_FREE_RUNS in src/config/constants.ts). It ships
- * switched off: every feature works without an account, forever.
+ * Account gating, controlled by one config flag (REQUIRE_ACCOUNT_AFTER_FREE_RUNS
+ * in src/config/constants.ts). It ships at 0: the first screen asks for an email
+ * address, and every feature runs once the extension is connected.
  */
 import { REQUIRE_ACCOUNT_AFTER_FREE_RUNS } from '@/config/constants';
-import { getRunCount, incrementRunCount } from '@/storage/settings';
+import { gateSwitchedOffForTests, getRunCount, incrementRunCount } from '@/storage/settings';
 
 export interface GateState {
   /** True when the user must connect a Legiit account to keep running features. */
@@ -24,7 +24,7 @@ export function gateState(runsUsed: number, connected: boolean, limit: number | 
 }
 
 export async function currentGate(connected: boolean, limit: number | false = REQUIRE_ACCOUNT_AFTER_FREE_RUNS): Promise<GateState> {
-  if (limit === false) return gateState(0, connected, limit);
+  if (limit === false || (await gateSwitchedOffForTests())) return gateState(0, connected, false);
   return gateState(await getRunCount(), connected, limit);
 }
 

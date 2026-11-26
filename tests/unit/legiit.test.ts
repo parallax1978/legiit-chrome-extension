@@ -1013,3 +1013,34 @@ describe('API contract (docs/legiit-api/openapi.yaml)', () => {
     expect(handleMockRequest(state, { method: 'GET', path: '/v1/session', headers: {} }).status).toBe(401);
   });
 });
+
+describe('signing up with an email address', () => {
+  it('creates the account without a token, then connects with the token Legiit returns', async () => {
+    const { HttpLegiitClient: Http } = await import('@/legiit/http-client');
+    const { StaticAuthProvider: Static } = await import('@/legiit/auth');
+    const calls: { url: string; headers: Record<string, string>; body: string | undefined }[] = [];
+    const client = new Http({
+      baseUrl: 'https://lens.legiit.com',
+      auth: new Static('must-not-be-sent'),
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), headers: Object.fromEntries(Object.entries((init?.headers ?? {}) as Record<string, string>).map(([k, v]) => [k.toLowerCase(), v])), body: init?.body as string | undefined });
+        return new Response(JSON.stringify({ token: 'lgt_new_account' }), { status: 201, headers: { 'content-type': 'application/json' } });
+      },
+    });
+    expect(await client.createAccount({ email: 'jordan.lee@example.com' })).toEqual({ token: 'lgt_new_account' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('https://lens.legiit.com/v1/accounts');
+    expect(calls[0]!.headers['authorization']).toBeUndefined();
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ email: 'jordan.lee@example.com' });
+  });
+
+  it('tells the owner of an existing account to connect with a token, and stores nothing', async () => {
+    const { signUp } = await import('@/legiit/connection');
+    const { MockLegiitClient: Mock } = await import('@/legiit/mock-client');
+    const { getLegiitToken: stored } = await import('@/storage/settings');
+    const session = (await import('@@/fixtures/legiit/session.json')).default as { user: { email: string } };
+    await expect(signUp(`  ${session.user.email.toUpperCase()} `, new Mock())).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/already has a Legiit account/) });
+    await expect(signUp('not an email', new Mock())).rejects.toMatchObject({ code: 'rejected', message: expect.stringMatching(/Enter your email address/) });
+    expect(await stored()).toBeNull();
+  });
+});

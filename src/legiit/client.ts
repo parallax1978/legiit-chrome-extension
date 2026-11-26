@@ -3,11 +3,13 @@
  * HttpLegiitClient (real HTTP) and MockLegiitClient (fixtures) implement it.
  */
 import type {
+  AccountRequest,
   AiCompletionRequest,
   AiCompletionResponse,
   Capability,
   CompetitorPayload,
   ContentEditorPayload,
+  CreatedAccount,
   GapListPayload,
   IndustryPulse,
   LegiitBusiness,
@@ -27,6 +29,8 @@ export interface SaveOptions {
 }
 
 export interface LegiitClient {
+  /** Creates a free Legiit account from an email address. The only call that is sent without a token. */
+  createAccount(payload: AccountRequest): Promise<CreatedAccount>;
   getSession(): Promise<LegiitSession>;
   listBusinesses(): Promise<LegiitBusiness[]>;
   getBusinessDetails(businessId: string): Promise<LegiitBusinessDetails>;
@@ -43,6 +47,7 @@ export type LegiitMethod = keyof LegiitClient;
 
 /** Which capability each method needs. UI for a method is shown only when its capability is available. */
 export const METHOD_CAPABILITY: Readonly<Record<LegiitMethod, Capability | null>> = {
+  createAccount: null,
   getSession: null,
   listBusinesses: 'businesses',
   getBusinessDetails: 'businesses',

@@ -54,7 +54,7 @@ describe('store listing', () => {
 
   it('promises only what the extension does', () => {
     for (const feature of ['Click Potential', 'Why Not Me', 'Rewind', 'New or Noise', 'Instant Brief']) expect(description).toContain(feature);
-    expect(description).toContain('Everything works without an account.');
+    expect(description).toContain('Start with your email: the extension creates your free Legiit account');
     expect(description).toContain('No analytics and no tracking.');
   });
 });
@@ -100,14 +100,14 @@ describe('privacy practices', () => {
     expect(html).not.toMatch(/<script/i);
     expect(html).not.toMatch(/<link|<img|src=/i);
     for (const heading of read('store/privacy-policy.md').match(/^## .+$/gm) ?? []) expect(html).toContain(`<h2>${heading.slice(3)}</h2>`);
-    for (const promise of ['nothing you analyze is sent to us', 'no analytics, no advertising and no tracking', 'We do not sell your data.', 'shows the exact data it will send']) {
+    for (const promise of ['Nothing you analyze is sent to us unless you choose to send it', 'It is sent to Legiit to create your free Legiit account', 'no analytics, no advertising and no tracking', 'We do not sell your data.', 'shows the exact data it will send']) {
       expect(html.replace(/<[^>]+>/g, ''), promise).toContain(promise);
     }
   });
 
-  it('gives the reviewer steps that need no account', () => {
+  it('gives the reviewer steps that start with an email address', () => {
     const notes = blocks(read('store/reviewer-notes.md'))[0]!;
-    for (const part of ['HOW TO TEST', 'PERMISSIONS', 'REMOTE CODE: NONE', 'DATA', 'no account needed']) expect(notes).toContain(part);
+    for (const part of ['HOW TO TEST', 'PERMISSIONS', 'REMOTE CODE: NONE', 'DATA', 'it asks for an email address', 'A free Legiit account is created']) expect(notes).toContain(part);
     for (const permission of permissions) expect(notes, permission).toContain(permission);
   });
 });
