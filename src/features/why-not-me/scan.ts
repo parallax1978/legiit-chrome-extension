@@ -7,6 +7,7 @@
 import type { BrandMatcher } from '@/brands/matcher';
 import type { PageDigest } from '@/extract/digest';
 import type { OpportunityLink } from '@/extract/links';
+import { checkGuessed } from '@/features/shared/guessed-page';
 import { urlKey } from '@/lib/url';
 import type { AnswerData, SerpData } from '@/model/schemas';
 import type { Passage } from './passages';
@@ -21,6 +22,11 @@ export interface ScanTarget {
   /** Where the page was found: "AI Overview citation", "Organic #3", "Cited by ChatGPT"… */
   foundIn: string;
   position: number | null;
+  /**
+   * True when Google hides the address of the result and `url` is what the line under its title spells out.
+   * The page is read only when it calls itself what the result is called (see checkGuessed).
+   */
+  guessed?: boolean;
 }
 
 export interface BrandCount {
@@ -72,11 +78,18 @@ export function pickSerpTargets(serp: SerpData, options: PickOptions = {}): Scan
   };
   const citedIn = serp.mode === 'ai-mode' ? 'AI Mode citation' : 'AI Overview citation';
   for (const [i, c] of (serp.aiAnswer?.citations ?? []).entries()) {
+    // A source of which only the site is known has no page to read.
+    if (c.address === 'site') continue;
     add({ url: c.url, title: c.title, domain: c.domain, reason: 'cited', foundIn: citedIn, position: i + 1 });
   }
   for (const o of serp.organic) {
-    // Only a page whose address is known can be read: the home page of its site is another page.
-    if (o.listStyle && (o.address ?? 'link') === 'link') add({ url: o.url, title: o.title, domain: o.domain, reason: 'list', foundIn: `Organic #${o.position}`, position: o.position });
+    if (!o.listStyle) continue;
+    const found = { title: o.title, domain: o.domain, reason: 'list' as const, foundIn: `Organic #${o.position}`, position: o.position };
+    const address = o.address ?? 'link';
+    // Only a page can be read: the home page of its site is another page. When Google hides the address, the line
+    // under the title can spell it out. That is a guess, which the scan checks against the title of the result.
+    if (address === 'link') add({ url: o.url, ...found });
+    else if (address === 'site' && o.guess) add({ url: o.guess, ...found, guessed: true });
   }
   return targets.slice(0, options.max ?? MAX_SCAN_TARGETS);
 }
@@ -85,6 +98,8 @@ export function pickAnswerTargets(answer: AnswerData, siteLabel: string, options
   const targets: ScanTarget[] = [];
   const seen = new Set<string>();
   for (const [i, c] of answer.citations.entries()) {
+    // A source of which only the site is known has no page to read.
+    if (c.address === 'site') continue;
     const key = urlKey(c.url);
     if (seen.has(key) || isMine(c.url, options.matcher)) continue;
     seen.add(key);
@@ -101,8 +116,21 @@ function counts(matcher: BrandMatcher, text: string, owner: 'mine' | 'competitor
   return out.sort((a, b) => b.mentions - a.mentions || a.name.localeCompare(b.name));
 }
 
+/**
+ * How many pages of a results page cannot be scanned because Google hides their address and the page spells none
+ * out: list-style results, and sources of the AI answer of which only the site is shown. Pages on the user's own
+ * sites do not count: they are never scanned.
+ */
+export function countUnreadable(serp: SerpData, matcher?: BrandMatcher): number {
+  const lists = serp.organic.filter((o) => o.listStyle && (o.address ?? 'link') !== 'link' && !o.guess && !(o.domain && isMine(o.url, matcher)));
+  const sources = (serp.aiAnswer?.citations ?? []).filter((c) => c.address === 'site' && !isMine(c.url, matcher));
+  return lists.length + sources.length;
+}
+
 /** Reads one digested page against the tracked brands. Pure. */
-export function analysePage(target: ScanTarget, digest: PageDigest, matcher: BrandMatcher, passages: Passage[] = []): PageScan {
+export function analysePage(target: ScanTarget, loaded: PageDigest, matcher: BrandMatcher, passages: Passage[] = []): PageScan {
+  // A page loaded from a guessed address counts only when it is the page the result names.
+  const digest = checkGuessed(loaded, target.guessed ? target.title : undefined);
   if (!digest.ok) {
     return {
       target,

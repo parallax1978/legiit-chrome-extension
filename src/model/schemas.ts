@@ -31,11 +31,22 @@ export const BLOCK_TYPES = [
   'knowledge_panel',
 ] as const;
 
+/**
+ * How an address is known. Google can hide where a link leads; the page then still names the site, in the line
+ * under the title or by the site's icon.
+ *   link:   the exact address of the page: read from the link, or from the page's own data about that result.
+ *   site:   only the site is known. `url` is the site's home page.
+ *   hidden: nothing on the page says where it leads. `url` is Google's own redirect link, `domain` is empty.
+ */
+export const ADDRESS_SOURCES = ['link', 'site', 'hidden'] as const;
+
 export const SerpItemSchema = v.object({
   title: text(400),
   url: v.nullable(httpUrl),
   domain: v.nullable(text(255)),
   text: text(1500),
+  /** 'site' when `url` is only the home page of the item's site. Left out for an exact address. */
+  address: v.optional(v.picklist(ADDRESS_SOURCES)),
 });
 
 export const SerpBlockSchema = v.object({
@@ -46,14 +57,6 @@ export const SerpBlockSchema = v.object({
   matchedBy: text(240),
 });
 
-/**
- * How the address of an organic result is known. Google can hide where a link leads; the line under the title then
- * still names the site.
- *   link:   the exact address of the page: read from the link, or from the page's own data about that result.
- *   site:   only the site is known. `url` is the site's home page.
- *   hidden: nothing on the page says where it leads. `url` is Google's own redirect link, `domain` is empty.
- */
-export const ADDRESS_SOURCES = ['link', 'site', 'hidden'] as const;
 export type AddressSource = (typeof ADDRESS_SOURCES)[number];
 
 export const OrganicResultSchema = v.object({
@@ -62,6 +65,11 @@ export const OrganicResultSchema = v.object({
   url: httpUrl,
   domain: text(255),
   address: v.optional(v.picklist(ADDRESS_SOURCES), 'link'),
+  /**
+   * For address 'site': the page address that the line under the title spells out, when it reads as a path.
+   * A guess: it counts only after the page that answers there has the title of this result.
+   */
+  guess: v.optional(v.nullable(httpUrl)),
   snippet: text(1500),
   rect: v.nullable(RectSchema),
   listStyle: v.boolean(),
@@ -73,6 +81,8 @@ export const CitationSchema = v.object({
   url: httpUrl,
   domain: text(255),
   title: text(400),
+  /** 'site' when only the site of the source is known and `url` is its home page. Left out for an exact address. */
+  address: v.optional(v.picklist(ADDRESS_SOURCES)),
 });
 
 export const AnswerDataSchema = v.object({

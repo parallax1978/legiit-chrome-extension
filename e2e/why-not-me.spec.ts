@@ -42,7 +42,7 @@ test.describe('Why Not Me on Google results', () => {
     const csv = await lens.downloadText(panel, () => panel.getByTestId('gap-export').click());
     expect(csv.name).toBe('gap-list-best-dentist-in-austin.csv');
     const lines = csv.text.replace('﻿', '').trim().split('\r\n');
-    expect(lines[0]).toBe('source,query_or_question,surface,position,title,url,domain,competitors_present,your_brand_present,evidence,page_type,actionable,scanned,contact_links');
+    expect(lines[0]).toBe('source,query_or_question,surface,position,title,url,domain,competitors_present,your_brand_present,evidence,page_type,actionable,scanned,contact_links,address');
     expect(lines.length).toBe(count + 1);
     expect(csv.text).toContain('Lakeside Smiles; Capitol Dental Care');
   });
@@ -126,6 +126,39 @@ test.describe('Why Not Me: scan sources (sites granted)', () => {
         'https://www.lakesidesmiles.example/',
       ].sort(),
     );
+    expect(lens.errors).toEqual([]);
+  });
+
+  test('finds a list page whose address Google hides, on the site of the page itself', async ({ lens }) => {
+    await lens.trackScenarioBrands();
+    const { tabId } = await lens.open(U.serpHidden!);
+    const panel = await lens.openPanel(tabId, 'why');
+    // Every link of this results page is Google's own redirect. Four pages are cited by the AI Overview and
+    // named in the page's data; the list-style result #5 is named only by the line under its title.
+    await expect(panel.getByTestId('scan-guessed')).toContainText('Google hides the address of 1 of them');
+    await panel.getByTestId('scan-sources').click();
+
+    const results = panel.getByTestId('scan-result');
+    await expect(results).toHaveCount(5);
+    const list = results.filter({ hasText: 'Lakeside Smiles vs Capitol Dental Care' });
+    await expect(list).toContainText('smilecompare.example · Organic #5');
+    await expect(list).toContainText('Does not name you');
+    await expect(list).toContainText('Lakeside Smiles');
+    await expect(list.getByRole('link').first()).toHaveAttribute('href', 'https://smilecompare.example/lakeside-smiles-vs-capitol-dental-care');
+
+    // The same five pages as on the results page that shows its links, each from its own site. Nothing was asked
+    // of Google: not the results page, and not one of its redirect links.
+    const fetched = lens.extensionRequests().map((r) => r.url);
+    expect([...fetched].sort()).toEqual(
+      [
+        'https://smilecompare.example/lakeside-smiles-vs-capitol-dental-care',
+        'https://texaslocalpicks.example/austin/top-rated-dentists',
+        'https://www.austinhealthguide.example/best-dentists-austin',
+        'https://www.capitoldentalcare.example/',
+        'https://www.lakesidesmiles.example/',
+      ].sort(),
+    );
+    expect(fetched.filter((url) => /(^|\.)google\./.test(new URL(url).hostname))).toEqual([]);
     expect(lens.errors).toEqual([]);
   });
 

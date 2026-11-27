@@ -47,6 +47,8 @@ export interface OrganicRow {
   domain: string;
   /** "link": `url` is the page. "site": Google hid the link and only the site is known. "hidden": not even that. */
   address: AddressSource;
+  /** For address 'site': the page address the line under the title spells out. A guess, null when there is none. */
+  guess: string | null;
   /** Pixels from the top of the page to the top of the result. Null when not measured. */
   top: number | null;
   fold: FoldStatus | null;
@@ -175,6 +177,7 @@ export function computeClickPotential(serp: SerpData, matcher: BrandMatcher): Cl
       url: result.url,
       domain: result.domain,
       address: result.address ?? 'link',
+      guess: result.guess ?? null,
       top: result.rect ? Math.round(result.rect.y) : null,
       fold: foldStatus(result.rect, viewport.height),
       owner: hit?.owner ?? null,

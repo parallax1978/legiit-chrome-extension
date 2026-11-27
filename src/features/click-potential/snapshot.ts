@@ -21,8 +21,12 @@ export interface SnapshotRecord {
   gradeLetter: GradeLetter;
   gradeScore: number;
   shares: BlockShare[];
-  /** `address` says how `url` is known (see AddressSource). A record without it was stored before Google hid links: 'link'. */
-  organic: { position: number; domain: string; url: string; address?: AddressSource; title: string; top: number | null; fold: FoldStatus | null }[];
+  /**
+   * `address` says how `url` is known (see AddressSource). A record without it was stored before Google hid links:
+   * 'link'. `guess` is the page address the line under the title spelled out, for a result of which only the site
+   * is known: unchecked.
+   */
+  organic: { position: number; domain: string; url: string; address?: AddressSource; guess?: string | null; title: string; top: number | null; fold: FoldStatus | null }[];
   tracked: TrackedRow[];
   /** Why Not Me summary for the same page, when brands were tracked at the time. Reused by Instant Brief. */
   presence: SnapshotPresence | null;
@@ -55,7 +59,7 @@ export function toSnapshot(serp: SerpData, cp: ClickPotential, presence: Snapsho
     gradeLetter: cp.grade.letter,
     gradeScore: cp.grade.score,
     shares: cp.shares,
-    organic: cp.organic.map((o) => ({ position: o.position, domain: o.domain, url: o.url, address: o.address, title: o.title, top: o.top, fold: o.fold })),
+    organic: cp.organic.map((o) => ({ position: o.position, domain: o.domain, url: o.url, address: o.address, ...(o.guess ? { guess: o.guess } : {}), title: o.title, top: o.top, fold: o.fold })),
     tracked: cp.tracked,
     presence,
   };

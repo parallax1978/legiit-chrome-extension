@@ -47,6 +47,13 @@ export interface PresenceItem {
   /** The item is a tracked brand's own website. */
   ownSite: 'mine' | 'competitor' | null;
   listStyle: boolean;
+  /**
+   * True when Google hides the address of the item and `url` is only the home page of its site. Such an address
+   * names the site, not the page: it is shown as text, never as a link to the item.
+   */
+  siteOnly: boolean;
+  /** For a site-only organic result: the page address the line under its title spells out. A guess until a scan read it. */
+  guess: string | null;
 }
 
 export type SurfaceStatus = 'both' | 'only-you' | 'only-competitors' | 'neither' | 'absent';
@@ -88,7 +95,7 @@ function unique(values: Iterable<string>): string[] {
   return [...new Set(values)];
 }
 
-function toItem(matcher: BrandMatcher, item: SerpItem, position: number | null, listStyle = false): PresenceItem {
+function toItem(matcher: BrandMatcher, item: SerpItem, position: number | null, listStyle = false, guess: string | null = null): PresenceItem {
   const hits = matcher.matchItem(item);
   const { mine, competitors } = splitHits(hits);
   const domainHit = hits.find((h) => h.via === 'domain');
@@ -101,6 +108,8 @@ function toItem(matcher: BrandMatcher, item: SerpItem, position: number | null, 
     competitors: unique(competitors.map((h) => h.name)),
     ownSite: domainHit ? domainHit.owner : null,
     listStyle,
+    siteOnly: item.address === 'site' && item.url !== null,
+    guess: item.address === 'site' ? guess : null,
   };
 }
 
@@ -139,7 +148,7 @@ export function buildSerpPresence(serp: SerpData, matcher: BrandMatcher): Presen
   const overview = serp.blocks.find((b) => b.type === 'ai_overview');
   const answer = serp.aiAnswer;
   if (answer?.recognised) {
-    const items = answer.citations.map((c, i) => toItem(matcher, { title: c.title, url: c.url, domain: c.domain, text: '' }, i + 1));
+    const items = answer.citations.map((c, i) => toItem(matcher, { title: c.title, url: c.url, domain: c.domain, text: '', address: c.address }, i + 1));
     surfaces.push(finish('ai_overview', true, items, answer.text, matcher));
   } else {
     surfaces.push(finish('ai_overview', overview !== undefined, [], overview?.text ?? '', matcher));
@@ -151,7 +160,15 @@ export function buildSerpPresence(serp: SerpData, matcher: BrandMatcher): Presen
         'organic',
         serp.organic.length > 0,
         // A result whose address Google hides and whose site the page does not name has no address to show.
-        serp.organic.map((o) => toItem(matcher, { title: o.title, url: o.address === 'hidden' ? null : o.url, domain: o.address === 'hidden' ? null : o.domain, text: o.snippet }, o.position, o.listStyle)),
+        serp.organic.map((o) =>
+          toItem(
+            matcher,
+            { title: o.title, url: o.address === 'hidden' ? null : o.url, domain: o.address === 'hidden' ? null : o.domain, text: o.snippet, address: o.address === 'site' ? 'site' : undefined },
+            o.position,
+            o.listStyle,
+            o.guess ?? null,
+          ),
+        ),
         '',
         matcher,
       ),
@@ -177,7 +194,7 @@ export function buildSerpPresence(serp: SerpData, matcher: BrandMatcher): Presen
 }
 
 export function buildAnswerPresence(answer: AnswerData, matcher: BrandMatcher): Presence {
-  const items = answer.citations.map((c, i) => toItem(matcher, { title: c.title, url: c.url, domain: c.domain, text: '' }, i + 1));
+  const items = answer.citations.map((c, i) => toItem(matcher, { title: c.title, url: c.url, domain: c.domain, text: '', address: c.address }, i + 1));
   return {
     kind: 'answer',
     subject: answer.question ?? '',
@@ -189,6 +206,19 @@ export function buildAnswerPresence(answer: AnswerData, matcher: BrandMatcher): 
       finish('citations', items.length > 0, items, '', matcher),
     ],
   };
+}
+
+/**
+ * The sites on a surface that are neither the user's nor a tracked competitor's: who else holds the place.
+ * Each site once, in page order.
+ */
+export function otherSites(surface: SurfacePresence): string[] {
+  return unique(surface.items.filter((i) => i.domain && i.ownSite === null).map((i) => i.domain as string));
+}
+
+function listSites(sites: readonly string[], max = 5): string {
+  const rest = sites.length - max;
+  return rest > 0 ? `${sites.slice(0, max).join(', ')} and ${rest} more` : sites.join(', ');
 }
 
 /** A compact summary stored with a Click Potential snapshot, so Instant Brief can reuse it later. */
@@ -227,6 +257,15 @@ export function explainPresence(presence: Presence, matcher: BrandMatcher): stri
   }
   const gaps = present.filter((s) => s.status === 'only-competitors');
   if (gaps.length > 0) lines.push(`Competitors are present and you are not on: ${gaps.map((s) => s.label.toLowerCase()).join(', ')}.`);
+  if (matcher.hasMine) {
+    // Surfaces without any tracked brand: the user is not there either, and that is worth saying out loud.
+    const empty = present.filter((s) => s.status === 'neither');
+    if (mineIn.length > 0 && empty.length > 0) lines.push(`You are ${gaps.length > 0 ? 'also ' : ''}not in: ${empty.map((s) => s.label.toLowerCase()).join(', ')}.`);
+    // Who holds the organic results instead: the plain answer to "why not me", with or without tracked competitors.
+    const organic = present.find((s) => s.id === 'organic');
+    const holders = organic && !organic.minePresent ? unique(organic.items.filter((i) => i.domain).map((i) => i.domain as string)) : [];
+    if (holders.length > 0) lines.push(`The organic results here are from: ${listSites(holders)}.`);
+  }
   const absent = presence.surfaces.filter((s) => !s.present).map((s) => s.label.toLowerCase());
   if (absent.length > 0) lines.push(`Not shown for this ${presence.kind === 'google' ? 'query' : 'answer'}: ${absent.join(', ')}.`);
   return lines;

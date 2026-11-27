@@ -7,8 +7,9 @@ import { digestHtml, failedDigest, type PageDigest } from '@/extract/digest';
 import { loadPages } from '@/features/shared/load-pages';
 import { buildGapRows, gapCsv, sortGapRows } from '@/features/why-not-me/gap';
 import { answerSentences, matchPassages, passageCandidates } from '@/features/why-not-me/passages';
-import { buildAnswerPresence, buildSerpPresence, explainPresence } from '@/features/why-not-me/presence';
-import { analysePage, pickAnswerTargets, pickSerpTargets } from '@/features/why-not-me/scan';
+import { checkGuessed, NO_PAGE, WRONG_PAGE } from '@/features/shared/guessed-page';
+import { buildAnswerPresence, buildSerpPresence, explainPresence, otherSites } from '@/features/why-not-me/presence';
+import { analysePage, countUnreadable, pickAnswerTargets, pickSerpTargets } from '@/features/why-not-me/scan';
 import type { FetchedHtml } from '@/net/page-fetch';
 import { gapPayload } from '@/legiit/payloads';
 import { getPack } from '@/selectors';
@@ -107,6 +108,129 @@ describe('presence on Google results', () => {
     expect(lines[1]).toMatch(/^Competitors: Lakeside Smiles \(ai overview, organic results, local pack, forums, videos, ads\)/);
     expect(lines[2]).toBe('Competitors are present and you are not on: ai overview, local pack, forums, ads.');
     expect(explainPresence(presence, new BrandMatcher({ mine: [], competitors: [] }))[0]).toMatch(/Add your brand/);
+  });
+});
+
+describe('a results page on which Google hides the links', () => {
+  const hidden = serp('google/serp-hidden-links.html', scenario.urls.serpHidden!);
+  const hiddenPresence = buildSerpPresence(hidden, matcher);
+
+  it('finds the same brands on the same surfaces as on the page that shows its links', () => {
+    expect(hiddenPresence.surfaces.map((s) => [s.id, s.status])).toEqual(presence.surfaces.map((s) => [s.id, s.status]));
+    expect(hiddenPresence.surfaces.find((s) => s.id === 'organic')!.items.filter((i) => i.ownSite === 'mine').map((i) => i.position)).toEqual([6]);
+  });
+
+  it('says who holds a surface when no tracked brand is on it', () => {
+    const only = new BrandMatcher({ mine: scenarioBrands.mine, competitors: [] });
+    const organic = buildSerpPresence(hidden, only).surfaces.find((s) => s.id === 'organic')!;
+    // The user's own site is not one of "the others"; every other site is listed once, in page order.
+    expect(otherSites(organic)).toEqual([
+      'austinhealthguide.example', 'lakesidesmiles.example', 'texaslocalpicks.example', 'capitoldentalcare.example',
+      'smilecompare.example', 'atxneighbors.example', 'zilkerfamilydentistry.example', 'texasdentalboard.example',
+    ]);
+    const nobody = new BrandMatcher({ mine: [{ id: 'x', name: 'Northgate Dental', domains: ['northgatedental.example'], aliases: [] }], competitors: [] });
+    const lines = explainPresence(buildSerpPresence(hidden, nobody), nobody);
+    expect(lines[0]).toMatch(/^Your brand does not appear on any of the \d+ surfaces/);
+    expect(lines).toContain('The organic results here are from: austinhealthguide.example, lakesidesmiles.example, texaslocalpicks.example, capitoldentalcare.example, smilecompare.example and 4 more.');
+  });
+
+  it('names the surfaces the user is missing from, also when no competitor is there', () => {
+    const lines = explainPresence(buildSerpPresence(hidden, new BrandMatcher({ mine: scenarioBrands.mine, competitors: [] })), new BrandMatcher({ mine: scenarioBrands.mine, competitors: [] }));
+    expect(lines[0]).toBe('Your brand appears on 2 of 6 surfaces: organic results, videos.');
+    expect(lines[1]).toBe('You are not in: ai overview, local pack, forums, ads.');
+  });
+
+  it('scans a list page at the address under its title, and reads it only when it is that page', async () => {
+    const targets = pickSerpTargets(hidden, { matcher });
+    // Four pages are cited by the AI Overview with their address. The fifth is a list-style result whose address
+    // Google hides: the line under its title spells one out.
+    expect(targets.map((t) => [t.reason, t.domain, t.guessed ?? false])).toEqual([
+      ['cited', 'austinhealthguide.example', false],
+      ['cited', 'lakesidesmiles.example', false],
+      ['cited', 'texaslocalpicks.example', false],
+      ['cited', 'capitoldentalcare.example', false],
+      ['list', 'smilecompare.example', true],
+    ]);
+    const guessed = targets[4]!;
+    expect(guessed.url).toBe('https://smilecompare.example/lakeside-smiles-vs-capitol-dental-care');
+    expect(targets.some((t) => /google\./.test(t.url))).toBe(false);
+    expect(countUnreadable(hidden, matcher)).toBe(0);
+
+    // The page that answers there has the title of the result: it is read like any other.
+    const [digest] = await loadPages([guessed.url], { fetchPage: fetchFixture });
+    expect(digest!.titles).toContain('Lakeside Smiles vs Capitol Dental Care: Which Austin Dentist Is Better?');
+    expect(analysePage(guessed, digest!, matcher)).toMatchObject({ ok: true, listStyle: true });
+
+    // Another page answers there (the line under the title was not the path): nothing of it is read.
+    const other = digestHtml('<html><head><title>All comparisons | SmileCompare</title></head><body><h1>Comparisons</h1><p>Lakeside Smiles and Capitol Dental Care are compared here.</p></body></html>', guessed.url);
+    const wrong = analysePage(guessed, other, matcher);
+    expect(wrong).toMatchObject({ ok: false, competitors: [], isGap: false, needsPermission: false });
+    expect(wrong.error).toContain(WRONG_PAGE);
+    // The same page under an address that is known is read: only a guess needs the check.
+    expect(analysePage({ ...guessed, guessed: false }, other, matcher).ok).toBe(true);
+
+    // Nothing answers there.
+    const missing = analysePage(guessed, failedDigest(guessed.url, 'The site answered 404', 404), matcher);
+    expect(missing.ok).toBe(false);
+    expect(missing.error).toBe(`${NO_PAGE} (The site answered 404)`);
+    // A missing permission stays what it is: the user can grant it.
+    expect(analysePage(guessed, failedDigest(guessed.url, 'Site access not granted', 0, true), matcher)).toMatchObject({ ok: false, needsPermission: true, error: 'Site access not granted' });
+    // A digest cached before pages kept all their names is checked by its title.
+    expect(checkGuessed({ ...digest!, titles: undefined }, guessed.title).ok).toBe(true);
+    expect(checkGuessed(other, undefined)).toBe(other);
+  });
+
+  it('builds the gap list without taking the home page of a site for the page of a result', async () => {
+    const before = buildGapRows(hiddenPresence);
+    // Result #5 names two competitors. Only its site is known, so its row has the site's home address, as text.
+    const row = before.find((r) => r.surface === 'Organic #5')!;
+    expect(row).toMatchObject({ url: 'https://smilecompare.example/', domain: 'smilecompare.example', siteOnly: true, scanned: false });
+    // Videos and the Reddit thread are known by their platform only.
+    expect(before.filter((r) => r.surfaceId === 'video').every((r) => r.siteOnly && r.url === 'https://www.youtube.com/')).toBe(true);
+    // Rows of one site are still rows of their own.
+    expect(new Set(before.map((r) => r.id)).size).toBe(before.length);
+    // A page that is cited with its address keeps it.
+    expect(before.find((r) => r.surface === 'AI Overview citation' && r.domain === 'lakesidesmiles.example')).toMatchObject({ siteOnly: false, url: 'https://www.lakesidesmiles.example/' });
+
+    // After the scan found the page at the address under its title, the row has that address and the scan's findings.
+    const targets = pickSerpTargets(hidden, { matcher });
+    const digests = await loadPages(targets.map((t) => t.url), { fetchPage: fetchFixture });
+    const scans = targets.map((t, i) => analysePage(t, digests[i]!, matcher));
+    const after = buildGapRows(hiddenPresence, scans);
+    const scanned = after.find((r) => r.surface === 'Organic #5')!;
+    expect(scanned).toMatchObject({ url: 'https://smilecompare.example/lakeside-smiles-vs-capitol-dental-care', siteOnly: false, scanned: true, pageType: 'list' });
+    expect(scanned.evidence).toMatch(/^This page names .* and never mentions you\.$/);
+    // The scanned page is one row, not two.
+    expect(after.filter((r) => r.domain === 'smilecompare.example')).toHaveLength(1);
+    // A scan of a site's home page (it is cited) says nothing about another result of that site.
+    const home = scans.find((s) => s.target.url === 'https://www.lakesidesmiles.example/')!;
+    expect(home.ok).toBe(true);
+    const siteOnly = { ...hidden, organic: hidden.organic.map((o) => (o.position === 2 ? { ...o, address: 'site' as const, url: 'https://www.lakesidesmiles.example/' } : o)) };
+    const rows = buildGapRows(buildSerpPresence(siteOnly, matcher), scans);
+    expect(rows.find((r) => r.surface === 'Organic #2')).toMatchObject({ siteOnly: true, scanned: false });
+
+    const csv = gapCsv(hiddenPresence, before).replace('\uFEFF', '').trim().split('\r\n');
+    expect(csv.find((line) => line.includes(',Organic #5,'))).toMatch(/,site only$/);
+    expect(csv.find((line) => line.includes('AI Overview citation') && line.includes('lakesidesmiles.example'))).toMatch(/,page$/);
+    // What is saved to Legiit keeps the fields of the contract.
+    expect(Object.keys(gapPayload(hiddenPresence, before).rows[0]!).sort()).toEqual(
+      ['actionable', 'competitors', 'contacts', 'domain', 'evidence', 'pageType', 'position', 'scanned', 'surface', 'surfaceId', 'title', 'url'].sort(),
+    );
+    expect(problemWith('GapList', gapPayload(hiddenPresence, after))).toBeNull();
+  });
+
+  it('counts the pages that cannot be scanned at all', () => {
+    const organic = hidden.organic.map((o) => (o.position === 5 ? { ...o, guess: null } : o));
+    const citations = [...hidden.aiAnswer!.citations, { url: 'https://www.dentalreviewhub.example/', domain: 'dentalreviewhub.example', title: 'Dental Review Hub', address: 'site' as const }];
+    const page = { ...hidden, organic, aiAnswer: { ...hidden.aiAnswer!, citations } };
+    // One list-style result without an address, one source of which only the site is shown.
+    expect(countUnreadable(page, matcher)).toBe(2);
+    const targets = pickSerpTargets(page, { matcher });
+    expect(targets.map((t) => t.domain)).toEqual(['austinhealthguide.example', 'lakesidesmiles.example', 'texaslocalpicks.example', 'capitoldentalcare.example']);
+    // The user's own site as a source is nothing to scan, and nothing that is missing.
+    const mine = { ...page, aiAnswer: { ...page.aiAnswer, citations: [...hidden.aiAnswer!.citations, { url: 'https://www.brightpathdental.example/', domain: 'brightpathdental.example', title: 'BrightPath Dental', address: 'site' as const }] } };
+    expect(countUnreadable(mine, matcher)).toBe(1);
+    expect(buildSerpPresence(mine, matcher).surfaces.find((s) => s.id === 'ai_overview')).toMatchObject({ minePresent: true, status: 'both' });
   });
 });
 
@@ -389,7 +513,7 @@ describe('gap list', () => {
     const csv = gapCsv(presence, buildGapRows(presence)).replace('﻿', '');
     const lines = csv.trim().split('\r\n');
     expect(lines[0]).toBe(
-      'source,query_or_question,surface,position,title,url,domain,competitors_present,your_brand_present,evidence,page_type,actionable,scanned,contact_links',
+      'source,query_or_question,surface,position,title,url,domain,competitors_present,your_brand_present,evidence,page_type,actionable,scanned,contact_links,address',
     );
     expect(lines.length).toBe(buildGapRows(presence).length + 1);
     expect(csv).toContain('Google results,best dentist in austin,Organic #5,5,');

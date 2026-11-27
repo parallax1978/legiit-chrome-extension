@@ -11,11 +11,12 @@ import {
   buildAnswerPresence,
   buildSerpPresence,
   explainPresence,
+  otherSites,
   type Presence,
   type SurfacePresence,
   type SurfaceStatus,
 } from '@/features/why-not-me/presence';
-import { analysePage, pickAnswerTargets, pickSerpTargets, type PageScan, type ScanTarget } from '@/features/why-not-me/scan';
+import { analysePage, countUnreadable, pickAnswerTargets, pickSerpTargets, type PageScan, type ScanTarget } from '@/features/why-not-me/scan';
 import { gapPayload } from '@/legiit/payloads';
 import { slugify } from '@/lib/sanitize';
 import { formatPercent } from '@/lib/text';
@@ -37,13 +38,16 @@ const STATUS: Readonly<Record<SurfaceStatus, { label: string; tone: Tone }>> = {
   absent: { label: 'Not on this page', tone: 'neutral' },
 };
 
-function SurfaceRow({ surface }: { surface: SurfacePresence }) {
+function SurfaceRow({ surface, hasMine }: { surface: SurfacePresence; hasMine: boolean }) {
   const mineItems = surface.items.filter((i) => i.mine.length > 0);
+  const others = surface.present ? otherSites(surface) : [];
+  // With a brand of the user's own tracked, "no tracked brand" on a surface means one thing: the user is not there.
+  const label = surface.status === 'neither' && hasMine ? 'You are not here' : STATUS[surface.status].label;
   return (
     <div className="item" data-testid={`surface-${surface.id}`}>
       <div className="row between">
         <span className="title">{surface.label}</span>
-        <Chip tone={STATUS[surface.status].tone}>{STATUS[surface.status].label}</Chip>
+        <Chip tone={STATUS[surface.status].tone}>{label}</Chip>
       </div>
       {surface.present && (
         <div className="small" style={{ marginTop: 4 }}>
@@ -62,6 +66,13 @@ function SurfaceRow({ surface }: { surface: SurfacePresence }) {
               ))}
             </div>
           )}
+          {others.length > 0 && (
+            <div className="muted break" style={{ marginTop: 3 }} data-testid={`surface-others-${surface.id}`}>
+              {surface.minePresent || surface.competitorNames.length > 0 ? 'Also here: ' : 'Here: '}
+              {others.slice(0, 6).join(', ')}
+              {others.length > 6 ? ` and ${others.length - 6} more` : ''}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -72,7 +83,8 @@ function ScanResult({ scan }: { scan: PageScan }) {
   return (
     <div className="item" data-testid="scan-result">
       <div className="title break">
-        <ExternalLink href={scan.target.url}>{scan.title || scan.target.domain}</ExternalLink>
+        {/* A guessed address that turned out wrong is no link: it leads to another page. */}
+        {!scan.ok && scan.target.guessed ? scan.title || scan.target.domain : <ExternalLink href={scan.target.url}>{scan.title || scan.target.domain}</ExternalLink>}
       </div>
       <div className="small muted">
         {scan.target.domain} · {scan.target.foundIn}
@@ -144,7 +156,8 @@ function GapTable({ rows }: { rows: GapRow[] }) {
             </span>
           </div>
           <div className="title break" style={{ marginTop: 3 }}>
-            {row.url ? <ExternalLink href={row.url}>{row.title}</ExternalLink> : row.title}
+            {/* The home page of a site is not the page of the row: without the page's address the title is no link. */}
+            {row.url && !row.siteOnly ? <ExternalLink href={row.url}>{row.title}</ExternalLink> : row.title}
           </div>
           <div className="small muted break">
             {row.domain ? `${row.domain} · ` : ''}
@@ -325,8 +338,10 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
   }
 
   const scanSites = targets.map((t) => t.url);
-  /** List-style results that the scan leaves out, because Google hides where they lead. */
-  const hiddenListPages = serp?.recognised ? serp.organic.filter((o) => o.listStyle && (o.address ?? 'link') !== 'link').length : 0;
+  /** Pages the scan leaves out, because Google hides where they lead and the page spells no address out. */
+  const unreadable = serp?.recognised && !activeAnswer ? countUnreadable(serp, matcher) : 0;
+  /** Pages the scan looks for at the address under their title, because Google hides where they lead. */
+  const guessed = targets.filter((t) => t.guessed).length;
   return (
     <>
       {matcher.isEmpty && <BrandsNeeded onOpenSettings={onOpenSettings} />}
@@ -345,7 +360,7 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
         </div>
         <div>
           {presence.surfaces.map((surface) => (
-            <SurfaceRow key={surface.id} surface={surface} />
+            <SurfaceRow key={surface.id} surface={surface} hasMine={matcher.hasMine} />
           ))}
         </div>
       </Card>
@@ -353,9 +368,9 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
       <Summary request={{ task: 'why-not-me', instruction: SUMMARY_INSTRUCTIONS['why-not-me'], facts: explanation, fallback: explanation }} testId="wnm-summary" />
 
       <Card title="Scan sources" testId="wnm-scan">
-        {hiddenListPages > 0 && (
+        {unreadable > 0 && (
           <p className="small muted" data-testid="scan-hidden">
-            Google hides the address of {hiddenListPages} list-style result{hiddenListPages === 1 ? '' : 's'} on this page, so {hiddenListPages === 1 ? 'it' : 'they'} cannot be scanned.
+            {unreadable} page{unreadable === 1 ? '' : 's'} cannot be scanned: Google hides {unreadable === 1 ? 'its' : 'their'} address, and the results page shows none.
           </p>
         )}
         {targets.length === 0 ? (
@@ -365,6 +380,11 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
             <p>
               Read the {targets.length} cited and list-style page{targets.length === 1 ? '' : 's'} to see which competitors each one names, whether it names you, and who to contact.
             </p>
+            {guessed > 0 && (
+              <p className="small muted" data-testid="scan-guessed">
+                Google hides the address of {guessed} of them. The scan asks the page&apos;s own site for the address shown under the title, and reads the page only when its title matches.
+              </p>
+            )}
             <PermissionLine urls={scanSites} purpose="for this scan" />
             <div className="row">
               <Button variant="primary" disabled={scanTask.status === 'running'} onClick={() => void scan()} data-testid="scan-sources">

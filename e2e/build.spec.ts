@@ -269,6 +269,18 @@ test.describe('network call sites in the package', () => {
       'www.example.com': 'example in a code comment',
       'www.Example.com': 'example in a code comment',
       'schema.org': 'JSON-LD vocabulary names',
+      // A result that Google labels "Reddit · r/SEO" shows no address: the label names the platform, the table
+      // below names its site. The site is shown as text; none of these addresses is ever requested.
+      'www.reddit.com': 'platform label on a results page to its site; text only',
+      'www.quora.com': 'platform label on a results page to its site; text only',
+      'www.youtube.com': 'platform label on a results page to its site; text only',
+      'www.facebook.com': 'platform label on a results page to its site; text only',
+      'www.linkedin.com': 'platform label on a results page to its site; text only',
+      'www.instagram.com': 'platform label on a results page to its site; text only',
+      'www.tiktok.com': 'platform label on a results page to its site; text only',
+      'www.pinterest.com': 'platform label on a results page to its site; text only',
+      'medium.com': 'platform label on a results page to its site; text only',
+      'encrypted-tbn0.gstatic.com': 'example in a code comment: the address of a site icon on a results page',
       'www.': 'a string fragment used when normalising domains',
     };
     const unknown = new Map<string, string>();

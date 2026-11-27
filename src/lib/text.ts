@@ -116,3 +116,44 @@ export function uniqueBy<T>(items: Iterable<T>, key: (item: T) => string): T[] {
   }
   return out;
 }
+
+/** A title as it is compared: lower case, plain quotes and dashes, without the "..." that marks a shortened title. */
+export function titleKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u201b`]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2010-\u2015]/g, '-')
+    .replace(/\s*(\.\.\.|…)\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const titleWords = (key: string): Set<string> => new Set(key.split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+
+/**
+ * True when a page that calls itself one of `pageTitles` can be the page a search result titled `resultTitle`
+ * leads to. Google shows a page's title shortened, or with the site's name added or moved, so the two need not be
+ * equal: the result is the start of the page's title, or the page's title is most of the result, or the page's
+ * title has at least 70 % of the words of the result (and three of them). A page that shares only a few words with
+ * the result, such as the section the result is filed under, does not agree.
+ */
+export function titlesAgree(resultTitle: string, pageTitles: readonly string[]): boolean {
+  const result = titleKey(resultTitle);
+  if (!result) return false;
+  const resultWords = titleWords(result);
+  for (const raw of pageTitles) {
+    const page = titleKey(raw);
+    if (!page) continue;
+    if (page === result) return true;
+    if (result.length >= 12 && page.startsWith(result)) return true;
+    if (page.length >= 12 && result.startsWith(page) && page.length >= result.length * 0.6) return true;
+    if (resultWords.size >= 3) {
+      const pageWords = titleWords(page);
+      let shared = 0;
+      for (const word of resultWords) if (pageWords.has(word)) shared++;
+      if (shared >= 3 && shared / resultWords.size >= 0.7) return true;
+    }
+  }
+  return false;
+}

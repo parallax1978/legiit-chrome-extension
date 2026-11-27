@@ -27,6 +27,8 @@ export interface GapRow {
   title: string;
   url: string | null;
   domain: string | null;
+  /** True when Google hides the page's address and `url` is only the home page of the site. Shown as text, not as a link. */
+  siteOnly: boolean;
   competitors: string[];
   /** Why this row is a gap, in words. */
   evidence: string;
@@ -100,6 +102,7 @@ export function buildGapRows(presence: Presence, scans: readonly PageScan[] = []
         title: `${what} names ${list(surface.textCompetitors)}`,
         url: null,
         domain: null,
+        siteOnly: false,
         competitors: surface.textCompetitors,
         evidence: `${what} names ${list(surface.textCompetitors)} and does not mention you.`,
         pageType: 'surface',
@@ -111,7 +114,10 @@ export function buildGapRows(presence: Presence, scans: readonly PageScan[] = []
     }
 
     for (const item of surface.items) {
-      const scan = item.url ? scanByUrl.get(urlKey(item.url)) : undefined;
+      // An item of which only the site is known is not the page at the site's home address. A scan belongs to it
+      // only through the address under its title, which the scan has then checked against the item's title.
+      const scan = item.siteOnly ? (item.guess ? scanByUrl.get(urlKey(item.guess)) : undefined) : item.url ? scanByUrl.get(urlKey(item.url)) : undefined;
+      const found = item.siteOnly && scan && item.guess ? item.guess : null;
       // A scan overrides what the title alone suggested.
       const competitors = scan ? [...new Set([...item.competitors, ...scan.competitors.map((c) => c.name)])] : item.competitors;
       const minePresent = item.mine.length > 0 || (scan?.myBrandPresent ?? false);
@@ -138,13 +144,15 @@ export function buildGapRows(presence: Presence, scans: readonly PageScan[] = []
             ? `${list(competitors)} is listed in the local pack; you are not.`
             : `Names ${list(competitors)}, not you.`;
       rows.push({
-        id: hashString(`${presence.subject}|${surface.id}|${item.url ?? item.title}`),
+        // Two items of one site share the site's home address: they are told apart by their title and place.
+        id: hashString(`${presence.subject}|${surface.id}|${item.siteOnly ? `${item.title}|${item.position}` : (item.url ?? item.title)}`),
         surfaceId: surface.id,
         surface: where,
         position: item.position,
         title: scan?.title || item.title,
-        url: item.url,
+        url: found ?? item.url,
         domain: item.domain,
+        siteOnly: item.siteOnly && !found,
         competitors,
         evidence,
         pageType,
@@ -157,7 +165,7 @@ export function buildGapRows(presence: Presence, scans: readonly PageScan[] = []
   }
 
   // Scanned pages that were not items of a surface with competitor hits (e.g. a neutral-looking listicle).
-  const covered = new Set(rows.filter((r) => r.url).map((r) => urlKey(r.url!)));
+  const covered = new Set(rows.filter((r) => r.url && !r.siteOnly).map((r) => urlKey(r.url!)));
   for (const scan of scans) {
     if (!scan.ok || !scan.isGap || covered.has(urlKey(scan.target.url))) continue;
     const names = scan.competitors.map((c) => c.name);
@@ -169,6 +177,7 @@ export function buildGapRows(presence: Presence, scans: readonly PageScan[] = []
       title: scan.title,
       url: scan.target.url,
       domain: scan.target.domain,
+      siteOnly: false,
       competitors: names,
       evidence: `This page names ${list(scan.competitors.map((c) => `${c.name} (${c.mentions}×)`))} and never mentions you.`,
       pageType: scan.listStyle ? 'list' : 'third-party',
@@ -211,7 +220,7 @@ export function sortGapRows(rows: readonly GapRow[], key: GapSortKey, direction:
 export function gapCsv(presence: Presence, rows: readonly GapRow[]): string {
   const headers = [
     'source', 'query_or_question', 'surface', 'position', 'title', 'url', 'domain', 'competitors_present',
-    'your_brand_present', 'evidence', 'page_type', 'actionable', 'scanned', 'contact_links',
+    'your_brand_present', 'evidence', 'page_type', 'actionable', 'scanned', 'contact_links', 'address',
   ];
   const data: CsvCell[][] = rows.map((r) => [
     presence.sourceLabel,
@@ -228,6 +237,8 @@ export function gapCsv(presence: Presence, rows: readonly GapRow[]): string {
     r.actionable,
     r.scanned,
     r.contacts.map((c) => `${c.kind}: ${c.url}`).join(' | '),
+    // Google can hide where a result leads: then `url` is the home page of its site.
+    r.url === null ? '' : r.siteOnly ? 'site only' : 'page',
   ]);
   return toCsv(headers, data);
 }

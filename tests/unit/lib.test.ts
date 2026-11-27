@@ -12,7 +12,7 @@ import {
   safeHttpUrl,
   slugify,
 } from '@/lib/sanitize';
-import { contentTokens, countWords, splitSentences, stem, tokenize } from '@/lib/text';
+import { contentTokens, countWords, splitSentences, stem, titlesAgree, tokenize } from '@/lib/text';
 import {
   cleanUrl,
   hostMatchesDomain,
@@ -20,7 +20,9 @@ import {
   isGoogleNavHost,
   isHiddenGoogleRedirect,
   originPatternFor,
+  pageOfAddressLine,
   siteOfAddressLine,
+  siteOfIconUrl,
   siteOfPattern,
   unwrapGoogleUrl,
   urlKey,
@@ -160,6 +162,51 @@ describe('links whose address Google hides', () => {
     expect(siteOfAddressLine('javascript:alert(1) \u203a x')).toBeNull();
     expect(siteOfAddressLine('https://user:pass@evil.example \u203a x')).toBeNull();
     expect(siteOfAddressLine('')).toBeNull();
+  });
+});
+
+describe('the page address a result spells out when Google hides its link', () => {
+  it('reads the line under the title as an address only when every part can be a path segment', () => {
+    expect(pageOfAddressLine('https://www.jobsboard.example \u203a blog \u203a guest-posting-services')).toBe('https://www.jobsboard.example/blog/guest-posting-services');
+    expect(pageOfAddressLine('https://smallsite.example \u203a buy-guest-posts')).toBe('https://smallsite.example/buy-guest-posts');
+    expect(pageOfAddressLine('www.example.co.uk \u203a Jobs \u203a Freelance-Seo')).toBe('https://www.example.co.uk/Jobs/Freelance-Seo');
+    // The site alone is no page. Neither is a line that Google shortened, or one that shows names of sections.
+    expect(pageOfAddressLine('https://smallsite.example')).toBeNull();
+    expect(pageOfAddressLine('https://www.hiringhub.example \u203a ... \u203a Business Jobs')).toBeNull();
+    expect(pageOfAddressLine('https://www.hiringhub.example \u203a Company Blog')).toBeNull();
+    expect(pageOfAddressLine('https://www.hiringhub.example \u203a guest-posting-serv...')).toBeNull();
+    expect(pageOfAddressLine('30+ comments \u00b7 1 year ago')).toBeNull();
+    expect(pageOfAddressLine('javascript:alert(1) \u203a x')).toBeNull();
+    // Whatever the line says, the address stays on the site it names.
+    expect(pageOfAddressLine('https://smallsite.example \u203a @evil.example \u203a x')).toBeNull();
+    expect(new URL(pageOfAddressLine('https://smallsite.example \u203a evil.example \u203a x')!).hostname).toBe('smallsite.example');
+  });
+
+  it('reads the site an icon stands for from the address of the icon', () => {
+    expect(siteOfIconUrl('https://encrypted-tbn3.gstatic.com/faviconV2?url=https://smallsite.example&client=AIM&size=32&type=FAVICON')).toBe('https://smallsite.example');
+    expect(siteOfIconUrl('https://encrypted-tbn0.gstatic.com/faviconV2?url=https://www.jobsboard.example/some/page&size=16')).toBe('https://www.jobsboard.example');
+    expect(siteOfIconUrl('https://encrypted-tbn0.gstatic.com/images?q=tbn:abc')).toBeNull();
+    expect(siteOfIconUrl('https://evil.example/faviconV2?url=https://smallsite.example')).toBeNull();
+    expect(siteOfIconUrl('https://encrypted-tbn0.gstatic.com/faviconV2?url=javascript:alert(1)')).toBeNull();
+    expect(siteOfIconUrl('data:image/gif;base64,R0lGODlhAQABAIAAAP')).toBeNull();
+    expect(siteOfIconUrl('')).toBeNull();
+  });
+
+  it('tells whether a page can be the page a result is titled after', () => {
+    const result = '15 Best Guest Posting Services for 2026 (Models and Prices)';
+    // The page's title with the site's name added, a shortened title, different quotes: the same page.
+    expect(titlesAgree(result, ['15 Best Guest Posting Services for 2026 (Models and Prices) - Distribb'])).toBe(true);
+    expect(titlesAgree('Guest Posting Sites List - 76651+ Sites by Niche, DR and ...', ['Guest Posting Sites List - 76651+ Sites by Niche, DR and Traffic | Linkio'])).toBe(true);
+    expect(titlesAgree('Find Freelance SEO Jobs Online - Guru', ['Find Freelance SEO Jobs Online'])).toBe(true);
+    expect(titlesAgree('2026\u2019s Best SEO Services', ["2026's Best SEO Services | Trusted Experts"])).toBe(true);
+    expect(titlesAgree('Buy Guest Posts', ['Something else', 'Buy Guest Posts | Guest Posting Service | UppercutLINKS'])).toBe(true);
+    // The section a result is filed under, the home page, an error page: another page.
+    expect(titlesAgree(result, ['Blog - Distribb'])).toBe(false);
+    expect(titlesAgree(result, ['Guest Posting Services'])).toBe(false);
+    expect(titlesAgree('24 Best Permanent Guest Post Services To Buy Online', ['Guest Post Services', 'Fiverr - Freelance Services Marketplace'])).toBe(false);
+    expect(titlesAgree(result, ['Page not found'])).toBe(false);
+    expect(titlesAgree(result, [])).toBe(false);
+    expect(titlesAgree('', ['Anything'])).toBe(false);
   });
 });
 

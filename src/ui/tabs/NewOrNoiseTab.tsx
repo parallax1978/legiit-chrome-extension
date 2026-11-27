@@ -8,6 +8,7 @@ import { CLASS_LABELS, classifySentences, explainNoise, type ComparisonPage, typ
 import { noiseCsv } from '@/features/new-or-noise/csv';
 import { contentSentences, textSentences, type SentenceUnit } from '@/features/new-or-noise/sentences';
 import { recordRun } from '@/features/shared/gating';
+import { checkGuessed } from '@/features/shared/guessed-page';
 import { loadPages } from '@/features/shared/load-pages';
 import { contentEditorPayload } from '@/legiit/payloads';
 import { cutText, safeHttpUrl, slugify, stripWww } from '@/lib/sanitize';
@@ -32,7 +33,11 @@ interface ResultSource {
   label: string;
   keyword: string;
   urls: string[];
+  /** For a page whose address is a guess: the title of the result, which the page must have (see checkGuessed). */
+  expect: Record<string, string>;
 }
+
+type ResultRow = { url: string; title: string; address?: AddressSource; guess?: string | null };
 
 interface NoiseResult {
   report: NoiseReport;
@@ -56,17 +61,29 @@ function keywordFromTitle(title: string): string {
 }
 
 /**
- * The results whose page address is known. When Google hides where a result leads, the extension knows only its
- * site, or nothing: such a result cannot be compared, and Google's own link is never requested.
+ * The pages of a results list that can be compared. A result whose address is known is one. When Google hides
+ * where a result leads, the line under its title can spell an address out: that is a guess, and the page is used
+ * only when it has the title of the result. A result with neither cannot be compared: the home page of its site is
+ * another page, and Google's own link is never requested.
  */
-function exactPages(organic: readonly { url: string; address?: AddressSource }[]): string[] {
-  return organic.filter((o) => (o.address ?? 'link') === 'link').map((o) => o.url);
+function comparablePages(organic: readonly ResultRow[]): { urls: string[]; expect: Record<string, string> } {
+  const urls: string[] = [];
+  const expect: Record<string, string> = {};
+  for (const o of organic) {
+    const address = o.address ?? 'link';
+    if (address === 'link') urls.push(o.url);
+    else if (address === 'site' && o.guess) {
+      urls.push(o.guess);
+      expect[o.guess] = o.title;
+    }
+  }
+  return { urls, expect };
 }
 
 /** "8 results", or how many of them have a page address when Google hides some. */
-function resultCount(organic: readonly { url: string; address?: AddressSource }[]): string {
-  const exact = exactPages(organic).length;
-  return exact === organic.length ? `${organic.length} results` : `${exact} of ${organic.length} results have a page address`;
+function resultCount(organic: readonly ResultRow[]): string {
+  const usable = comparablePages(organic).urls.length;
+  return usable === organic.length ? `${organic.length} results` : `${usable} of ${organic.length} results have a page address`;
 }
 
 function parseUrlList(text: string): string[] {
@@ -114,11 +131,11 @@ export function NewOrNoiseTab() {
   const loadSources = async () => {
     const [open, saved] = await Promise.all([findResultsPages(), listKeywords()]);
     const list: ResultSource[] = [
-      ...open.map((p) => ({ id: `tab-${p.tabId}`, label: `“${p.serp.keyword}” — open results page, ${resultCount(p.serp.organic)}`, keyword: p.serp.keyword, urls: exactPages(p.serp.organic) })),
+      ...open.map((p) => ({ id: `tab-${p.tabId}`, label: `“${p.serp.keyword}” — open results page, ${resultCount(p.serp.organic)}`, keyword: p.serp.keyword, ...comparablePages(p.serp.organic) })),
       ...saved
         .filter((k) => !open.some((p) => p.serp.keyword.toLowerCase() === k.keyword.toLowerCase()))
         .slice(0, 20)
-        .map((k) => ({ id: `snap-${k.latest.id}`, label: `“${k.keyword}” — saved ${formatDate(k.latest.takenAt)}, ${resultCount(k.latest.organic)}`, keyword: k.keyword, urls: exactPages(k.latest.organic) })),
+        .map((k) => ({ id: `snap-${k.latest.id}`, label: `“${k.keyword}” — saved ${formatDate(k.latest.takenAt)}, ${resultCount(k.latest.organic)}`, keyword: k.keyword, ...comparablePages(k.latest.organic) })),
     ];
     setSources(list);
     setSourceId((current) => {
@@ -174,7 +191,10 @@ export function NewOrNoiseTab() {
       }
       if (target.length === 0) throw new Error('No sentences of five words or more were found to check.');
 
-      const digests = await loadPages(comparisonUrls, { fetchPage, cache: pageCache }, { signal, onProgress: (done, total) => progress(done, total, 'Reading comparison pages') });
+      const loaded = await loadPages(comparisonUrls, { fetchPage, cache: pageCache }, { signal, onProgress: (done, total) => progress(done, total, 'Reading comparison pages') });
+      // A page loaded from a guessed address counts only when it is the page the result names.
+      const expect = sourceKind === 'results' ? (sources.find((s) => s.id === sourceId)?.expect ?? {}) : {};
+      const digests = loaded.map((d) => checkGuessed(d, expect[d.url]));
       const pages: ComparisonPage[] = digests.filter((d) => d.ok).map((d) => ({ url: d.url, title: d.title, sentences: contentSentences({ blocks: d.blocks }) }));
       if (pages.length === 0) throw new Error('None of the comparison pages could be read.');
       if (pages.every((p) => p.sentences.length === 0)) throw new Error('The comparison pages had no readable text to compare with.');

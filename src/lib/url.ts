@@ -72,6 +72,38 @@ export function siteOfAddressLine(text: string): string | null {
   return safe ? new URL(safe).origin : null;
 }
 
+/** A part of an address line that can be one segment of a path: no space, and not the "..." of a shortened line. */
+const PATH_SEGMENT = /^[\p{L}\p{N}][\p{L}\p{N}._~%+,;=@:!$'()*-]{0,200}$/u;
+
+/**
+ * The page address that the line under a result's title spells out: "https://www.example.com › blog › post" reads
+ * as https://www.example.com/blog/post. It is a guess, never a fact: Google shortens this line, leaves parts out,
+ * or prints the names of the site's sections instead of the path. So the address counts only after the page that
+ * answers there has been checked against the title of the result (see titlesAgree). null when the line names no
+ * site, shows the site alone, or has a part that cannot be a path segment ("BuzzStream Blog", "...").
+ */
+export function pageOfAddressLine(text: string): string | null {
+  const parts = text.replace(/\s+/g, ' ').trim().slice(0, 600).split(/\s*›\s*/).map((part) => part.trim());
+  const site = siteOfAddressLine(parts[0] ?? '');
+  const segments = parts.slice(1);
+  if (!site || segments.length === 0 || segments.length > 12) return null;
+  if (!segments.every((segment) => PATH_SEGMENT.test(segment) && !segment.endsWith('...') && !segment.includes('…'))) return null;
+  return safeHttpUrl(`${site}/${segments.join('/')}`);
+}
+
+/**
+ * The site whose icon Google shows: the address of the icon names it
+ * (https://encrypted-tbn0.gstatic.com/faviconV2?url=https://www.example.com&size=32). null for any other image.
+ */
+export function siteOfIconUrl(src: string): string | null {
+  const safe = safeHttpUrl(src);
+  if (!safe) return null;
+  const icon = new URL(safe);
+  if (!/(^|\.)gstatic\.com$/.test(icon.hostname) || !icon.pathname.startsWith('/favicon')) return null;
+  const named = safeHttpUrl(icon.searchParams.get('url') ?? '');
+  return named ? new URL(named).origin : null;
+}
+
 /** Google's own navigation hosts: search, maps, accounts, help. Links to them are UI, not results. */
 export function isGoogleNavHost(host: string): boolean {
   return /^(?:(?:www|maps|accounts|policies|support|myaccount|myactivity|consent|lens|images)\.)?google\.[a-z]{2,3}(?:\.[a-z]{2})?$/.test(

@@ -9,7 +9,18 @@
  */
 import { blockText } from '@/extract/blocks';
 import { cleanMultiline, cleanText, domainOf, safeHttpUrl } from '@/lib/sanitize';
-import { cleanUrl, isGoogleInfraHost, isGoogleNavHost, isHiddenGoogleRedirect, siteOfAddressLine, unwrapGoogleUrl, urlKey } from '@/lib/url';
+import { titleKey } from '@/lib/text';
+import {
+  cleanUrl,
+  isGoogleInfraHost,
+  isGoogleNavHost,
+  isHiddenGoogleRedirect,
+  pageOfAddressLine,
+  siteOfAddressLine,
+  siteOfIconUrl,
+  unwrapGoogleUrl,
+  urlKey,
+} from '@/lib/url';
 import type {
   AddressSource,
   AnswerData,
@@ -181,8 +192,15 @@ function isGoogleOwn(host: string, serpHost: string): boolean {
   return host === serpHost || isGoogleNavHost(host) || isGoogleInfraHost(host);
 }
 
-/** The site (an origin) named by the first address line inside `scope`: "https://www.example.com › blog › post". */
-function siteIn(scope: Element, pack: SelectorPack): string | null {
+interface NamedAddress {
+  /** The site, as an origin. */
+  site: string;
+  /** The page that the line spells out, when it reads as a path. A guess (see pageOfAddressLine). */
+  page: string | null;
+}
+
+/** What the first address line inside `scope` names: "https://www.example.com › blog › post". */
+function addressIn(scope: Element, pack: SelectorPack): NamedAddress | null {
   for (const candidate of pack.slots['organicAddress']?.candidates ?? [{ css: 'cite' }]) {
     let found: Element[];
     try {
@@ -191,9 +209,48 @@ function siteIn(scope: Element, pack: SelectorPack): string | null {
       continue; // An invalid selector in a pack: try the next candidate.
     }
     for (const el of found) {
-      const site = siteOfAddressLine(el.textContent ?? '');
-      if (site) return site;
+      const line = el.textContent ?? '';
+      const site = siteOfAddressLine(line);
+      if (site) return { site, page: pageOfAddressLine(line) };
     }
+  }
+  return null;
+}
+
+/**
+ * Platforms whose results show a community or a profile where other results show an address:
+ * "Reddit · r/SEO" over "10+ comments · 8 years ago". Google's own label names the platform, so it names the site.
+ */
+const PLATFORM_SITES: Readonly<Record<string, string>> = {
+  reddit: 'https://www.reddit.com',
+  quora: 'https://www.quora.com',
+  youtube: 'https://www.youtube.com',
+  facebook: 'https://www.facebook.com',
+  linkedin: 'https://www.linkedin.com',
+  instagram: 'https://www.instagram.com',
+  tiktok: 'https://www.tiktok.com',
+  pinterest: 'https://www.pinterest.com',
+  medium: 'https://medium.com',
+};
+const PLATFORM_LABEL = new RegExp(`^(${Object.keys(PLATFORM_SITES).join('|')})\\s*·\\s*\\S`, 'i');
+
+/** The site of a platform that `scope` names in a label of its own ("Reddit · r/SEO"). */
+function platformSiteIn(scope: Element): string | null {
+  let checked = 0;
+  for (const el of scope.querySelectorAll('span, div')) {
+    if (el.childElementCount > 0) continue;
+    if (++checked > 60) break;
+    const name = PLATFORM_LABEL.exec((el.textContent ?? '').replace(/\s+/g, ' ').trim())?.[1];
+    if (name) return PLATFORM_SITES[name.toLowerCase()] ?? null;
+  }
+  return null;
+}
+
+/** The site whose icon stands in `scope`: next to a source, Google shows the icon of its site. */
+function siteIconIn(scope: Element): string | null {
+  for (const img of Array.from(scope.querySelectorAll('img')).slice(0, 12)) {
+    const site = siteOfIconUrl(img.getAttribute('data-src') ?? '') ?? siteOfIconUrl(img.getAttribute('src') ?? '');
+    if (site) return site;
   }
   return null;
 }
@@ -219,17 +276,6 @@ interface KnownPage {
   titled: boolean;
 }
 
-/** Titles as compared: lower case, plain quotes, without the "…" that marks a shortened title. */
-function titleKey(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[\u2018\u2019\u201b`]/g, "'")
-    .replace(/[\u201c\u201d]/g, '"')
-    .replace(/\s*(\.\.\.|…)\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 /** The same page under two titles: one starts with the other (either can be shortened), and both say enough. */
 function sameTitle(a: string, b: string): boolean {
   const x = titleKey(a);
@@ -241,15 +287,17 @@ interface Destination {
   url: string;
   domain: string;
   address: AddressSource;
+  /** For address 'site': the page that the line under the title spells out, when it reads as a path. A guess. */
+  guess: string | null;
   /** For de-duplication. A link whose address Google hides is its own key: two results can lead to one site. */
   key: string;
 }
 
 /**
  * Where a result link leads. The link says so itself, unless Google hides it behind its own redirect
- * (google.com/goto?url=<token>). Then, in this order: the page's own data can name the exact address of a page of
- * that site with that title; the line under the title names the site; a "More results from …" link names the site;
- * and when the page says nothing at all, the result keeps Google's link.
+ * (google.com/goto?url=<token>). Then the site is named by the line under the title, by a "More results from …"
+ * link, by the site's icon or by the label of a platform ("Reddit · r/SEO"), in this order. With the site known, the page's own data can name the exact address
+ * of a page of that site with that title. When the page says nothing at all, the result keeps Google's link.
  * `scopes` are the places to look for the site, nearest first. null for a link that is no result.
  */
 function destinationOf(
@@ -263,23 +311,26 @@ function destinationOf(
 ): Destination | null {
   const href = link.getAttribute('href');
   const exact = externalUrl(href, pageUrl, serpHost);
-  if (exact) return { url: cleanUrl(exact) ?? exact, domain: domainOf(exact), address: 'link', key: urlKey(exact) };
+  if (exact) return { url: cleanUrl(exact) ?? exact, domain: domainOf(exact), address: 'link', guess: null, key: urlKey(exact) };
   if (!href || !isHiddenGoogleRedirect(href, pageUrl)) return null;
   const redirect = safeHttpUrl(href, pageUrl);
   if (!redirect) return null;
   const key = `hidden:${redirect}`;
-  let site: string | null = null;
-  for (const scope of scopes) if ((site = siteIn(scope, pack))) break;
+  let named: NamedAddress | null = null;
+  for (const scope of scopes) if ((named = addressIn(scope, pack))) break;
+  let site = named?.site ?? null;
   if (!site) for (const scope of scopes) if ((site = siteLinkIn(scope, pageUrl))) break;
-  if (!site) return { url: redirect, domain: '', address: 'hidden', key };
+  if (!site) for (const scope of scopes) if ((site = siteIconIn(scope))) break;
+  if (!site) for (const scope of scopes) if ((site = platformSiteIn(scope))) break;
+  if (!site) return { url: redirect, domain: '', address: 'hidden', guess: null, key };
   if (isGoogleOwn(new URL(site).hostname.toLowerCase(), serpHost)) return null;
   const domain = domainOf(site);
   if (title) {
     const pages = known().filter((page) => page.titled && page.domain === domain && sameTitle(page.title, title));
     // One page of that site with that title: its address is the address of this result.
-    if (pages.length === 1) return { url: pages[0]!.url, domain, address: 'link', key };
+    if (pages.length === 1) return { url: pages[0]!.url, domain, address: 'link', guess: null, key };
   }
-  return { url: `${site}/`, domain, address: 'site', key };
+  return { url: `${site}/`, domain, address: 'site', guess: named?.page ?? null, key };
 }
 
 function linkTitle(a: Element): string {
@@ -298,6 +349,25 @@ interface LinkEntry {
 }
 
 /**
+ * The part of a block that belongs to one link: the largest box around the link that holds no link to anywhere
+ * else. In a list of sources, that is the one source: its title, the name and the icon of its site.
+ */
+function boxOf(link: Element, block: Element, pageUrl: string, serpHost: string): Element {
+  const href = link.getAttribute('href');
+  const leadsElsewhere = (other: Element): boolean => {
+    const target = other.getAttribute('href');
+    return target !== null && target !== href && (isHiddenGoogleRedirect(target, pageUrl) || externalUrl(target, pageUrl, serpHost) !== null);
+  };
+  let box = link;
+  for (let up = link.parentElement, hops = 0; up && up !== block && block.contains(up) && hops < 12; up = up.parentElement, hops++) {
+    const links = up.querySelectorAll('a[href]');
+    if (links.length > 20 || Array.from(links).some(leadsElsewhere)) break;
+    box = up;
+  }
+  return box;
+}
+
+/**
  * The links of a block that lead to another site, each once. A link whose page Google hides is told apart by its
  * title: two such links can lead to one site, and one item often has two links (its picture and its title).
  * With `keepHidden`, a link that names no site at all is kept too, with its title and without an address.
@@ -306,10 +376,14 @@ function linkEntries(el: Element, pack: SelectorPack, pageUrl: string, serpHost:
   const entries: LinkEntry[] = [];
   const seen = new Set<string>();
   for (const a of el.querySelectorAll('a[href]')) {
-    const destination = destinationOf(a, [a], pack, pageUrl, serpHost);
+    const href = a.getAttribute('href');
+    // Only a link that hides its address needs the box around it: the site is named next to the link, not in it.
+    const box = href && isHiddenGoogleRedirect(href, pageUrl) ? boxOf(a, el, pageUrl, serpHost) : a;
+    const destination = destinationOf(a, box === a ? [a] : [a, box], pack, pageUrl, serpHost);
     if (!destination) continue;
     const { address } = destination;
-    const title = linkTitle(a);
+    // A link that only covers its box (a card that is one big link) has no words of its own.
+    const title = linkTitle(a) || (box === a ? '' : cleanText(box.textContent ?? '', 160));
     if (address !== 'link' && (!title || (address === 'hidden' && !keepHidden))) continue;
     const key = address === 'link' ? urlKey(destination.url) : `title:${title.toLowerCase()}`;
     if (seen.has(key)) continue;
@@ -317,7 +391,10 @@ function linkEntries(el: Element, pack: SelectorPack, pageUrl: string, serpHost:
     const text = cleanText(`${a.getAttribute('aria-label') ?? ''} ${a.textContent ?? ''}`, 400);
     entries.push({
       address,
-      item: address === 'hidden' ? { title, url: null, domain: null, text } : { title: title || destination.domain, url: destination.url, domain: destination.domain, text },
+      item:
+        address === 'hidden'
+          ? { title, url: null, domain: null, text }
+          : { title: title || destination.domain, url: destination.url, domain: destination.domain, text, ...(address === 'site' ? { address } : {}) },
     });
     if (entries.length >= limit) break;
   }
@@ -397,19 +474,29 @@ function embeddedSources(el: Element, pageUrl: string, serpHost: string, limit =
 }
 
 /**
- * The sources of an AI answer: its links, then the sources the page lists for it that no link shows. A source is a
- * page, so only an exact address counts: a link that names just its site is no source.
+ * The sources of an AI answer. First the pages whose address is known: its links, then the sources the page lists
+ * in its own data. Then the sources of which the page shows only the site (its name and icon next to a hidden
+ * link): each such site once, unless a page of that site is already listed.
  */
 function answerItems(el: Element, pack: SelectorPack, pageUrl: string, serpHost: string, limit: number): SerpItem[] {
-  const items = linkEntries(el, pack, pageUrl, serpHost, limit)
+  const entries = linkEntries(el, pack, pageUrl, serpHost, limit * 2);
+  const items = entries
     .filter((entry) => entry.address === 'link')
-    .map((entry) => entry.item);
+    .map((entry) => entry.item)
+    .slice(0, limit);
   const seen = new Set(items.map((item) => (item.url ? urlKey(item.url) : '')));
   for (const source of embeddedSources(el, pageUrl, serpHost, limit)) {
     if (items.length >= limit) break;
     if (seen.has(urlKey(source.url))) continue;
     seen.add(urlKey(source.url));
     items.push({ title: source.title, url: source.url, domain: source.domain, text: '' });
+  }
+  const sites = new Set(items.map((item) => item.domain ?? ''));
+  for (const { address, item } of entries) {
+    if (items.length >= limit) break;
+    if (address !== 'site' || !item.domain || sites.has(item.domain)) continue;
+    sites.add(item.domain);
+    items.push(item);
   }
   return items;
 }
@@ -523,7 +610,7 @@ function answerText(el: Element, max: number): string {
 function toCitations(items: readonly SerpItem[]): Citation[] {
   const out: Citation[] = [];
   for (const item of items) {
-    if (item.url) out.push({ url: item.url, domain: item.domain ?? domainOf(item.url), title: item.title });
+    if (item.url) out.push({ url: item.url, domain: item.domain ?? domainOf(item.url), title: item.title, ...(item.address === 'site' ? { address: item.address } : {}) });
   }
   return out;
 }
@@ -593,6 +680,7 @@ export function parseSerp(doc: Document, pack: SelectorPack, env: ParseEnv): Ser
       url: destination.url,
       domain: destination.domain,
       address: destination.address,
+      ...(destination.guess ? { guess: destination.guess } : {}),
       snippet: snippetOf(container, link, pack, title),
       rect: env.rectOf(container),
       listStyle: isListStyleTitle(title),

@@ -175,8 +175,13 @@ test.describe('summary strip above Google results', () => {
     // The other tools read the same page: who is cited in the AI Overview, and who shows up where.
     await panel.getByTestId('tab-why').click();
     await expect(panel.getByTestId('wnm-gaps')).toBeVisible();
-    // One list-style result has no known page address: the panel says that it cannot be scanned.
-    await expect(panel.getByTestId('scan-hidden')).toContainText('1 list-style result');
+    // The user's own site has no competitor next to it in the ads of this page, and the panel says who is there.
+    await expect(panel.getByTestId('surface-organic')).toContainText('#6');
+    await expect(panel.getByTestId('surface-others-organic')).toContainText('austinhealthguide.example');
+    // One list-style result has no known page address. The line under its title spells one out, and the scan
+    // will try it on the page's own site.
+    await expect(panel.getByTestId('scan-guessed')).toContainText('Google hides the address of 1 of them');
+    await expect(panel.getByTestId('scan-hidden')).toHaveCount(0);
     expect(lens.errors).toEqual([]);
   });
 

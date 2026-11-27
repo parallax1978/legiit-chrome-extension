@@ -20,6 +20,11 @@ export interface PageDigest {
   needsPermission: boolean;
   fetchedAt: number;
   title: string;
+  /**
+   * Every name the page gives itself: its title, the title it offers for sharing, its main headings. Used to tell
+   * whether a page loaded from a guessed address is the page that was meant. Missing on digests cached earlier.
+   */
+  titles?: string[];
   /** Main-content blocks. */
   blocks: ContentBlock[];
   /** Whole-page text (navigation and footer included), for brand mentions outside the article body. */
@@ -54,6 +59,15 @@ export function digestHtml(html: string, url: string, finalUrl: string = url, st
   const doc = parseHtml(html);
   const content = extractMainContent(doc);
   const title = content.title || cleanText(doc.querySelector('h1')?.textContent ?? '', 300);
+  const named = [
+    title,
+    doc.querySelector('title')?.textContent ?? '',
+    doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ?? '',
+    doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ?? '',
+    ...Array.from(doc.querySelectorAll('h1'))
+      .slice(0, 2)
+      .map((h) => h.textContent ?? ''),
+  ].map((value) => cleanText(value, 300));
   return {
     url,
     finalUrl,
@@ -63,6 +77,7 @@ export function digestHtml(html: string, url: string, finalUrl: string = url, st
     needsPermission: false,
     fetchedAt: now,
     title,
+    titles: [...new Set(named.filter(Boolean))].slice(0, 6),
     blocks: content.blocks.slice(0, MAX_BLOCKS),
     fullText: extractAllText(doc).slice(0, MAX_FULL_TEXT),
     wordCount: content.wordCount,
