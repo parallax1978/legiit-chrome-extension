@@ -441,9 +441,10 @@ export function ClickPotentialTab() {
                 <tr key={o.position} className={o.owner === 'mine' ? 'mine' : undefined}>
                   <td className="num">{o.position}</td>
                   <td className="break">
-                    <ExternalLink href={o.url}>{o.title}</ExternalLink>
+                    {/* Without the page's address the title is no link: the site's home page is not the result. */}
+                    {o.address === 'link' ? <ExternalLink href={o.url}>{o.title}</ExternalLink> : <span>{o.title}</span>}
                     <div className="small muted">
-                      {o.domain} {o.owner && <Chip tone={o.owner === 'mine' ? 'mine' : 'rival'}>{o.owner === 'mine' ? 'You' : 'Competitor'}</Chip>} {o.listStyle && <Chip>List page</Chip>}
+                      {o.domain || 'Site not shown'} {o.owner && <Chip tone={o.owner === 'mine' ? 'mine' : 'rival'}>{o.owner === 'mine' ? 'You' : 'Competitor'}</Chip>} {o.listStyle && <Chip>List page</Chip>}
                     </div>
                   </td>
                   <td className="num nowrap">{o.top === null ? '—' : `${formatInt(o.top)} px`}</td>
@@ -455,6 +456,11 @@ export function ClickPotentialTab() {
             </tbody>
           </table>
         </div>
+        {cp.organic.some((o) => o.address !== 'link') && (
+          <p className="small muted" data-testid="cp-hidden-links">
+            Google hides where the links on this page lead. Each site is read from the line under its title. A title that is not a link has no known page address.
+          </p>
+        )}
       </Card>
 
       <Card

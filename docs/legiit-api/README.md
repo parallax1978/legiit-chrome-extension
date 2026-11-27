@@ -1,6 +1,6 @@
 # Legiit Lens API: developer build guide
 
-Contract version `1.0.0-draft.5`, 26 November 2026. What changed: [section 13](#13-version-and-changes). Best read on GitHub, which draws the diagram of section 2.
+Contract version `1.0.0-draft.6`, 27 November 2026. What changed: [section 13](#13-version-and-changes). Best read on GitHub, which draws the diagram of section 2.
 
 For the Legiit backend team. The Legiit Lens Chrome extension is finished and already calls this API. The API does not exist yet. This guide says what to build so that the extension works with it without another release.
 
@@ -742,9 +742,16 @@ The extension does not use these, so do not build them for it: OAuth, a logout c
 
 ## 13. Version and changes
 
-This is contract version `1.0.0-draft.5` of 26 November 2026.
+This is contract version `1.0.0-draft.6` of 27 November 2026.
 
 **You can build on it.** It describes what the finished extension sends and accepts, and that cannot change without a new release of the extension. "Draft" means that wording, examples and advice can still improve when a reader finds a gap. The contract becomes `1.0.0` when your API passes the check with it.
+
+Changes in `1.0.0-draft.6`. No field, no type and no limit changed: an API that was built from `1.0.0-draft.5` stays valid, and there is nothing to build. Google now hides where the links of a results page lead (each link is `https://www.google.com/goto?url=` plus a code that only Google can read). So the meaning of two values is wider:
+
+- **`organic[].url` of a visibility snapshot** is the address of the page when the results page shows it. Otherwise it is the home page of the result's site (`https://www.example.com/`). When the page does not name the site either, it is Google's own link for the result, and `domain` is `google.com`. This last case is rare. Show such a result as "site not shown", and never request such a link from your server.
+- **`rows[].url` of a gap list** can be the home page of a site for the same reason, and is `null` for a result whose site Google hides.
+
+Positions, titles, pixel values and tracked brands are as before. A brand is still matched by its site.
 
 Changes in `1.0.0-draft.5`: two new endpoints, `POST /v1/signups` and `POST /v1/signups/verify` (endpoints 11 and 12). The first screen of the extension now asks for an email address, and a code from the email connects a free account. Nothing else changed.
 

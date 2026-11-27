@@ -50,7 +50,7 @@ const fullOrganic = [
   { url: 'https://www.texasdentalboard.example/find-a-dentist', title: 'Find a Licensed Dentist – Texas Dental Board', site: 'Texas Dental Board', crumb: 'https://www.texasdentalboard.example › find-a-dentist', snippet: 'Look up the licence status of any dentist practising in Texas.' },
 ];
 
-const aio = g.aiOverview({
+const aioParts = {
   paragraphs: [
     'Several Austin dental practices are recommended again and again in patient reviews and local guides. <b>Lakeside Smiles</b> is praised for gentle cleanings and same-week appointments, while <b>Capitol Dental Care</b> is a downtown practice known for cosmetic work and evening hours.',
     'Families with young children often choose <b>Zilker Family Dentistry</b>.',
@@ -62,7 +62,8 @@ const aio = g.aiOverview({
     LIST_TLP,
     { url: 'https://www.capitoldentalcare.example/', title: 'Capitol Dental Care: Downtown Austin Dentist', site: 'Capitol Dental Care' },
   ],
-});
+};
+const aio = g.aiOverview(aioParts);
 
 const places = [
   { name: 'Lakeside Smiles', rating: '4.9 ★ (412)', address: '1200 Lakeshore Blvd', phone: '(512) 555-0101', website: 'https://www.lakesidesmiles.example/' },
@@ -97,11 +98,8 @@ const forums = g.forumBlock([
   { url: 'https://www.askaustin.example/q/who-is-the-best-dentist-in-austin', title: 'Who is the best dentist in Austin?', meta: 'AskAustin · 9 answers · "Capitol Dental Care for cosmetic work"' },
 ]);
 
-const serpFull = g.serpPage({
-  keyword: scenario.keywords.full,
-  top: topAds,
-  results: [
-    aio,
+const fullResults = (overview) => [
+    overview,
     g.localPack(places),
     ...fullOrganic.slice(0, 3).map(g.organic),
     paaFull,
@@ -110,9 +108,12 @@ const serpFull = g.serpPage({
     ...fullOrganic.slice(6, 8).map(g.organic),
     forums,
     ...fullOrganic.slice(8).map(g.organic),
-  ],
-  bottomAds,
-});
+];
+const serpFull = g.serpPage({ keyword: scenario.keywords.full, top: topAds, results: fullResults(aio), bottomAds });
+// The same results as Google serves them when it hides where its links lead (seen live in November 2026).
+const serpHidden = g.hideLinks(
+  g.serpPage({ keyword: scenario.keywords.hidden, top: topAds, results: fullResults(g.aiOverview({ ...aioParts, withData: true })), bottomAds }),
+);
 
 const plainOrganic = [
   { url: 'https://www.capitoldentalcare.example/blog/how-often-teeth-cleaning', title: 'How Often Should You Get Your Teeth Cleaned? | Capitol Dental Care', site: 'Capitol Dental Care', crumb: 'https://www.capitoldentalcare.example › blog', snippet: 'Dentists generally recommend a professional teeth cleaning every six months.' },
@@ -216,6 +217,7 @@ add('google/serp-plain.html', serpPlain, U.serpPlain);
 add('google/serp-featured.html', serpFeatured, U.serpFeatured);
 add('google/serp-local.html', serpLocal, U.serpLocal);
 add('google/serp-churn.html', g.churn(serpFull), U.serpChurn);
+add('google/serp-hidden-links.html', serpHidden, U.serpHidden);
 add('google/serp-ai-mode.html', serpAiMode, U.serpAiMode);
 add('google/serp-unrecognised.html', serpUnrecognised, U.serpUnrecognised);
 

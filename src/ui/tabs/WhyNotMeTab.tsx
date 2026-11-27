@@ -325,6 +325,8 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
   }
 
   const scanSites = targets.map((t) => t.url);
+  /** List-style results that the scan leaves out, because Google hides where they lead. */
+  const hiddenListPages = serp?.recognised ? serp.organic.filter((o) => o.listStyle && (o.address ?? 'link') !== 'link').length : 0;
   return (
     <>
       {matcher.isEmpty && <BrandsNeeded onOpenSettings={onOpenSettings} />}
@@ -351,6 +353,11 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
       <Summary request={{ task: 'why-not-me', instruction: SUMMARY_INSTRUCTIONS['why-not-me'], facts: explanation, fallback: explanation }} testId="wnm-summary" />
 
       <Card title="Scan sources" testId="wnm-scan">
+        {hiddenListPages > 0 && (
+          <p className="small muted" data-testid="scan-hidden">
+            Google hides the address of {hiddenListPages} list-style result{hiddenListPages === 1 ? '' : 's'} on this page, so {hiddenListPages === 1 ? 'it' : 'they'} cannot be scanned.
+          </p>
+        )}
         {targets.length === 0 ? (
           <p className="muted">There are no cited pages or list-style results to scan here.</p>
         ) : (

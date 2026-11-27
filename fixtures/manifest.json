@@ -172,6 +172,11 @@
       "contentType": "text/html; charset=utf-8"
     },
     {
+      "url": "https://www.google.com/search?q=family+dentist+austin+tx",
+      "file": "google/serp-hidden-links.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
       "url": "https://www.google.com/search?q=how+long+does+teeth+whitening+last",
       "file": "google/serp-featured.html",
       "contentType": "text/html; charset=utf-8"

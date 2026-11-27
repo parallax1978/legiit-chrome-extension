@@ -1,6 +1,6 @@
 /** Per-keyword snapshots of Click Potential, stored locally in IndexedDB, and their CSV exports. */
 import { toCsv, type CsvCell } from '@/lib/csv';
-import type { SerpData, Viewport } from '@/model/schemas';
+import type { AddressSource, SerpData, Viewport } from '@/model/schemas';
 import { BLOCK_LABELS, foldLabel, type BlockShare, type ClickPotential, type FoldStatus, type GradeLetter, type ShareType, type TrackedRow } from './metrics';
 
 export interface SnapshotRecord {
@@ -21,7 +21,8 @@ export interface SnapshotRecord {
   gradeLetter: GradeLetter;
   gradeScore: number;
   shares: BlockShare[];
-  organic: { position: number; domain: string; url: string; title: string; top: number | null; fold: FoldStatus | null }[];
+  /** `address` says how `url` is known (see AddressSource). A record without it was stored before Google hid links: 'link'. */
+  organic: { position: number; domain: string; url: string; address?: AddressSource; title: string; top: number | null; fold: FoldStatus | null }[];
   tracked: TrackedRow[];
   /** Why Not Me summary for the same page, when brands were tracked at the time. Reused by Instant Brief. */
   presence: SnapshotPresence | null;
@@ -54,7 +55,7 @@ export function toSnapshot(serp: SerpData, cp: ClickPotential, presence: Snapsho
     gradeLetter: cp.grade.letter,
     gradeScore: cp.grade.score,
     shares: cp.shares,
-    organic: cp.organic.map((o) => ({ position: o.position, domain: o.domain, url: o.url, title: o.title, top: o.top, fold: o.fold })),
+    organic: cp.organic.map((o) => ({ position: o.position, domain: o.domain, url: o.url, address: o.address, title: o.title, top: o.top, fold: o.fold })),
     tracked: cp.tracked,
     presence,
   };
@@ -67,7 +68,7 @@ const pct = (fraction: number): number => Math.round(fraction * 1000) / 10;
 export function organicCsv(serp: SerpData, cp: ClickPotential): string {
   const headers = [
     'keyword', 'captured_at', 'viewport', 'location', 'position', 'title', 'url', 'domain',
-    'top_px', 'fold', 'tracked_as', 'brand', 'list_style',
+    'top_px', 'fold', 'tracked_as', 'brand', 'list_style', 'address',
   ];
   const rows: CsvCell[][] = cp.organic.map((o) => [
     serp.keyword,
@@ -83,6 +84,8 @@ export function organicCsv(serp: SerpData, cp: ClickPotential): string {
     o.owner === 'mine' ? 'my brand' : o.owner === 'competitor' ? 'competitor' : '',
     o.brand ?? '',
     o.listStyle,
+    // Google can hide where a link leads: then `url` is the site's home page, or Google's own link.
+    o.address === 'link' ? 'page' : o.address === 'site' ? 'site only' : 'hidden by Google',
   ]);
   return toCsv(headers, rows);
 }

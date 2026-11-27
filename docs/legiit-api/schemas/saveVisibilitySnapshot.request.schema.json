@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.5, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.6, by scripts/build-api-reference.mjs. Do not edit by hand.",
   "title": "Request body of POST /v1/businesses/{businessId}/visibility-snapshots",
   "type": "object",
   "description": "One measurement of one Google results page, exactly as the user's Chrome displayed it (their window size, location and personalisation). Pixel values are CSS pixels from the top of the document, so they do not depend on how far the user had scrolled.",
@@ -194,12 +194,12 @@
             "type": "string",
             "maxLength": 2048,
             "pattern": "^https?://",
-            "description": "Where the result leads, with Google's redirect and tracking parameters removed."
+            "description": "Where the result leads, with Google's redirect and tracking parameters removed. Google can hide where the links of a results page lead. The extension then sends the best address the page itself shows: the address of the page when the page's own data has it; else the home page of the result's site (https://www.example.com/); else, when the page does not name the site, Google's own link for the result (https://www.google.com/goto?url=...). Store it as text. Never request it from your server."
           },
           "domain": {
             "type": "string",
             "maxLength": 255,
-            "description": "Host of url, in lower case, without a leading \"www.\" (other subdomains are kept)."
+            "description": "Host of url, in lower case, without a leading \"www.\" (other subdomains are kept). Never empty. It is a Google host (google.com) only for a result whose site Google hides: show such a result as \"site not shown\"."
           },
           "title": {
             "type": "string",

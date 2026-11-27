@@ -10,7 +10,7 @@ import type { Brief } from '@/features/instant-brief/compose';
 import type { NoiseReport } from '@/features/new-or-noise/classify';
 import type { GapRow } from '@/features/why-not-me/gap';
 import type { Presence } from '@/features/why-not-me/presence';
-import { cleanText, cutText, wellFormedDeep } from '@/lib/sanitize';
+import { cleanText, cutText, domainOf, wellFormedDeep } from '@/lib/sanitize';
 import { clip, clipDomain, clipUrl, LIMITS } from './limits';
 import type { SignupRequest, SignupVerification, CompetitorPayload, ContentEditorPayload, GapListPayload, VisibilitySnapshotPayload, WorkspaceFromBriefPayload } from './types';
 
@@ -63,7 +63,8 @@ export function snapshotPayload(snapshot: SnapshotRecord, brands: TrackedBrands 
     organic: snapshot.organic.slice(0, LIMITS.snapshot.organic).map((o) => ({
       position: o.position,
       url: clipUrl(o.url),
-      domain: clipDomain(o.domain),
+      // "domain" is the host of "url". For a result whose site Google hides, "url" is Google's own link.
+      domain: clipDomain(o.domain || domainOf(o.url)),
       title: clip(o.title, LIMITS.snapshot.title),
       topPx: px(o.top),
       fold: px(o.top) === null ? null : o.fold,

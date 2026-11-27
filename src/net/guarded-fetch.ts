@@ -9,13 +9,16 @@
  *   legiit   only the configured Legiit API origin               (when connected)
  *   page     any http(s) page on a site the user explicitly
  *            granted through Chrome's permission prompt          (source scans, comparisons)
+ *            never a page of Google or of an AI site: those are only read on screen
  *
  * Requests never carry cookies or a referrer. A page that redirects to a site
  * the user did not grant is discarded unread. A Legiit request is never
  * redirected at all.
  */
 import { LEGIIT_ORIGIN, WAYBACK_ORIGIN } from '@/config/runtime';
+import { aiSiteForHost, isGoogleSearchHost } from '@/config/sites';
 import { safeHttpUrl } from '@/lib/sanitize';
+import { isGoogleInfraHost, isGoogleNavHost } from '@/lib/url';
 import { hasAccess } from './permissions';
 
 export type FetchPurpose = 'wayback' | 'legiit' | 'page';
@@ -62,6 +65,16 @@ export function onNetworkLog(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * True for a host the extension never requests a page from: Google's own pages (a results page, or the redirect
+ * link of a result whose address Google hides) and the AI sites. The extension reads those only as the user's own
+ * browser displays them, so it never sends them a query of its own.
+ */
+export function isNeverRequested(host: string): boolean {
+  const h = host.toLowerCase();
+  return isGoogleNavHost(h) || isGoogleInfraHost(h) || isGoogleSearchHost(h) || aiSiteForHost(h) !== null;
+}
+
 /** Throws unless `url` is allowed for `purpose`. Exported for tests. */
 export function assertAllowed(url: string, purpose: FetchPurpose): URL {
   const safe = safeHttpUrl(url);
@@ -72,6 +85,9 @@ export function assertAllowed(url: string, purpose: FetchPurpose): URL {
   }
   if (purpose === 'legiit' && target.origin !== LEGIIT_ORIGIN) {
     throw new NetworkPolicyError(`Legiit requests must go to ${LEGIIT_ORIGIN}`);
+  }
+  if (purpose === 'page' && isNeverRequested(target.hostname)) {
+    throw new NetworkPolicyError('Pages of Google and of the AI sites are never requested');
   }
   return target;
 }

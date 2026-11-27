@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { assertAllowed, guardedFetch, networkLog, NetworkPolicyError, PermissionRequiredError } from '@/net/guarded-fetch';
+import { assertAllowed, guardedFetch, isNeverRequested, networkLog, NetworkPolicyError, PermissionRequiredError } from '@/net/guarded-fetch';
 import { decodeHtml, fetchPage } from '@/net/page-fetch';
 import { describeSites, grantedSites, hasAccess, missingAccess, patternsFor, requestAccess, revokeSites } from '@/net/permissions';
 import { chromeMock } from '../helpers/fixtures';
@@ -39,6 +39,34 @@ describe('network policy', () => {
     for (const purpose of ['wayback', 'legiit', 'page'] as const) {
       expect(() => assertAllowed('file:///etc/passwd', purpose)).toThrow(NetworkPolicyError);
       expect(() => assertAllowed('chrome-extension://abc/x', purpose)).toThrow(NetworkPolicyError);
+    }
+  });
+
+  it('never requests a page of Google or of an AI site, whatever access the browser has', async () => {
+    // Google can hide where a result leads: its own redirect link then stands where the address was.
+    const off = [
+      'https://www.google.com/goto?url=CAESegHEIkXXm5BIIQxZ',
+      'https://www.google.co.uk/search?q=best+dentist',
+      'https://www.google.com/url?q=https://example.com/',
+      'https://maps.google.com/maps?q=x',
+      'https://www.googleadservices.com/pagead/aclk?sa=L',
+      'https://chatgpt.com/share/abc',
+      'https://gemini.google.com/app',
+      'https://www.perplexity.ai/search/x',
+      'https://copilot.microsoft.com/',
+    ];
+    chromeMock().granted.add('*://*.google.com/*');
+    chromeMock().granted.add('*://*.chatgpt.com/*');
+    for (const url of off) {
+      expect(isNeverRequested(new URL(url).hostname), url).toBe(true);
+      expect(() => assertAllowed(url, 'page'), url).toThrow(NetworkPolicyError);
+      await expect(guardedFetch(url, 'page'), url).rejects.toBeInstanceOf(NetworkPolicyError);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Other sites, also Google's publishing sites and YouTube, are pages like any other.
+    for (const url of ['https://www.example.com/a', 'https://blog.google/products/search/', 'https://www.youtube.com/watch?v=x', 'https://notgoogle.com/']) {
+      expect(isNeverRequested(new URL(url).hostname), url).toBe(false);
+      expect(assertAllowed(url, 'page').href, url).toBe(url);
     }
   });
 

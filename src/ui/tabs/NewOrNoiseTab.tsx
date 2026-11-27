@@ -14,7 +14,7 @@ import { cutText, safeHttpUrl, slugify, stripWww } from '@/lib/sanitize';
 import { formatPercent } from '@/lib/text';
 import { urlKey } from '@/lib/url';
 import type { HighlightGroup } from '@/model/messages';
-import { HighlightReplySchema, PageSnapshotSchema, type HighlightReply } from '@/model/schemas';
+import { HighlightReplySchema, PageSnapshotSchema, type AddressSource, type HighlightReply } from '@/model/schemas';
 import { fetchPage } from '@/net/page-fetch';
 import { requestAccess } from '@/net/permissions';
 import { findResultsPages, sendToTab } from '@/panel/tabs';
@@ -53,6 +53,20 @@ const CLASS_COLOR: Readonly<Record<SentenceClass, string>> = { most: '#94a3b8', 
 function keywordFromTitle(title: string): string {
   const first = (title.split(/\s[|–—·]\s|\s-\s/)[0] ?? title).replace(/[?!.]+$/, '').trim();
   return cutText(first, 120).trim();
+}
+
+/**
+ * The results whose page address is known. When Google hides where a result leads, the extension knows only its
+ * site, or nothing: such a result cannot be compared, and Google's own link is never requested.
+ */
+function exactPages(organic: readonly { url: string; address?: AddressSource }[]): string[] {
+  return organic.filter((o) => (o.address ?? 'link') === 'link').map((o) => o.url);
+}
+
+/** "8 results", or how many of them have a page address when Google hides some. */
+function resultCount(organic: readonly { url: string; address?: AddressSource }[]): string {
+  const exact = exactPages(organic).length;
+  return exact === organic.length ? `${organic.length} results` : `${exact} of ${organic.length} results have a page address`;
 }
 
 function parseUrlList(text: string): string[] {
@@ -100,11 +114,11 @@ export function NewOrNoiseTab() {
   const loadSources = async () => {
     const [open, saved] = await Promise.all([findResultsPages(), listKeywords()]);
     const list: ResultSource[] = [
-      ...open.map((p) => ({ id: `tab-${p.tabId}`, label: `“${p.serp.keyword}” — open results page, ${p.serp.organic.length} results`, keyword: p.serp.keyword, urls: p.serp.organic.map((o) => o.url) })),
+      ...open.map((p) => ({ id: `tab-${p.tabId}`, label: `“${p.serp.keyword}” — open results page, ${resultCount(p.serp.organic)}`, keyword: p.serp.keyword, urls: exactPages(p.serp.organic) })),
       ...saved
         .filter((k) => !open.some((p) => p.serp.keyword.toLowerCase() === k.keyword.toLowerCase()))
         .slice(0, 20)
-        .map((k) => ({ id: `snap-${k.latest.id}`, label: `“${k.keyword}” — saved ${formatDate(k.latest.takenAt)}, ${k.latest.organic.length} results`, keyword: k.keyword, urls: k.latest.organic.map((o) => o.url) })),
+        .map((k) => ({ id: `snap-${k.latest.id}`, label: `“${k.keyword}” — saved ${formatDate(k.latest.takenAt)}, ${resultCount(k.latest.organic)}`, keyword: k.keyword, urls: exactPages(k.latest.organic) })),
     ];
     setSources(list);
     setSourceId((current) => {

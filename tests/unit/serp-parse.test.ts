@@ -241,3 +241,126 @@ describe('list-style titles', () => {
     }
   });
 });
+
+/*
+ * Google can hide where every link of a results page leads: the link is Google's own redirect with a token only
+ * Google can read. This page has the markup of such a page as it was served in November 2026, with invented
+ * sites. What still tells where a result leads: the line under its title (the site), a "More results from" link
+ * (the site), and the data the page keeps for its AI answer (exact addresses of the pages it cites).
+ */
+const HIDDEN_LINKS_PAGE = `<!doctype html><html><body><div id="rcnt">
+<div id="tvcap"><div id="tads"><span class="LoygGf">Sponsored results</span>
+  <div data-text-ad="1"><a href="/goto?url=CAESad1" data-pcu="https://www.brightpathdental.example/"><div role="heading" aria-level="3">Emergency Dentist Austin</div></a><span data-dtld="brightpathdental.example"></span></div>
+</div></div>
+<div id="center_col"><div id="search"><div><div id="rso">
+  <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="a" data-ved="a">
+    <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESone" ping="/url?sa=t&amp;url=CAESone"><h3 class="LC20lb">10 Best Dentists in Austin (2026)</h3><span class="VuuXrf">Austin Health Guide</span><cite class="qLRx3b" role="text">https://www.austinhealthguide.example<span role="text"> › best › dentists</span></cite></a></div>
+    <div class="VwiC3b"><span>Our editors compared forty practices.</span></div>
+  </div></div></div>
+  <div class="ULSxyf"><div class="YzCcne"><div role="heading" aria-level="2">AI Overview</div><p>Several practices in Austin are well reviewed.</p>
+    <a href="/goto?url=CAESsrc1" aria-label="Austin Health Guide"></a><a href="/goto?url=CAESsrc2" aria-label="Texas Local Picks"></a>
+    <!--TgQPHd|||[[&quot;id-1&quot;,null,null,0,&quot;https://encrypted-tbn1.gstatic.com/faviconV2?url\\u003dhttps://www.austinhealthguide.example\\u0026client\\u003dAIM&quot;,&quot;Austin Health Guide&quot;,3,&quot;https://www.austinhealthguide.example/best/dentists-in-austin/?utm_source\\u003dx&quot;,null,null]]-->
+    <!--TgQPHd|||[[null,[&quot;10 Best Dentists in Austin (2026) – Austin Health Guide&quot;,&quot;Our editors compared forty practices.&quot;,&quot;Austin Health Guide&quot;,&quot;https://encrypted-tbn1.gstatic.com/faviconV2?url\\u003dhttps://www.austinhealthguide.example\\u0026client\\u003dAIM&quot;]]]-->
+    <!--TgQPHd|||[[&quot;id-2&quot;,null,null,0,&quot;https://encrypted-tbn2.gstatic.com/faviconV2?url\\u003dhttps://www.texaslocalpicks.example&quot;,&quot;Texas Local Picks&quot;,2,&quot;https://www.texaslocalpicks.example/austin/dentists&quot;,null,null]]-->
+  </div></div>
+  <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="b" data-ved="b">
+    <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAEStwo"><h3 class="LC20lb">Top 5 Family Dentists Compared</h3><span class="VuuXrf">Lakeside Smiles</span><cite class="qLRx3b" role="text">https://www.lakesidesmiles.example<span role="text"> › ... › Family Dentistry</span></cite></a></div>
+    <div class="VwiC3b"><span>Same-week appointments.</span></div>
+  </div></div></div>
+  <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="c" data-ved="c">
+    <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESthree"><h3 class="LC20lb">Which dentist do you trust in Austin?</h3><span class="VuuXrf">Forum · r/Austin</span><cite class="qLRx3b" role="text">30+ comments · 1 year ago</cite></a></div>
+    <div class="VwiC3b"><span>I would look for a practice with weekend hours.</span></div>
+    <a href="/search?q=best+dentist+in+austin+site:www.forum.example&amp;sa=X"><span>More results from www.forum.example</span></a>
+  </div></div></div>
+  <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="d" data-ved="d">
+    <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESfour"><h3 class="LC20lb">Dentist recommendations from neighbors</h3><span class="VuuXrf">ATX Neighbors</span><cite class="qLRx3b" role="text">12 answers</cite></a></div>
+  </div></div></div>
+  <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="e" data-ved="e">
+    <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESfive"><h3 class="LC20lb">Lakeside Smiles | Cosmetic Dentist</h3><span class="VuuXrf">Lakeside Smiles</span><cite class="qLRx3b" role="text">https://www.lakesidesmiles.example</cite></a></div>
+  </div></div></div>
+  <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="f" data-ved="f">
+    <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="https://www.capitoldentalcare.example/about?utm_source=x"><h3 class="LC20lb">Capitol Dental Care: Downtown</h3><cite class="qLRx3b" role="text">https://www.capitoldentalcare.example<span role="text"> › about</span></cite></a></div>
+  </div></div></div>
+  <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="g" data-ved="g">
+    <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESseven"><h3 class="LC20lb">Find a dentist near you - Help</h3><cite class="qLRx3b" role="text">https://support.google.com<span role="text"> › answer</span></cite></a></div>
+  </div></div></div>
+</div></div></div></div></div></body></html>`;
+
+describe('a results page on which Google hides where the links lead', () => {
+  const url = 'https://www.google.com/search?q=best+dentist+in+austin';
+  const read = (): SerpData => {
+    const doc = new DOMParser().parseFromString(HIDDEN_LINKS_PAGE, 'text/html');
+    return parseSerp(doc, getPack('google'), { ...serpEnv(doc, url), rectOf: () => null, isVisible: () => true });
+  };
+
+  it('still finds every organic result, in order, with what the page says about its address', () => {
+    const serp = read();
+    expect(serp.organic.map((o) => [o.position, o.address, o.domain, o.url])).toEqual([
+      // The page's own data names the exact page of this site with this title.
+      [1, 'link', 'austinhealthguide.example', 'https://www.austinhealthguide.example/best/dentists-in-austin/'],
+      // The line under the title names the site. Its other parts are not a path, so the page is not known.
+      [2, 'site', 'lakesidesmiles.example', 'https://www.lakesidesmiles.example/'],
+      // No address line: the site comes from "More results from …".
+      [3, 'site', 'forum.example', 'https://www.forum.example/'],
+      // Nothing names the site: the result keeps Google's own link, and has no domain.
+      [4, 'hidden', '', 'https://www.google.com/goto?url=CAESfour'],
+      // A second result of a site that is already in the list is a result of its own.
+      [5, 'site', 'lakesidesmiles.example', 'https://www.lakesidesmiles.example/'],
+      // A link that shows its address is read as before.
+      [6, 'link', 'capitoldentalcare.example', 'https://www.capitoldentalcare.example/about'],
+    ]);
+    // Google's own help pages are not results, hidden link or not.
+    expect(serp.organic.some((o) => o.title.includes('Help'))).toBe(false);
+    expect(serp.organic[0]!.snippet).toBe('Our editors compared forty practices.');
+    expect(parseOrNull(SerpDataSchema, JSON.parse(JSON.stringify(serp)))).not.toBeNull();
+  });
+
+  it('reads the sources of the AI answer from the data the page keeps for it', () => {
+    const serp = read();
+    expect(serp.aiAnswer?.citations).toEqual([
+      { url: 'https://www.austinhealthguide.example/best/dentists-in-austin/', domain: 'austinhealthguide.example', title: '10 Best Dentists in Austin (2026) – Austin Health Guide' },
+      { url: 'https://www.texaslocalpicks.example/austin/dentists', domain: 'texaslocalpicks.example', title: 'Texas Local Picks' },
+    ]);
+    expect(serp.blocks.find((b) => b.type === 'ad')?.items).toMatchObject([{ url: 'https://www.brightpathdental.example/', domain: 'brightpathdental.example' }]);
+  });
+
+  it('a page without that data keeps the site of each result and has no sources', () => {
+    const doc = new DOMParser().parseFromString(HIDDEN_LINKS_PAGE.replace(/<!--TgQPHd[\s\S]*?-->/g, ''), 'text/html');
+    const serp = parseSerp(doc, getPack('google'), { ...serpEnv(doc, url), rectOf: () => null, isVisible: () => true });
+    expect(serp.organic.map((o) => o.address)).toEqual(['site', 'site', 'site', 'hidden', 'site', 'link']);
+    expect(serp.organic[0]).toMatchObject({ domain: 'austinhealthguide.example', url: 'https://www.austinhealthguide.example/' });
+    expect(serp.aiAnswer?.citations).toEqual([]);
+  });
+});
+
+describe('the full results page as Google serves it when it hides the links', () => {
+  const shown = parse('google/serp-full.html', scenario.urls.serpFull!);
+  const hidden = parse('google/serp-hidden-links.html', scenario.urls.serpHidden!);
+
+  it('finds the same results, in the same places, with the same sites', () => {
+    expect(hidden.recognised).toBe(true);
+    expect(hidden.keyword).toBe('family dentist austin tx');
+    expect(hidden.organic.map((o) => [o.position, o.title, o.domain, o.rect, o.listStyle])).toEqual(
+      shown.organic.map((o) => [o.position, o.title, o.domain, o.rect, o.listStyle]),
+    );
+    expect(blockTypes(hidden)).toEqual(blockTypes(shown));
+  });
+
+  it('knows the page address of the results that the AI Overview cites, and the site of the others', () => {
+    expect(hidden.organic.map((o) => o.address)).toEqual(['link', 'link', 'link', 'link', 'site', 'site', 'site', 'site', 'site']);
+    // An exact address is the same address the page with visible links gives.
+    expect(hidden.organic.slice(0, 4).map((o) => o.url)).toEqual(shown.organic.slice(0, 4).map((o) => o.url));
+    expect(hidden.organic.slice(4).map((o) => o.url)).toEqual(shown.organic.slice(4).map((o) => `${new URL(o.url).origin}/`));
+    expect(hidden.aiAnswer?.citations.map((c) => c.url)).toEqual(shown.aiAnswer?.citations.map((c) => c.url));
+    // No address anywhere in the result is one of Google's.
+    const addresses = [...hidden.organic.map((o) => o.url), ...hidden.blocks.flatMap((b) => b.items.map((i) => i.url ?? ''))];
+    expect(addresses.filter((u) => /google\./.test(u))).toEqual([]);
+  });
+
+  it('keeps the ads, and the titles of videos and discussions whose address is hidden', () => {
+    const items = (type: string) => hidden.blocks.filter((b) => b.type === type).flatMap((b) => b.items);
+    expect(items('ad').map((i) => i.domain)).toEqual(shown.blocks.filter((b) => b.type === 'ad').flatMap((b) => b.items.map((i) => i.domain)));
+    expect(items('video').map((i) => [i.title, i.url])).toEqual(shown.blocks.find((b) => b.type === 'video')!.items.map((i) => [i.title, null]));
+    expect(items('forum').map((i) => [i.title, i.url, i.domain])).toEqual(shown.blocks.find((b) => b.type === 'forum')!.items.map((i) => [i.title, null, null]));
+  });
+});

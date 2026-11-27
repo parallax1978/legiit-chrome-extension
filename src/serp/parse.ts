@@ -9,8 +9,9 @@
  */
 import { blockText } from '@/extract/blocks';
 import { cleanMultiline, cleanText, domainOf, safeHttpUrl } from '@/lib/sanitize';
-import { cleanUrl, isGoogleInfraHost, isGoogleNavHost, unwrapGoogleUrl, urlKey } from '@/lib/url';
+import { cleanUrl, isGoogleInfraHost, isGoogleNavHost, isHiddenGoogleRedirect, siteOfAddressLine, unwrapGoogleUrl, urlKey } from '@/lib/url';
 import type {
+  AddressSource,
   AnswerData,
   BlockType,
   Citation,
@@ -175,6 +176,112 @@ function externalUrl(href: string | null, pageUrl: string, serpHost: string): st
   return target;
 }
 
+/** True for a host that is the results page itself or one of Google's own: never the site a result leads to. */
+function isGoogleOwn(host: string, serpHost: string): boolean {
+  return host === serpHost || isGoogleNavHost(host) || isGoogleInfraHost(host);
+}
+
+/** The site (an origin) named by the first address line inside `scope`: "https://www.example.com › blog › post". */
+function siteIn(scope: Element, pack: SelectorPack): string | null {
+  for (const candidate of pack.slots['organicAddress']?.candidates ?? [{ css: 'cite' }]) {
+    let found: Element[];
+    try {
+      found = Array.from(scope.querySelectorAll(candidate.css)).slice(0, 20);
+    } catch {
+      continue; // An invalid selector in a pack: try the next candidate.
+    }
+    for (const el of found) {
+      const site = siteOfAddressLine(el.textContent ?? '');
+      if (site) return site;
+    }
+  }
+  return null;
+}
+
+/** The site named by a "More results from www.example.com" link: a Google search limited with "site:". */
+function siteLinkIn(scope: Element, pageUrl: string): string | null {
+  for (const a of Array.from(scope.querySelectorAll('a[href*="site:"], a[href*="site%3A"]')).slice(0, 10)) {
+    const safe = safeHttpUrl(a.getAttribute('href') ?? '', pageUrl);
+    if (!safe) continue;
+    const host = /(?:^|\s)site:([^\s/]+)/i.exec(new URL(safe).searchParams.get('q') ?? '')?.[1];
+    const site = host ? siteOfAddressLine(host) : null;
+    if (site) return site;
+  }
+  return null;
+}
+
+/** A page that the results page's own data names with its exact address: a source of its AI answer. */
+interface KnownPage {
+  title: string;
+  url: string;
+  domain: string;
+  /** True when `title` is the page's title, not only the name of its site. */
+  titled: boolean;
+}
+
+/** Titles as compared: lower case, plain quotes, without the "…" that marks a shortened title. */
+function titleKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u201b`]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\s*(\.\.\.|…)\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** The same page under two titles: one starts with the other (either can be shortened), and both say enough. */
+function sameTitle(a: string, b: string): boolean {
+  const x = titleKey(a);
+  const y = titleKey(b);
+  return Math.min(x.length, y.length) >= 12 && (x.startsWith(y) || y.startsWith(x));
+}
+
+interface Destination {
+  url: string;
+  domain: string;
+  address: AddressSource;
+  /** For de-duplication. A link whose address Google hides is its own key: two results can lead to one site. */
+  key: string;
+}
+
+/**
+ * Where a result link leads. The link says so itself, unless Google hides it behind its own redirect
+ * (google.com/goto?url=<token>). Then, in this order: the page's own data can name the exact address of a page of
+ * that site with that title; the line under the title names the site; a "More results from …" link names the site;
+ * and when the page says nothing at all, the result keeps Google's link.
+ * `scopes` are the places to look for the site, nearest first. null for a link that is no result.
+ */
+function destinationOf(
+  link: Element,
+  scopes: readonly Element[],
+  pack: SelectorPack,
+  pageUrl: string,
+  serpHost: string,
+  title = '',
+  known: () => readonly KnownPage[] = () => [],
+): Destination | null {
+  const href = link.getAttribute('href');
+  const exact = externalUrl(href, pageUrl, serpHost);
+  if (exact) return { url: cleanUrl(exact) ?? exact, domain: domainOf(exact), address: 'link', key: urlKey(exact) };
+  if (!href || !isHiddenGoogleRedirect(href, pageUrl)) return null;
+  const redirect = safeHttpUrl(href, pageUrl);
+  if (!redirect) return null;
+  const key = `hidden:${redirect}`;
+  let site: string | null = null;
+  for (const scope of scopes) if ((site = siteIn(scope, pack))) break;
+  if (!site) for (const scope of scopes) if ((site = siteLinkIn(scope, pageUrl))) break;
+  if (!site) return { url: redirect, domain: '', address: 'hidden', key };
+  if (isGoogleOwn(new URL(site).hostname.toLowerCase(), serpHost)) return null;
+  const domain = domainOf(site);
+  if (title) {
+    const pages = known().filter((page) => page.titled && page.domain === domain && sameTitle(page.title, title));
+    // One page of that site with that title: its address is the address of this result.
+    if (pages.length === 1) return { url: pages[0]!.url, domain, address: 'link', key };
+  }
+  return { url: `${site}/`, domain, address: 'site', key };
+}
+
 function linkTitle(a: Element): string {
   const heading = a.querySelector('[role="heading"], h3, h4');
   return (
@@ -185,19 +292,124 @@ function linkTitle(a: Element): string {
   );
 }
 
-function linkItems(el: Element, pageUrl: string, serpHost: string, limit = 40): SerpItem[] {
-  const items: SerpItem[] = [];
+interface LinkEntry {
+  item: SerpItem;
+  address: AddressSource;
+}
+
+/**
+ * The links of a block that lead to another site, each once. A link whose page Google hides is told apart by its
+ * title: two such links can lead to one site, and one item often has two links (its picture and its title).
+ * With `keepHidden`, a link that names no site at all is kept too, with its title and without an address.
+ */
+function linkEntries(el: Element, pack: SelectorPack, pageUrl: string, serpHost: string, limit = 40, keepHidden = false): LinkEntry[] {
+  const entries: LinkEntry[] = [];
   const seen = new Set<string>();
   for (const a of el.querySelectorAll('a[href]')) {
-    const url = externalUrl(a.getAttribute('href'), pageUrl, serpHost);
+    const destination = destinationOf(a, [a], pack, pageUrl, serpHost);
+    if (!destination) continue;
+    const { address } = destination;
+    const title = linkTitle(a);
+    if (address !== 'link' && (!title || (address === 'hidden' && !keepHidden))) continue;
+    const key = address === 'link' ? urlKey(destination.url) : `title:${title.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const text = cleanText(`${a.getAttribute('aria-label') ?? ''} ${a.textContent ?? ''}`, 400);
+    entries.push({
+      address,
+      item: address === 'hidden' ? { title, url: null, domain: null, text } : { title: title || destination.domain, url: destination.url, domain: destination.domain, text },
+    });
+    if (entries.length >= limit) break;
+  }
+  return entries;
+}
+
+function linkItems(el: Element, pack: SelectorPack, pageUrl: string, serpHost: string, limit = 40, keepHidden = false): SerpItem[] {
+  return linkEntries(el, pack, pageUrl, serpHost, limit, keepHidden).map((entry) => entry.item);
+}
+
+/** A JSON string literal as it stands in the page's own data. */
+const LITERAL = (max: number): string => `"((?:[^"\\\\]|\\\\.){0,${max}})"`;
+/** One source of an AI answer in the page's data: its site name, a number, its address. */
+const CITED_SOURCE = new RegExp(`${LITERAL(200)},\\s*(?:\\d{1,4}|null),\\s*"(https?:\\/\\/(?:[^"\\\\]|\\\\.){1,2000})"`, 'g');
+/** One source card: page title, excerpt, site name, then the site's icon, whose address names the site. */
+const SOURCE_CARD = new RegExp(
+  `${LITERAL(300)},\\s*${LITERAL(4000)},\\s*${LITERAL(200)},\\s*"https:\\/\\/[a-z0-9-]+\\.gstatic\\.com\\/faviconV2\\?url(?:=|\\\\u003d)(https?:\\/\\/[^&"\\\\]{1,300})`,
+  'g',
+);
+const MAX_EMBEDDED_CHARS = 800_000;
+
+function unquote(literal: string): string {
+  try {
+    return String(JSON.parse(`"${literal}"`));
+  } catch {
+    return literal;
+  }
+}
+
+/**
+ * The sources of an AI answer, when Google hides where its links lead. The answer then still carries the address of
+ * each cited page in data that the page keeps next to the answer (in comment nodes). That data is Google's own
+ * format and can change: when it is not there, the answer simply has no sources. Nothing here is executed; every
+ * address is checked like any other link.
+ */
+function embeddedSources(el: Element, pageUrl: string, serpHost: string, limit = 60): KnownPage[] {
+  const walker = el.ownerDocument.createTreeWalker(el, 128 /* NodeFilter.SHOW_COMMENT */);
+  const cited: { name: string; url: string }[] = [];
+  const titlesByHost = new Map<string, Set<string>>();
+  let budget = MAX_EMBEDDED_CHARS;
+  while (budget > 0 && walker.nextNode()) {
+    const raw = walker.currentNode.nodeValue ?? '';
+    if (raw.length > 100_000 || !raw.includes('http')) continue;
+    budget -= raw.length;
+    // Text inside a comment keeps its HTML escapes.
+    const text = raw.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    for (const match of text.matchAll(CITED_SOURCE)) cited.push({ name: unquote(match[1] ?? ''), url: unquote(match[2] ?? '') });
+    for (const match of text.matchAll(SOURCE_CARD)) {
+      const site = safeHttpUrl(unquote(match[4] ?? ''));
+      const title = cleanText(unquote(match[1] ?? ''), 300);
+      if (!site || !title) continue;
+      const host = domainOf(site);
+      titlesByHost.set(host, (titlesByHost.get(host) ?? new Set()).add(title));
+    }
+  }
+  const pages: KnownPage[] = [];
+  const seen = new Set<string>();
+  for (const source of cited) {
+    const url = externalUrl(source.url, pageUrl, serpHost);
     if (!url) continue;
     const key = urlKey(url);
     if (seen.has(key)) continue;
     seen.add(key);
     const domain = domainOf(url);
-    const text = cleanText(`${a.getAttribute('aria-label') ?? ''} ${a.textContent ?? ''}`, 400);
-    items.push({ title: linkTitle(a) || domain, url, domain, text });
+    pages.push({ title: cleanText(source.name, 300) || domain, url: cleanUrl(url) ?? url, domain, titled: false });
+    if (pages.length >= limit) break;
+  }
+  // A page title belongs to a source only when the site has one title and one cited page: otherwise it is a guess.
+  for (const page of pages) {
+    const titles = titlesByHost.get(page.domain);
+    if (titles?.size === 1 && pages.filter((other) => other.domain === page.domain).length === 1) {
+      page.title = [...titles][0] ?? page.title;
+      page.titled = true;
+    }
+  }
+  return pages;
+}
+
+/**
+ * The sources of an AI answer: its links, then the sources the page lists for it that no link shows. A source is a
+ * page, so only an exact address counts: a link that names just its site is no source.
+ */
+function answerItems(el: Element, pack: SelectorPack, pageUrl: string, serpHost: string, limit: number): SerpItem[] {
+  const items = linkEntries(el, pack, pageUrl, serpHost, limit)
+    .filter((entry) => entry.address === 'link')
+    .map((entry) => entry.item);
+  const seen = new Set(items.map((item) => (item.url ? urlKey(item.url) : '')));
+  for (const source of embeddedSources(el, pageUrl, serpHost, limit)) {
     if (items.length >= limit) break;
+    if (seen.has(urlKey(source.url))) continue;
+    seen.add(urlKey(source.url));
+    items.push({ title: source.title, url: source.url, domain: source.domain, text: '' });
   }
   return items;
 }
@@ -284,12 +496,15 @@ function itemsFor(block: FoundBlock, pack: SelectorPack, pageUrl: string, serpHo
       return placeItems(block.el, pack, pageUrl, serpHost);
     case 'paa': {
       const questions = questionItems(block.el);
-      return questions.length > 0 ? questions : linkItems(block.el, pageUrl, serpHost, 12);
+      return questions.length > 0 ? questions : linkItems(block.el, pack, pageUrl, serpHost, 12);
     }
     case 'image':
       return [];
+    case 'ai_overview':
+      return answerItems(block.el, pack, pageUrl, serpHost, 40);
     default:
-      return linkItems(block.el, pageUrl, serpHost);
+      // Videos, discussions, news: an item whose address Google hides still counts, with its title.
+      return linkItems(block.el, pack, pageUrl, serpHost, 40, true);
   }
 }
 
@@ -332,7 +547,7 @@ function readAiMode(doc: Document, pack: SelectorPack, env: ParseEnv, serpHost: 
     url: safeHttpUrl(env.url),
     question,
     text: latest ? answerText(latest, 40_000) : '',
-    citations: latest ? toCitations(linkItems(latest, env.url, serpHost, 100)) : [],
+    citations: latest ? toCitations(answerItems(latest, pack, env.url, serpHost, 100)) : [],
     capturedAt: env.now,
     recognised: latest !== null,
     packVersion: pack.version,
@@ -352,26 +567,32 @@ export function parseSerp(doc: Document, pack: SelectorPack, env: ParseEnv): Ser
   const titleLinks = findTitleLinks(doc, pack, visible);
   const found = findBlocks(doc, pack, root, titleLinks, visible);
 
-  // Organic results: title links that are not part of any other block.
-  const organicLinks = titleLinks.filter(
-    (link) => !found.some((b) => b.el.contains(link)) && externalUrl(link.getAttribute('href'), env.url, serpHost) !== null,
-  );
+  // Organic results: title links that are not part of any other block. A title link leads to another site, or to
+  // Google's own redirect when Google hides where it leads.
+  const organicLinks = titleLinks.filter((link) => {
+    if (found.some((b) => b.el.contains(link))) return false;
+    const href = link.getAttribute('href');
+    return externalUrl(href, env.url, serpHost) !== null || (href !== null && isHiddenGoogleRedirect(href, env.url));
+  });
   const organic: OrganicResult[] = [];
   const seenUrls = new Set<string>();
+  // Pages whose exact address the page's own data names. Read once, and only when a link hides its address.
+  let knownPages: KnownPage[] | null = null;
+  const known = (): readonly KnownPage[] => (knownPages ??= doc.body ? embeddedSources(doc.body, env.url, serpHost, 200) : []);
   for (const link of organicLinks) {
-    const url = externalUrl(link.getAttribute('href'), env.url, serpHost);
-    if (!url) continue;
     const title = cleanText(link.querySelector('h3')?.textContent ?? link.textContent ?? '', 300);
     if (!title) continue;
-    const key = urlKey(url);
-    if (seenUrls.has(key)) continue;
-    seenUrls.add(key);
     const container = containerFor(link, pack, root, organicLinks, found);
+    const destination = destinationOf(link, [link, container], pack, env.url, serpHost, title, known);
+    if (!destination) continue;
+    if (seenUrls.has(destination.key)) continue;
+    seenUrls.add(destination.key);
     organic.push({
       position: organic.length + 1,
       title,
-      url: cleanUrl(url) ?? url,
-      domain: domainOf(url),
+      url: destination.url,
+      domain: destination.domain,
+      address: destination.address,
       snippet: snippetOf(container, link, pack, title),
       rect: env.rectOf(container),
       listStyle: isListStyleTitle(title),

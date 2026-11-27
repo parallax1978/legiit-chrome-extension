@@ -34,7 +34,7 @@ async function useEverything(lens: Lens, options: { brandsAlreadyTracked?: boole
   if (!options.brandsAlreadyTracked) await lens.trackScenarioBrands();
 
   // Google results, in every fixture state, with the strip; the panel on one of them.
-  for (const url of [U.serpFull!, U.serpPlain!, U.serpFeatured!, U.serpLocal!, U.serpChurn!, U.serpAiMode!, U.serpUnrecognised!]) await lens.open(url);
+  for (const url of [U.serpFull!, U.serpPlain!, U.serpFeatured!, U.serpLocal!, U.serpChurn!, U.serpHidden!, U.serpAiMode!, U.serpUnrecognised!]) await lens.open(url);
   const serp = await lens.open(U.serpFull!);
   await expect.poll(() => lens.stripText(serp.page)).toContain('Click potential');
   const onSerp = await lens.openPanel(serp.tabId, 'click');

@@ -150,7 +150,8 @@ export function buildSerpPresence(serp: SerpData, matcher: BrandMatcher): Presen
       finish(
         'organic',
         serp.organic.length > 0,
-        serp.organic.map((o) => toItem(matcher, { title: o.title, url: o.url, domain: o.domain, text: o.snippet }, o.position, o.listStyle)),
+        // A result whose address Google hides and whose site the page does not name has no address to show.
+        serp.organic.map((o) => toItem(matcher, { title: o.title, url: o.address === 'hidden' ? null : o.url, domain: o.address === 'hidden' ? null : o.domain, text: o.snippet }, o.position, o.listStyle)),
         '',
         matcher,
       ),

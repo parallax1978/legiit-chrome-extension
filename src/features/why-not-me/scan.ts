@@ -75,7 +75,8 @@ export function pickSerpTargets(serp: SerpData, options: PickOptions = {}): Scan
     add({ url: c.url, title: c.title, domain: c.domain, reason: 'cited', foundIn: citedIn, position: i + 1 });
   }
   for (const o of serp.organic) {
-    if (o.listStyle) add({ url: o.url, title: o.title, domain: o.domain, reason: 'list', foundIn: `Organic #${o.position}`, position: o.position });
+    // Only a page whose address is known can be read: the home page of its site is another page.
+    if (o.listStyle && (o.address ?? 'link') === 'link') add({ url: o.url, title: o.title, domain: o.domain, reason: 'list', foundIn: `Organic #${o.position}`, position: o.position });
   }
   return targets.slice(0, options.max ?? MAX_SCAN_TARGETS);
 }

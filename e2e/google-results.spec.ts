@@ -151,6 +151,35 @@ test.describe('summary strip above Google results', () => {
     expect(lens.errors).toEqual([]);
   });
 
+  test('reads a page on which Google hides where the links lead', async ({ lens }) => {
+    await lens.trackScenarioBrands();
+    const { page, tabId } = await lens.open(U.serpHidden!);
+    // As Google serves it since November 2026: every result link is Google's own redirect with a code.
+    expect(await page.locator('#rso a[href^="http"]:not([href*="google."])').count()).toBe(0);
+    expect(await page.locator('#rso h3').count()).toBeGreaterThanOrEqual(9);
+    await expect.poll(() => lens.stripText(page)).toContain('First organic at 1,431 px · below the fold');
+
+    const panel = await lens.openPanel(tabId, 'click');
+    const rows = panel.getByTestId('cp-organic-table').locator('tbody tr');
+    await expect(rows).toHaveCount(9);
+    // A result that the AI Overview cites: the page's own data has its address, so its title is a link.
+    await expect(rows.nth(0).locator('a')).toHaveAttribute('href', 'https://www.austinhealthguide.example/best-dentists-austin');
+    // Of the others the page names only the site. The title is no link, and a tracked brand is still recognised.
+    await expect(rows.nth(5)).toContainText('brightpathdental.example');
+    await expect(rows.nth(5)).toContainText('You');
+    await expect(rows.nth(5).locator('a')).toHaveCount(0);
+    await expect(panel.getByTestId('cp-hidden-links')).toBeVisible();
+    // Nothing in the panel leads to Google's redirect.
+    expect(await panel.locator('a[href*="/goto?"]').count()).toBe(0);
+
+    // The other tools read the same page: who is cited in the AI Overview, and who shows up where.
+    await panel.getByTestId('tab-why').click();
+    await expect(panel.getByTestId('wnm-gaps')).toBeVisible();
+    // One list-style result has no known page address: the panel says that it cannot be scanned.
+    await expect(panel.getByTestId('scan-hidden')).toContainText('1 list-style result');
+    expect(lens.errors).toEqual([]);
+  });
+
   test('stays out of the way on a Google page it does not recognise', async ({ lens }) => {
     const { page, tabId } = await lens.open(U.serpUnrecognised!);
     await page.waitForTimeout(800);
@@ -237,9 +266,9 @@ test.describe('Click Potential tab', () => {
     const organic = await lens.downloadText(panel, () => panel.getByTestId('cp-export').click());
     expect(organic.name).toBe('click-potential-best-dentist-in-austin.csv');
     const lines = organic.text.replace('﻿', '').trim().split('\r\n');
-    expect(lines[0]).toBe('keyword,captured_at,viewport,location,position,title,url,domain,top_px,fold,tracked_as,brand,list_style');
+    expect(lines[0]).toBe('keyword,captured_at,viewport,location,position,title,url,domain,top_px,fold,tracked_as,brand,list_style,address');
     expect(lines).toHaveLength(10);
-    expect(lines[6]).toContain('brightpathdental.example,2475,Below the fold,my brand,BrightPath Dental,no');
+    expect(lines[6]).toContain('brightpathdental.example,2475,Below the fold,my brand,BrightPath Dental,no,page');
 
     await expect(panel.getByTestId('history-table')).toBeVisible();
     const history = await lens.downloadText(panel, () => panel.getByTestId('cp-history-export').click());

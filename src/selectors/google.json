@@ -1,7 +1,7 @@
 {
   "site": "google",
-  "version": "2026.11.20-2",
-  "updated": "2026-11-20",
+  "version": "2026.11.27-1",
+  "updated": "2026-11-27",
   "description": "Google Search results pages (desktop). Each slot lists candidates in priority order; the first that matches wins. Stable ids and attributes come first, then class names (which Google renames often), then heading-text fallbacks (English plus common locales). Verify on live pages with the selector health check and docs/QA.md.",
   "slots": {
     "resultsRoot": {
@@ -125,6 +125,17 @@
         },
         {
           "css": "[style*='-webkit-line-clamp']"
+        }
+      ]
+    },
+    "organicAddress": {
+      "description": "The address line under an organic result's title (\"https://www.example.com › blog › post\"). Read when Google hides where the title link leads.",
+      "candidates": [
+        {
+          "css": "cite"
+        },
+        {
+          "css": "[role='text']"
         }
       ]
     },

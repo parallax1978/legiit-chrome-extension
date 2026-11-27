@@ -139,6 +139,22 @@ describe('scan targets', () => {
     expect(pickSerpTargets(full, { matcher, max: 2 })).toHaveLength(2);
   });
 
+  it('does not pick a list page whose address Google hides, and shows no address for it', () => {
+    const hiddenLink = 'https://www.google.com/goto?url=CAESfive';
+    const organic = full.organic.map((o) =>
+      o.position === 1 ? { ...o, url: hiddenLink, domain: '', address: 'hidden' as const } : o.listStyle ? { ...o, url: `https://www.${o.domain}/`, address: 'site' as const } : o,
+    );
+    const page = { ...full, aiAnswer: null, organic };
+    // The list-style results of this page: #1 is hidden, of the others only the site is known.
+    expect(full.organic.filter((o) => o.listStyle).map((o) => o.position)).toEqual([1, 3, 5]);
+    expect(pickSerpTargets({ ...full, aiAnswer: null }, { matcher }).length).toBeGreaterThan(0);
+    expect(pickSerpTargets(page, { matcher })).toEqual([]);
+    expect(pickSerpTargets(page, { matcher }).some((t) => t.url.includes('google.'))).toBe(false);
+    const items = buildSerpPresence(page, matcher).surfaces.find((s) => s.id === 'organic')!.items;
+    expect(items[0]).toMatchObject({ position: 1, url: null, domain: null });
+    expect(items[4]).toMatchObject({ position: 5, url: 'https://www.smilecompare.example/', domain: 'smilecompare.example' });
+  });
+
   it('picks the pages an AI answer cites', () => {
     const targets = pickAnswerTargets(answer('gemini', 'ai/gemini.html', scenario.urls.gemini!), 'Gemini', { matcher });
     expect(targets.map((t) => t.foundIn)).toEqual(['Cited by Gemini', 'Cited by Gemini', 'Cited by Gemini']);

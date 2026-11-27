@@ -329,6 +329,15 @@ The owner's decision on 26 November 2026, after D-89: an account created straigh
 **D-91 · One question: the email.**
 The owner's direction on 26 November 2026: setting up must not feel like a form. The welcome page shows the email box and one line on how to use the extension; what it does, reads and never sends is folded into one "details" block, still on the page for anyone who wants it. "Add your brand and competitors in Settings" is no longer a step: a company email address fills "My brands" by itself (jordan@brightpathdental.com gives "Brightpathdental" on brightpathdental.com; free mail providers give nothing, and a brand the user already has is never replaced). In Settings, the token field sits behind "I have a Legiit token", so a new user sees one box there too.
 
+**D-92 · Google hides where its links lead: read the site from the page, never ask Google.**
+Found on 27 November 2026 on a live results page the owner saved: every result, ad and citation link is `https://www.google.com/goto?url=<code>`, and the code can only be read by Google. The old reader dropped every link that led to Google itself, so it found no organic result at all. The reader now keeps such a result and says how its address is known (`address` on each organic result):
+
+- `link`: the exact page address. It comes from the link itself, or from the data the page keeps for its AI answer, when that data names one page of the same site with the same title.
+- `site`: only the site is known, from the line under the title ("https://www.example.com › blog › post") or from a "More results from www.example.com" link. `url` is the home page of the site. The other parts of that line are not a path (Google shortens and rewrites them), so the reader never builds a page address from them.
+- `hidden`: the page names no site. `url` is Google's own link and `domain` is empty. Rare.
+
+What follows from it: positions, pixel measurements and brand matching (by site) work as before. A title is a link in the panel only when the page address is known. Source scans and "New or Noise" comparisons use only results with a known page address, because the home page of a site is another page. The network guard now refuses every request for a page of Google or of an AI site, whatever the caller: the hard rule "no automated queries to Google or AI sites" no longer depends on each caller filtering its list. Following Google's redirect to learn the address was rejected for the same rule. The sources of an AI Overview are read from the page's own data (comment nodes next to the answer); that format is Google's and can change, and then the answer simply lists no sources. A source is a page, so a link that names only its site is no source. In the other boxes (videos, discussions, news) an item whose link is hidden keeps its title and has no address, so a brand named in a title is still found. A saved snapshot keeps the fields of the contract (`1.0.0-draft.6` only widens two descriptions): a hidden result is sent with Google's link and the host `google.com`, never with an empty site, so a server that requires a non-empty `domain` still accepts it.
+
 ---
 
 ## 3. Assumptions that a person must confirm
@@ -341,7 +350,7 @@ The owner's direction on 26 November 2026: setting up must not feel like a form.
 | A-4 | Product name "Legiit Lens", publisher "Legiit". | `src/config/constants.ts` |
 | A-5 | The shortcut Alt+Shift+L is free on users' machines. Chrome silently drops a suggested shortcut that is taken; the panel then tells the user where to set one. | `SUGGESTED_SHORTCUT` |
 | A-6 | Minimum Chrome 116. | `MINIMUM_CHROME_VERSION` |
-| A-7 | The Google and AI-site selectors match the live sites. Unverified (D-34). | `src/selectors/*.json` |
+| A-7 | The Google and AI-site selectors match the live sites. The Google pack was checked against one live results page saved on 27 November 2026 (D-92): results, ads and AI Overview sources were read. The AI-site packs are unverified (D-34). | `src/selectors/*.json` |
 | A-8 | The privacy policy's contact address, company name and effective date (placeholders marked in the file). | `store/privacy-policy.md` and `.html` |
 | A-9 | No endpoint exists for saving Rewind timelines; none was in the brief's method list, so Rewind has no "Save to Command Center". Industry Pulse is used as date presets in Rewind. | `src/ui/tabs/RewindTab.tsx` |
 | A-10 | Icons, promo tiles and screenshots are placeholders (marked). | `store/`, `scripts/make-icons.mjs` |

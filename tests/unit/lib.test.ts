@@ -18,7 +18,9 @@ import {
   hostMatchesDomain,
   isGoogleInfraHost,
   isGoogleNavHost,
+  isHiddenGoogleRedirect,
   originPatternFor,
+  siteOfAddressLine,
   siteOfPattern,
   unwrapGoogleUrl,
   urlKey,
@@ -126,6 +128,38 @@ describe('url', () => {
     expect(hostMatchesDomain('www.example.com', 'example.com')).toBe(true);
     expect(hostMatchesDomain('badexample.com', 'example.com')).toBe(false);
     expect(hostMatchesDomain('example.com.evil.test', 'example.com')).toBe(false);
+  });
+});
+
+describe('links whose address Google hides', () => {
+  const page = 'https://www.google.com/search?q=x';
+
+  it("recognises Google's redirect with a token, and nothing else", () => {
+    expect(isHiddenGoogleRedirect('/goto?url=CAESegHEIkXXm5BIIQxZ', page)).toBe(true);
+    expect(isHiddenGoogleRedirect('https://www.google.com/goto?url=CAESegHE', page)).toBe(true);
+    expect(isHiddenGoogleRedirect('https://www.google.co.uk/goto?url=CAESegHE', page)).toBe(true);
+    expect(isHiddenGoogleRedirect('/url?sa=t&url=CAESegHEIkXX', page)).toBe(true);
+    // A redirect that names its target is unwrapped as before, so it is not a hidden one.
+    expect(isHiddenGoogleRedirect('/url?q=https://example.com/page', page)).toBe(false);
+    expect(isHiddenGoogleRedirect('/url?sa=t', page)).toBe(false);
+    expect(isHiddenGoogleRedirect('/search?q=more', page)).toBe(false);
+    expect(isHiddenGoogleRedirect('https://example.com/goto?url=CAES', page)).toBe(false);
+    expect(isHiddenGoogleRedirect('javascript:alert(1)', page)).toBe(false);
+    expect(isHiddenGoogleRedirect('', page)).toBe(false);
+  });
+
+  it('takes only the site from the line under a title', () => {
+    expect(siteOfAddressLine('https://www.jobsboard.example \u203a freelance-jobs \u203a seo')).toBe('https://www.jobsboard.example');
+    expect(siteOfAddressLine('https://www.hiringhub.example \u203a ... \u203a Business Jobs')).toBe('https://www.hiringhub.example');
+    expect(siteOfAddressLine('  https://www.seoworkers.example  ')).toBe('https://www.seoworkers.example');
+    expect(siteOfAddressLine('www.example.co.uk \u203a blog')).toBe('https://www.example.co.uk');
+    expect(siteOfAddressLine('http://smallsite.example')).toBe('http://smallsite.example');
+    // A line that names no site gives nothing: the reader must not guess.
+    expect(siteOfAddressLine('30+ comments \u00b7 1 year ago')).toBeNull();
+    expect(siteOfAddressLine('Forum \u00b7 r/Austin')).toBeNull();
+    expect(siteOfAddressLine('javascript:alert(1) \u203a x')).toBeNull();
+    expect(siteOfAddressLine('https://user:pass@evil.example \u203a x')).toBeNull();
+    expect(siteOfAddressLine('')).toBeNull();
   });
 });
 

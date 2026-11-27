@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Legiit Command Center API for Legiit Lens
-  version: 1.0.0-draft.5
+  version: 1.0.0-draft.6
   summary: The API the Legiit Lens Chrome extension calls. To be built by the Legiit backend team.
   description: |
     The extension is finished and calls exactly this API. The API does not exist yet.
@@ -1098,11 +1098,20 @@ components:
                 description: 1-based order among the organic results of this page, without gaps.
               url:
                 $ref: '#/components/schemas/HttpUrl'
-                description: Where the result leads, with Google's redirect and tracking parameters removed.
+                description: >-
+                  Where the result leads, with Google's redirect and tracking parameters removed. Google can
+                  hide where the links of a results page lead. The extension then sends the best address the
+                  page itself shows: the address of the page when the page's own data has it; else the home
+                  page of the result's site (https://www.example.com/); else, when the page does not name the
+                  site, Google's own link for the result (https://www.google.com/goto?url=...). Store it as
+                  text. Never request it from your server.
               domain:
                 type: string
                 maxLength: 255
-                description: Host of url, in lower case, without a leading "www." (other subdomains are kept).
+                description: >-
+                  Host of url, in lower case, without a leading "www." (other subdomains are kept). Never empty.
+                  It is a Google host (google.com) only for a result whose site Google hides: show such a result
+                  as "site not shown".
               title:
                 type: string
                 minLength: 1
@@ -1228,7 +1237,9 @@ components:
                   - type: 'null'
                 description: >-
                   URL of the page the row is about, with tracking parameters removed. null for pageType
-                  "surface", and for some local-pack and ad rows that have no link.
+                  "surface", for some local-pack and ad rows that have no link, and for a result whose site
+                  Google hides. When Google hides the address of a result and the page names only its site,
+                  this is the home page of that site.
               domain:
                 type: [string, 'null']
                 maxLength: 255

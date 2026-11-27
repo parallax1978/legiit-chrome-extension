@@ -46,11 +46,22 @@ export const SerpBlockSchema = v.object({
   matchedBy: text(240),
 });
 
+/**
+ * How the address of an organic result is known. Google can hide where a link leads; the line under the title then
+ * still names the site.
+ *   link:   the exact address of the page: read from the link, or from the page's own data about that result.
+ *   site:   only the site is known. `url` is the site's home page.
+ *   hidden: nothing on the page says where it leads. `url` is Google's own redirect link, `domain` is empty.
+ */
+export const ADDRESS_SOURCES = ['link', 'site', 'hidden'] as const;
+export type AddressSource = (typeof ADDRESS_SOURCES)[number];
+
 export const OrganicResultSchema = v.object({
   position: num,
   title: text(400),
   url: httpUrl,
   domain: text(255),
+  address: v.optional(v.picklist(ADDRESS_SOURCES), 'link'),
   snippet: text(1500),
   rect: v.nullable(RectSchema),
   listStyle: v.boolean(),

@@ -578,6 +578,20 @@ describe('in-memory mock client', () => {
 });
 
 describe('save payloads (what the user is shown is what is sent)', () => {
+  it('sends a result whose site Google hides with Google\'s own link and its host, never with an empty site', () => {
+    const hiddenLink = 'https://www.google.com/goto?url=CAESfour';
+    const organic = snapshot.organic.map((o, i) =>
+      i === 1 ? { ...o, url: 'https://www.lakesidesmiles.example/', address: 'site' as const } : i === 2 ? { ...o, url: hiddenLink, domain: '', address: 'hidden' as const } : o,
+    );
+    const payload = snapshotPayload({ ...snapshot, organic });
+    expect(payload.organic[1]).toMatchObject({ position: 2, url: 'https://www.lakesidesmiles.example/', domain: 'lakesidesmiles.example' });
+    expect(payload.organic[2]).toMatchObject({ position: 3, url: hiddenLink, domain: 'google.com' });
+    // Positions stay without gaps, and the body keeps the fields of the contract: nothing new is sent.
+    expect(payload.organic.map((o) => o.position)).toEqual(snapshot.organic.map((o) => o.position));
+    expect(Object.keys(payload.organic[2]!).sort()).toEqual(['domain', 'fold', 'position', 'title', 'topPx', 'url']);
+    expect(payload.organic.every((o) => o.domain !== '')).toBe(true);
+  });
+
   it('builds the visibility snapshot payload', () => {
     const payload = snapshotPayload(snapshot, scenarioBrands);
     expect(payload).toMatchObject({

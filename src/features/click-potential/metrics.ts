@@ -8,7 +8,7 @@
 import type { BrandMatcher, Owner } from '@/brands/matcher';
 import { intersect, unionArea, type Rect } from '@/lib/rect';
 import { formatInt, formatPercent } from '@/lib/text';
-import type { BlockType, SerpData, Viewport } from '@/model/schemas';
+import type { AddressSource, BlockType, SerpData, Viewport } from '@/model/schemas';
 
 export type FoldStatus = 'above' | 'partly' | 'below';
 export type ShareType = BlockType | 'organic';
@@ -45,6 +45,8 @@ export interface OrganicRow {
   title: string;
   url: string;
   domain: string;
+  /** "link": `url` is the page. "site": Google hid the link and only the site is known. "hidden": not even that. */
+  address: AddressSource;
   /** Pixels from the top of the page to the top of the result. Null when not measured. */
   top: number | null;
   fold: FoldStatus | null;
@@ -172,6 +174,7 @@ export function computeClickPotential(serp: SerpData, matcher: BrandMatcher): Cl
       title: result.title,
       url: result.url,
       domain: result.domain,
+      address: result.address ?? 'link',
       top: result.rect ? Math.round(result.rect.y) : null,
       fold: foldStatus(result.rect, viewport.height),
       owner: hit?.owner ?? null,

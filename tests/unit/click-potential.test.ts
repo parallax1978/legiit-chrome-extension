@@ -47,6 +47,7 @@ const result = (position: number, y: number, domain = `site${position}.example`)
   snippet: '',
   rect: { x: 0, y, width: 500, height: 100 },
   listStyle: false,
+  address: 'link' as const,
 });
 
 describe('fold status and grade bands', () => {
@@ -213,12 +214,35 @@ describe('snapshots and CSV', () => {
 
   it('exports the organic table as CSV', () => {
     const lines = organicCsv(full, cp).replace('﻿', '').trim().split('\r\n');
-    expect(lines[0]).toBe('keyword,captured_at,viewport,location,position,title,url,domain,top_px,fold,tracked_as,brand,list_style');
+    expect(lines[0]).toBe('keyword,captured_at,viewport,location,position,title,url,domain,top_px,fold,tracked_as,brand,list_style,address');
     expect(lines).toHaveLength(10);
     expect(lines[1]).toBe(
-      'best dentist in austin,2026-11-20T12:00:00.000Z,1280x800,"Austin, Texas",1,10 Best Dentists in Austin (2026),https://www.austinhealthguide.example/best-dentists-austin,austinhealthguide.example,1431,Below the fold,,,yes',
+      'best dentist in austin,2026-11-20T12:00:00.000Z,1280x800,"Austin, Texas",1,10 Best Dentists in Austin (2026),https://www.austinhealthguide.example/best-dentists-austin,austinhealthguide.example,1431,Below the fold,,,yes,page',
     );
-    expect(lines[6]).toContain(',my brand,BrightPath Dental,no');
+    expect(lines[6]).toContain(',my brand,BrightPath Dental,no,page');
+  });
+
+  it('says for each result how its address is known when Google hides the links', () => {
+    // Three results of one page: an address read from the link, only the site, and nothing at all.
+    const hiddenLink = 'https://www.google.com/goto?url=CAESfour';
+    const page = synthetic({
+      organic: [
+        result(1, 200, 'brightpathdental.example'),
+        { ...result(2, 320, 'lakesidesmiles.example'), address: 'site' as const },
+        { ...result(3, 440), url: hiddenLink, domain: '', address: 'hidden' as const },
+      ],
+    });
+    const measured = computeClickPotential(page, matcher);
+    expect(measured.organic.map((o) => [o.position, o.address, o.domain, o.owner])).toEqual([
+      [1, 'link', 'brightpathdental.example', 'mine'],
+      // The site is enough to recognise a tracked brand.
+      [2, 'site', 'lakesidesmiles.example', 'competitor'],
+      [3, 'hidden', '', null],
+    ]);
+    const lines = organicCsv(page, measured).replace('\uFEFF', '').trim().split('\r\n');
+    expect(lines.slice(1).map((line) => line.split(',').at(-1))).toEqual(['page', 'site only', 'hidden by Google']);
+    // The stored measurement keeps it, so a later comparison never takes a site's home page for the result.
+    expect(toSnapshot(page, measured).organic.map((o) => o.address)).toEqual(['link', 'site', 'hidden']);
   });
 
   it('exports snapshot history as CSV with per-block shares', () => {

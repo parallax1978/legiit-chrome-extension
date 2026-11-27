@@ -132,6 +132,8 @@ export function InstantBriefTab() {
     const siteHost = pageUrl ? stripWww(new URL(pageUrl).hostname) : '';
     for (const page of pages) {
       for (const result of page.serp.organic) {
+        // Google can hide the site of a result: such a result names no competitor.
+        if (!result.domain) continue;
         if (result.domain === siteHost || matcher.matchDomain(result.domain).some((h) => h.owner === 'mine')) continue;
         const known = [...candidates, ...found].some((c) => c.domain === result.domain);
         if (!known) found.push({ name: matcher.matchDomain(result.domain)[0]?.name ?? result.domain, domain: result.domain, source: 'results', checked: false });

@@ -38,6 +38,40 @@ export function unwrapGoogleUrl(href: string, base: string): string | null {
   return cleanUrl(url.href);
 }
 
+/**
+ * Google can hide where a result link leads: the link goes to Google's own redirect with a token that only Google
+ * can read (https://www.google.com/goto?url=CAES…). True for such a link: the destination is not in the link at all.
+ */
+export function isHiddenGoogleRedirect(href: string, base: string): boolean {
+  const safe = safeHttpUrl(href, base);
+  if (!safe) return false;
+  const url = new URL(safe);
+  if (!isGoogleNavHost(url.hostname)) return false;
+  if (url.pathname === '/goto') return true;
+  if (url.pathname === '/url' || url.pathname === '/interstitial') {
+    const target = url.searchParams.get('q') ?? url.searchParams.get('url');
+    return target !== null && target !== '' && cleanUrl(target) === null;
+  }
+  return false;
+}
+
+const ADDRESS_HOST = /^(https?:\/\/)?[\p{L}\p{N}]([\p{L}\p{N}.-]*[\p{L}\p{N}])?\.[\p{L}]{2,24}(:\d{1,5})?\/?$/u;
+
+/**
+ * The site named by the address line that Google prints under a result's title
+ * ("https://www.example.com › blog › post"), as an origin: "https://www.example.com". null for a line that does not
+ * start with a site ("30+ comments · 1 year ago").
+ *
+ * Only the site is taken from the line. The parts after it are not the path of the page: Google shortens them,
+ * leaves parts out, or prints the names of the site's own breadcrumb trail.
+ */
+export function siteOfAddressLine(text: string): string | null {
+  const first = (text.replace(/\s+/g, ' ').trim().slice(0, 600).split(/\s*›\s*/)[0] ?? '').trim();
+  if (!ADDRESS_HOST.test(first)) return null;
+  const safe = safeHttpUrl(/^https?:\/\//i.test(first) ? first : `https://${first}`);
+  return safe ? new URL(safe).origin : null;
+}
+
 /** Google's own navigation hosts: search, maps, accounts, help. Links to them are UI, not results. */
 export function isGoogleNavHost(host: string): boolean {
   return /^(?:(?:www|maps|accounts|policies|support|myaccount|myactivity|consent|lens|images)\.)?google\.[a-z]{2,3}(?:\.[a-z]{2})?$/.test(

@@ -96,7 +96,20 @@ export function adsBlock(id, units) {
   return id === 'tads' ? `<div id="taw"><div id="tvcap">${inner}</div></div>` : `<div id="bottomads">${inner}</div>`;
 }
 
-export function aiOverview({ paragraphs, bullets, sources }) {
+/**
+ * What Google keeps next to an AI Overview about one of its sources, in comment nodes: the address of the cited
+ * page, and a card with its title. Written the way Google writes it: JSON with = and & as \u escapes.
+ */
+function sourceData(source, index) {
+  const icon = `https://encrypted-tbn${index % 4}.gstatic.com/faviconV2?url=${new URL(source.url).origin}&client=AIM&size=128`;
+  const blob = (value) => `<!--TgQPHd|||${esc(JSON.stringify(value).replace(/=/g, '\\u003d').replace(/&/g, '\\u0026'))}-->`;
+  return (
+    blob([[`fixture-source-${index}`, null, null, 0, icon, source.site, index + 1, source.url, null, null]]) +
+    blob([[null, [source.title, 'An excerpt of the cited page.', source.site, icon]]])
+  );
+}
+
+export function aiOverview({ paragraphs, bullets, sources, withData = false }) {
   return `<div class="MjjYud"><div class="YzCcne" data-attrid="AIOverview" jscontroller="fixture"><div class="nk9vdc"><div class="Fzsovc" role="heading" aria-level="2">AI Overview</div></div><div class="LT6XE">${paragraphs
     .map((p) => `<div class="WaaZC"><span>${p}</span></div>`)
     .join('')}<ul>${bullets.map((b) => `<li>${b}</li>`).join('')}</ul></div><ul class="zVKf0d">${sources
@@ -104,7 +117,7 @@ export function aiOverview({ paragraphs, bullets, sources }) {
       (s) =>
         `<li><a href="${esc(s.url)}#:~:text=${encodeURIComponent(s.title.slice(0, 12))}"><div class="mNme1d">${esc(s.title)}</div><div>${esc(s.site)}</div></a></li>`,
     )
-    .join('')}</ul><div class="in7vHe" role="button" aria-expanded="false">Show more</div><div class="aio-note">Generative AI is experimental. <a href="https://support.google.com/websearch?p=ai_overviews">Learn more</a></div></div></div>`;
+    .join('')}</ul>${withData ? sources.map(sourceData).join('') : ''}<div class="in7vHe" role="button" aria-expanded="false">Show more</div><div class="aio-note">Generative AI is experimental. <a href="https://support.google.com/websearch?p=ai_overviews">Learn more</a></div></div></div>`;
 }
 
 export function localPack(places) {
@@ -195,6 +208,19 @@ ${bottomAds}
 </body>
 </html>
 `;
+}
+
+/**
+ * "Hidden links" transform: what a results page looks like when Google hides where its links lead (seen live in
+ * November 2026). Every link to another site, the ads included, becomes Google's own redirect with a code that only
+ * Google can read, and the ping that named the address is gone. What stays on the page: the line under each title,
+ * the data-pcu of an ad, and the data Google keeps next to an AI Overview about its sources.
+ */
+export function hideLinks(html) {
+  let n = 0;
+  return html
+    .replace(/ href="https?:\/\/(?!(?:www|support|maps)\.google\.)[^"]*"/g, () => ` href="/goto?url=CAES${(n++).toString(36).padStart(3, '0')}fixtureXw"`)
+    .replace(/ (?:ping|data-rw)="[^"]*"/g, '');
 }
 
 /**

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.5, by scripts/build-api-reference.mjs. Do not edit by hand.",
+  "$comment": "Generated from openapi.yaml, version 1.0.0-draft.6, by scripts/build-api-reference.mjs. Do not edit by hand.",
   "title": "Request body of POST /v1/businesses/{businessId}/competitors",
   "type": "object",
   "description": "A competitor as the user tracks it in the extension. The same shape is used when one is added to a business, listed in a brief, and returned in Business Details.",
