@@ -188,7 +188,10 @@ test.describe('Why Not Me on AI answer sites', () => {
       await lens.trackScenarioBrands();
       const { tabId } = await lens.open(url);
       const panel = await lens.openPanel(tabId);
-      // The panel opens on Why Not Me for an AI site.
+      // The panel opens on the Overview, which says in a sentence whether the answer names the user.
+      await expect(panel.getByTestId('overview-headline')).toContainText(site === 'perplexity' ? `${label} names you.` : `${label} names Lakeside Smiles`);
+      // "Tools" opens the tool that fits an AI answer.
+      await panel.getByTestId('tab-tools').click();
       await expect(panel.getByTestId('panel-why')).toBeVisible();
       await expect(panel.getByTestId('target-line')).toContainText(label);
       await expect(panel.getByTestId('wnm-presence')).toContainText(label);

@@ -360,7 +360,7 @@ test.describe('connected to Legiit', () => {
     const panel = await lens.openPanel(tabId, 'click');
     const summary = panel.getByTestId('cp-summary');
     await expect(summary.getByTestId('summary-source')).toHaveText('Built from the measured facts. No AI was used.');
-    await expect(summary).toContainText('Estimated organic click potential');
+    await expect(summary).toContainText('This search is very crowded');
     // Being connected is not enough: nothing was sent to the AI endpoint yet.
     expect(lens.legiit.aiRequests).toEqual([]);
 
@@ -368,15 +368,15 @@ test.describe('connected to Legiit', () => {
     const dialog = panel.getByTestId('ai-confirm');
     await expect(dialog).toContainText('This is exactly what will be sent to Legiit. Nothing else leaves your device.');
     const shown = JSON.parse(await dialog.locator('pre').innerText()) as { prompt: string };
-    expect(shown.prompt).toContain('The first organic result starts 1,431 px from the top of the page');
-    expect(shown.prompt).toContain('BrightPath Dental is organic result #6');
+    expect(shown.prompt).toContain('The first result starts about 2 screens down (1,431 px from the top)');
+    expect(shown.prompt).toContain('BrightPath Dental is result #6');
     expect(lens.legiit.aiRequests).toEqual([]);
     await panel.getByTestId('ai-confirm-send').click();
 
     await expect(summary.getByTestId('summary-source')).toContainText('Rewritten by Legiit AI');
     // The mock model restates the first four facts: its text replaced the built-in summary, and "#6" kept its "#".
-    await expect(summary).toContainText('BrightPath Dental is organic result #6');
-    await expect(summary).not.toContainText('Estimated organic click potential');
+    await expect(summary).toContainText('BrightPath Dental is result #6');
+    await expect(summary).not.toContainText('This search is very crowded');
     expect(lens.legiit.aiRequests).toEqual([shown]);
     expect((shown as unknown as { maxOutputTokens: number }).maxOutputTokens).toBe(700);
     expect(lens.errors).toEqual([]);
@@ -625,7 +625,7 @@ test.describe('an account with some endpoints switched off', () => {
     await panel.getByTestId('ai-confirm-send').click();
     await expect(summary).toContainText('Legiit AI is not available yet. Showing the built-in summary.');
     await expect(summary.getByTestId('summary-source')).toHaveText('Built from the measured facts. No AI was used.');
-    await expect(summary).toContainText('Estimated organic click potential');
+    await expect(summary).toContainText('This search is very crowded');
     await expect(summary.getByTestId('ai-rewrite')).toHaveCount(0);
   });
 

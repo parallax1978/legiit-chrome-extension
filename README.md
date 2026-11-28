@@ -10,13 +10,15 @@ The first screen asks for an email address (`POST /v1/signups`), and then every 
 
 ## What it does
 
-| Tab | On | What you get |
+The panel opens on **Overview**: one sentence on what the page in the tab means for you (where you rank, whether the AI answer names you, who is ahead of you, how crowded the page is), up to three next steps that open the tool that does them, and **My keywords**: every search you looked at, with your place and how it moved. The detail is in five tools under **Tools** (in the code they keep their first names: Click Potential, Why Not Me, Rewind, New or Noise, Instant Brief):
+
+| Tool | On | What you get |
 |---|---|---|
-| **Click Potential** | a Google results page | Where the first organic result starts, what fills the first screen (AI Overview, ads, local pack, …), where each result and tracked domain sits relative to the fold, an estimated grade with its formula, history per keyword, CSV |
-| **Why Not Me** | Google results, ChatGPT, Gemini, Perplexity, Copilot | Where competitors appear and you do not. "Scan sources" reads the cited and list-style pages (after Chrome asks you) and shows who each one names and who to contact. Gap list, CSV |
-| **Rewind** | any page address | A dated timeline of on-page changes from the Wayback Machine: title, description, canonical, robots, headings, word count, links, JSON-LD, hreflang |
-| **New or Noise** | an article or any text | Which sentences say something the competing pages do not, measured with a small model that runs in the browser. Highlights on the page, CSV |
-| **Instant Brief** | a business website | A client brief built from up to 8 pages of the site: business facts, offer, three draft avatars, competitors, search presence, issues, next steps. Markdown and print-ready PDF with your agency's name and logo |
+| **This search** | a Google results page | Where the first organic result starts, what fills the first screen (AI Overview, ads, local pack, …), where each result and tracked domain sits relative to the fold, an estimated grade with its formula, history per keyword, CSV |
+| **Who's beating me** | Google results, ChatGPT, Gemini, Perplexity, Copilot | Where competitors appear and you do not. "Scan sources" reads the cited and list-style pages (after Chrome asks you) and shows who each one names and who to contact. Gap list, CSV |
+| **What changed** | any page address | A dated timeline of on-page changes from the Wayback Machine: title, description, canonical, robots, headings, word count, links, JSON-LD, hreflang |
+| **Content check** | an article or any text | Which sentences say something the competing pages do not, measured with a small model that runs in the browser. Highlights on the page, CSV |
+| **Site brief** | a business website | A client brief built from up to 8 pages of the site: business facts, offer, three draft avatars, competitors, search presence, issues, next steps. Markdown and print-ready PDF with your agency's name and logo |
 
 Plus a thin summary strip above Google results, a settings page, an onboarding page and a selector health check.
 
@@ -95,7 +97,7 @@ Google country domains are in `src/config/google-domains.ts`. Selectors are in `
 - It reads only pages you open. It never sends a query to Google or a prompt to an AI site.
 - Nothing leaves the device unless you click a save action while connected to Legiit, and you are shown exactly what will be sent.
 - No analytics.
-- Network destinations: web.archive.org (Rewind), sites you grant when you start a scan, the site you build a brief on, and the Legiit API when connected. `e2e/network.spec.ts` proves it.
+- Network destinations: web.archive.org (What changed), sites you grant when you start a scan, the site you build a brief on, and the Legiit API when connected. `e2e/network.spec.ts` proves it.
 - Permissions: `activeTab`, `scripting`, `storage`, `sidePanel`, `contextMenus`. No access to all sites at install. Each permission is mapped to code in `docs/PERMISSIONS.md`.
 
 ## Documentation

@@ -170,7 +170,7 @@ paths:
         snapshots that are similar, and do not discard one. The same measurement can arrive twice (the
         user saved it twice); it then carries the same `capturedAt`.
       x-capability: visibilitySnapshots
-      x-called-when: The user clicks "Save to Command Center" on the Click Potential tab, reads the JSON and confirms.
+      x-called-when: The user clicks "Save to Command Center" in "This search" (under Tools), reads the JSON and confirms.
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -205,7 +205,7 @@ paths:
         first as read, then again after the user ran "Scan sources", which adds contact details to rows.
         Both carry the same `capturedAt`.
       x-capability: gapLists
-      x-called-when: The user clicks "Save to Command Center" on the Why Not Me tab, reads the JSON and confirms.
+      x-called-when: The user clicks "Save to Command Center" in "Who's beating me" (under Tools), reads the JSON and confirms.
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -284,7 +284,7 @@ paths:
         with two lists, "Only on this page" and "Missing points" with their source links. Store every
         analysis as a new item; the same analysis sent again carries the same `capturedAt`.
       x-capability: contentEditor
-      x-called-when: The user clicks "Send to content editor" on the New or Noise tab, reads the JSON and confirms.
+      x-called-when: The user clicks "Send to content editor" in "Content check" (under Tools), reads the JSON and confirms.
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -331,7 +331,7 @@ paths:
         Everything in the body was read from a public website by a program. Treat the values as
         suggestions the user will review, not as verified facts.
       x-capability: workspaces
-      x-called-when: The user clicks "Open in Command Center" on the Instant Brief tab, reads the JSON and confirms.
+      x-called-when: The user clicks "Open in Command Center" in "Site brief" (under Tools), reads the JSON and confirms.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -357,7 +357,7 @@ paths:
       tags: [Insights]
       summary: Returns dated search-industry events, such as Google algorithm updates.
       description: |
-        The Rewind tab shows how a page changed over time. It offers the dates of the first eight events
+        The What changed tab shows how a page changed over time. It offers the dates of the first eight events
         as shortcuts: one click filters the page history to the days before that date (30 by default;
         the user can change the number). Only `date` and `title` are shown, and only once the user has
         looked up the history of a page.
@@ -367,7 +367,7 @@ paths:
 
         When this call fails, for any reason, the extension shows no shortcuts and no message.
       x-capability: industryPulse
-      x-called-when: Each time the Rewind tab is opened while connected.
+      x-called-when: Each time "What changed" (under Tools) is opened while connected.
       responses:
         '200':
           description: The events, newest first.
@@ -385,7 +385,7 @@ paths:
       tags: [AI]
       summary: Rewrites a summary with Legiit's language model.
       description: |
-        Four tabs of the extension show a summary built without AI, and the Instant Brief tab shows
+        Four tabs of the extension show a summary built without AI, and "Site brief" (under Tools) shows
         draft customer avatars. With this capability the user can ask for them to be rewritten. The
         extension sends the complete instructions (`system`) and the facts (`prompt`); you pass them
         to a language model and return its text. Nothing has to be stored, and there is no
@@ -431,8 +431,8 @@ paths:
         the model no tools and no access to other data.
       x-capability: ai
       x-called-when: >-
-        The user clicks "Rewrite with Legiit AI" on the Click Potential, Why Not Me, Rewind or New or
-        Noise tab, or "Improve drafts with Legiit AI" on the Instant Brief tab (task "brief"), reads
+        The user clicks "Rewrite with Legiit AI" on the This search, Who's beating me, What changed or New or
+        Noise tab, or "Improve drafts with Legiit AI" in "Site brief" (under Tools) (task "brief"), reads
         the JSON and confirms.
       requestBody:
         required: true
@@ -806,7 +806,7 @@ components:
         One feature the extension can show. businesses: the business drop-down; list it whenever you
         list visibilitySnapshots, gapLists, competitors or contentEditor, because those saves go into a
         chosen business. visibilitySnapshots, gapLists, competitors, contentEditor, workspaces: one save
-        button each. industryPulse: date shortcuts on the Rewind tab. ai: the two "… with Legiit AI"
+        button each. industryPulse: date shortcuts in "What changed" (under Tools). ai: the two "… with Legiit AI"
         buttons. Names are case-sensitive.
     Session:
       type: object
@@ -1164,7 +1164,7 @@ components:
     GapList:
       type: object
       description: >-
-        A "Why Not Me" gap list: the places on one source where tracked competitors appear and the user's own
+        A "Who's beating me" gap list: the places on one source where tracked competitors appear and the user's own
         brand does not. It is computed in the extension against the brands tracked there.
       required: [source, subject, capturedAt, rows]
       properties:

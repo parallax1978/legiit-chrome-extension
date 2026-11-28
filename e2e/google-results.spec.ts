@@ -10,12 +10,13 @@ test.describe('summary strip above Google results', () => {
     const host = page.locator('[data-legiit-lens-strip]');
     await expect(host).toBeAttached();
 
-    await expect.poll(() => lens.stripText(page)).toContain('First organic at 1,431 px · below the fold');
+    await expect.poll(() => lens.stripText(page)).toContain('First result about 2 screens down');
     const text = (await lens.stripText(page))!;
     expect(text).toContain('Legiit Lens');
-    expect(text).toContain('Organic share 0%');
-    expect(text).toContain('Click potential F · estimate');
-    expect(text).toContain('You #6 · below the fold');
+    expect(text).toContain('This search: very crowded');
+    // Plain words: no pixels, no "fold", no letter grade on the page.
+    expect(text).not.toMatch(/\bpx\b|fold|organic|estimate/i);
+    expect(text).toContain('You #6 · about 3 screens down');
     expect(text).toContain('Open panel');
 
     // Closed shadow root: the page cannot reach into it, and nothing of ours is in the light DOM.
@@ -101,14 +102,14 @@ test.describe('summary strip above Google results', () => {
 
   test('collapses, remembers the choice, and can be switched off', async ({ lens }) => {
     const { page } = await lens.open(U.serpPlain!);
-    await expect.poll(() => lens.stripText(page)).toContain('Click potential A · estimate');
+    await expect.poll(() => lens.stripText(page)).toContain('This search: open');
     await lens.clickStrip(page, 'Hide');
     await expect.poll(() => lens.stripText(page)).toBe('Legiit Lens Show');
 
     const again = await lens.open(U.serpPlain!);
     await expect.poll(() => lens.stripText(again.page)).toBe('Legiit Lens Show');
     await lens.clickStrip(again.page, 'Show');
-    await expect.poll(() => lens.stripText(again.page)).toContain('First organic at 152 px · above the fold');
+    await expect.poll(() => lens.stripText(again.page)).toContain('First result on the first screen');
 
     await lens.setSettings({ strip: { enabled: false, collapsed: false } });
     const off = await lens.open(U.serpPlain!);
@@ -135,16 +136,16 @@ test.describe('summary strip above Google results', () => {
 
   test('re-measures when the window is resized', async ({ lens }) => {
     const { page } = await lens.open(U.serpPlain!);
-    await expect.poll(() => lens.stripText(page)).toContain('above the fold');
-    // A very short window: the first result (at 152 px) is now cut by, or below, the fold.
+    await expect.poll(() => lens.stripText(page)).toContain('on the first screen');
+    // A very short window: the first result (at 152 px) is now below the first screen.
     await page.setViewportSize({ width: 1280, height: 140 });
-    await expect.poll(() => lens.stripText(page), { timeout: 10_000 }).toContain('First organic at 152 px · below the fold');
+    await expect.poll(() => lens.stripText(page), { timeout: 10_000 }).toContain('First result just below the first screen');
   });
 
   test('works on a Google country domain and survives renamed classes', async ({ lens }) => {
     const { page, tabId } = await lens.open(U.serpChurn!);
     expect(new URL(page.url()).hostname).toBe('www.google.co.uk');
-    await expect.poll(() => lens.stripText(page)).toContain('First organic at 1,431 px · below the fold');
+    await expect.poll(() => lens.stripText(page)).toContain('First result about 2 screens down');
     const panel = await lens.openPanel(tabId, 'click');
     await expect(panel.getByTestId('cp-organic-table').locator('tbody tr')).toHaveCount(9);
     await expect(panel.getByTestId('shares')).toContainText('AI Overview');
@@ -157,7 +158,7 @@ test.describe('summary strip above Google results', () => {
     // As Google serves it since November 2026: every result link is Google's own redirect with a code.
     expect(await page.locator('#rso a[href^="http"]:not([href*="google."])').count()).toBe(0);
     expect(await page.locator('#rso h3').count()).toBeGreaterThanOrEqual(9);
-    await expect.poll(() => lens.stripText(page)).toContain('First organic at 1,431 px · below the fold');
+    await expect.poll(() => lens.stripText(page)).toContain('First result about 2 screens down');
 
     const panel = await lens.openPanel(tabId, 'click');
     const rows = panel.getByTestId('cp-organic-table').locator('tbody tr');
@@ -214,17 +215,18 @@ test.describe('Click Potential tab', () => {
 
     await expect(panel.getByTestId('cp-header')).toContainText('“best dentist in austin”');
     await expect(panel.getByTestId('cp-header')).toContainText('1280×800 viewport · Austin, Texas');
-    await expect(panel.getByTestId('cp-grade')).toContainText('F');
+    await expect(panel.getByTestId('cp-grade')).toContainText('Very crowded');
     await expect(panel.getByTestId('cp-grade')).toContainText('Estimate');
-    await expect(panel.getByTestId('cp-first-organic')).toContainText('Below the fold · 1.8 screens down');
+    await expect(panel.getByTestId('cp-first-organic')).toContainText('About 2 screens down');
+    await expect(panel.getByTestId('cp-first-organic')).toContainText('1,431 px from the top');
     await expect(panel.getByTestId('cp-organic-share')).toContainText('0.0%');
     await expect(panel.getByTestId('shares')).toContainText('AI Overview 26.8%');
     await expect(panel.getByTestId('shares')).toContainText('Ads 12.7%');
     await expect(panel.getByTestId('minimap')).toBeVisible();
 
     await panel.getByText('How this is calculated').click();
-    await expect(panel.getByTestId('cp-method')).toContainText('Score = 100 − position penalty − displacement penalty.');
-    await expect(panel.getByTestId('cp-method')).toContainText('not a click-through-rate prediction');
+    await expect(panel.getByTestId('cp-method')).toContainText('Room for regular results = 100 − position penalty − displacement penalty.');
+    await expect(panel.getByTestId('cp-method')).toContainText('not a prediction of clicks');
 
     // Every organic result with pixel position and fold status; tracked domains marked.
     const rows = panel.getByTestId('cp-organic-table').locator('tbody tr');
@@ -234,7 +236,7 @@ test.describe('Click Potential tab', () => {
     await expect(rows.nth(5)).toContainText('You');
     await expect(rows.nth(5)).toContainText('2,475 px');
     await expect(panel.getByTestId('cp-tracked')).toContainText('Lakeside Smiles');
-    await expect(panel.getByTestId('cp-summary')).toContainText('BrightPath Dental is organic result #6');
+    await expect(panel.getByTestId('cp-summary')).toContainText('BrightPath Dental is result #6');
     await expect(panel.getByTestId('summary-source').first()).toContainText('No AI was used');
     expect(lens.errors).toEqual([]);
   });
@@ -254,7 +256,7 @@ test.describe('Click Potential tab', () => {
     await expect(panel2.getByTestId('history-table')).toContainText('1024×700');
 
     // Away from Google, the tab shows history for every keyword.
-    await lens.open(U.serpPlain!).then(({ tabId }) => lens.openPanel(tabId, 'click').then((p) => expect(p.getByTestId('cp-grade')).toContainText('A')));
+    await lens.open(U.serpPlain!).then(({ tabId }) => lens.openPanel(tabId, 'click').then((p) => expect(p.getByTestId('cp-grade')).toContainText('Open')));
     const plain = await lens.open(U.plainPage!);
     const elsewhere = await lens.openPanel(plain.tabId, 'click');
     await expect(elsewhere.getByTestId('cp-not-serp')).toBeVisible();

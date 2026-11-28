@@ -22,7 +22,7 @@ This policy describes what the extension reads, what it stores, and what leaves 
 
 **Other pages, only when you ask.** On any other site the extension has no access until you click its toolbar icon, use its keyboard shortcut, or choose it from the right-click menu on that page. It then reads that page's text, links, headings and styling. Access ends when the tab leaves that site.
 
-**Pages you choose to scan, compare or brief.** Three features read further pages: "Scan sources" reads pages cited by a results page or AI answer, "New or Noise" reads pages that compete with yours (and your own page, when you name it by its address), and "Instant Brief" reads up to eight pages of a business website you name by its address. Before any of them runs, Chrome asks you to allow each site by name. Your browser fetches those pages without sending cookies. When the business website is open in your tab, "Instant Brief" reads its pages through that tab instead.
+**Pages you choose to scan, compare or brief.** Three features read further pages: "Scan sources" reads pages cited by a results page or AI answer, "Content check" reads pages that compete with yours (and your own page, when you name it by its address), and "Site brief" reads up to eight pages of a business website you name by its address. Before any of them runs, Chrome asks you to allow each site by name. Your browser fetches those pages without sending cookies. When the business website is open in your tab, "Site brief" reads its pages through that tab instead.
 
 **Archived copies of a page.** When you look up a page's history, the extension requests archived copies of that page from the Internet Archive (web.archive.org).
 
@@ -57,7 +57,7 @@ You can disconnect at any time in Settings. Disconnecting deletes the token and 
 
 ## On-device AI
 
-"New or Noise" compares sentences using a small language model that is included in the extension and runs entirely in your browser. Nothing is uploaded for this.
+"Content check" compares sentences using a small language model that is included in the extension and runs entirely in your browser. Nothing is uploaded for this.
 
 If you opt in to Chrome's built-in AI in Settings, summaries can be rewritten by a model that Chrome runs on your device. Nothing is sent to us or, according to Google, to Google for this.
 

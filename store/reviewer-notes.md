@@ -9,25 +9,25 @@ Legiit Lens is an SEO analysis tool. Single purpose: it shows how visible a web 
 HOW TO TEST (about 5 minutes)
 
 1. After install an onboarding page opens. Pin the extension. The first time the side panel opens, it asks for an email address: enter any address you can receive mail at and click Start. The tools open. To connect a free Legiit account, type the 6-digit code from the email and click Verify.
-2. Click Potential: search anything on google.com. A thin "Legiit Lens" strip appears above the results (it can be hidden). Click "Open panel" on the strip: the side panel shows where the first organic result starts and what fills the first screen.
-3. Why Not Me: in the panel open Settings and add a brand and a competitor (name + domain). Go back to the results page and open the "Why Not Me" tab. "Scan sources" asks Chrome for permission to read the specific cited sites it lists; you can decline.
+2. This search: search anything on google.com. A thin "Legiit Lens" strip appears above the results (it can be hidden). Click "Open panel" on the strip: the side panel shows where the first organic result starts and what fills the first screen.
+3. Who's beating me: in the panel open Settings and add a brand and a competitor (name + domain). Go back to the results page and open the "Who's beating me" tab. "Scan sources" asks Chrome for permission to read the specific cited sites it lists; you can decline.
 4. Access to other pages: open any normal website and look at the panel. It says it has no access. Click the toolbar icon (or press Alt+Shift+L, or right-click > "Analyze this page with Legiit Lens"): the panel now shows that page. This is activeTab; there is no standing access to all sites.
-5. Instant Brief: on a business website, after step 4, open "Instant Brief" > "Build brief".
-6. Rewind: open "Rewind" > "Look up history". It reads the Internet Archive (web.archive.org).
-7. New or Noise: with a Google results tab open, go to an article that ranks for that search, invoke the extension, open "New or Noise" > "Compare". Chrome asks for the competing sites by name.
+5. Site brief: on a business website, after step 4, open "Site brief" > "Build brief".
+6. What changed: open "What changed" > "Look up history". It reads the Internet Archive (web.archive.org).
+7. Content check: with a Google results tab open, go to an article that ranks for that search, invoke the extension, open "Content check" > "Compare". Chrome asks for the competing sites by name.
 
 PERMISSIONS
 - activeTab + scripting: read the current page only after the user invokes the extension on it. One packaged file (page-agent.js) is injected; no remote or generated code.
 - storage: settings on the device (chrome.storage.local, restricted to trusted contexts).
 - sidePanel: the main UI.
 - contextMenus: "Analyze this page" and "Check the selected text". A context-menu click is one of the gestures that grants activeTab.
-- Host permissions: only web.archive.org (Rewind) and lens.legiit.com (the Legiit account: the first screen's email and code, then saves the user confirms).
+- Host permissions: only web.archive.org (What changed) and lens.legiit.com (the Legiit account: the first screen's email and code, then saves the user confirms).
 - Content scripts: Google Search (/search on each Google country domain; match patterns cannot use a wildcard TLD) and chatgpt.com, gemini.google.com, perplexity.ai, copilot.microsoft.com. They only read the page the user opened. No automated queries are sent to Google or any AI site, and Google's ads and results are never hidden, moved or restyled. The strip is added above the results inside a closed shadow root.
 - optional_host_permissions (*://*/*): never granted at install and never requested as a wildcard. Specific sites are requested at the moment the user starts a scan, after the UI names them and says why. Granted sites are listed and removable under Settings > Privacy and data.
 
 REMOTE CODE: NONE
 All JavaScript and WebAssembly is in the package. The build is not minified so it can be read directly.
-- 'wasm-unsafe-eval' is in the CSP only to compile the bundled ONNX Runtime WebAssembly (/ort) that runs a bundled sentence-embedding model (/models, all-MiniLM-L6-v2) on the device for the "New or Noise" feature.
+- 'wasm-unsafe-eval' is in the CSP only to compile the bundled ONNX Runtime WebAssembly (/ort) that runs a bundled sentence-embedding model (/models, all-MiniLM-L6-v2) on the device for the "Content check" feature.
 - The bundled transformers.js / ONNX Runtime libraries contain the strings "huggingface.co" and "cdn.jsdelivr.net" as their default download locations. They are never contacted: remote models are disabled (env.allowRemoteModels = false), paths point into the package, and the worker replaces fetch with one that rejects any address outside the extension (see src/similarity/embed.worker.ts in the source, assets/embed.worker-*.js in the package).
 - Selector definitions are JSON data files in the package.
 

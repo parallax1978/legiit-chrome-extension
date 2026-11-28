@@ -8,8 +8,8 @@
  */
 import { PRODUCT_NAME } from '@/config/constants';
 import type { ClickPotential } from '@/features/click-potential/metrics';
-import { foldLabel } from '@/features/click-potential/metrics';
-import { formatInt, formatPercent } from '@/lib/text';
+import { CROWDING_LABELS, CROWDING_MEANING, crowdingOf, howFarDown } from '@/features/overview/words';
+import { formatInt } from '@/lib/text';
 
 export interface StripCallbacks {
   onOpenPanel: () => void;
@@ -39,8 +39,8 @@ button.primary { background: #2563eb; color: #fff; }
 button.ghost { color: #1e2a55; border: 1px solid #c7d2fe; background: #fff; }
 button:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
 button[disabled] { opacity: .6; cursor: default; }
-@container (max-width: 900px) { .chip.mine { display: none; } }
-@container (max-width: 760px) { .chip.share { display: none; } }
+/* On a narrow page the user's own place stays; where the results start is what gives way. */
+@container (max-width: 620px) { .chip.first { display: none; } }
 @media (prefers-color-scheme: dark) {
   .bar { background: #1b2238; border-color: #3b4a7a; color: #e5e9ff; }
   .chip { background: #232c48; border-color: #3b4a7a; }
@@ -67,6 +67,8 @@ export class Strip {
   private model: ClickPotential | null = null;
   private saved = false;
   private showSave = true;
+  /** True when the user tracks a site of their own: the strip then says so when it has no result here. */
+  private hasMine = false;
 
   /**
    * @param anchor  The strip is inserted immediately before this element.
@@ -112,7 +114,8 @@ export class Strip {
     return this.host.isConnected;
   }
 
-  update(model: ClickPotential, options: { saved: boolean; showSave: boolean }): void {
+  update(model: ClickPotential, options: { saved: boolean; showSave: boolean; hasMine?: boolean }): void {
+    this.hasMine = options.hasMine === true;
     this.model = model;
     this.saved = options.saved;
     this.showSave = options.showSave;
@@ -161,17 +164,23 @@ export class Strip {
           if (title) node.title = title;
           return node;
         };
+        // Plain words: where the user is, where the results start, and how crowded the page is.
+        const mine = cp.tracked.filter((t) => t.owner === 'mine').sort((a, b) => (a.position ?? 999) - (b.position ?? 999))[0];
+        if (mine) {
+          const where = howFarDown(mine.top, cp.viewport.height);
+          bar.appendChild(chip('You', `#${mine.position}${where ? ` · ${where}` : ''}`, 'mine', `${mine.name}: result #${mine.position} on this page`));
+        } else if (this.hasMine) {
+          bar.appendChild(chip('You', 'not on this page', 'mine', 'None of your sites has a result on this page'));
+        }
         bar.appendChild(
           cp.firstOrganicTop === null
-            ? chip('First organic result', 'none found')
-            : chip('First organic at', `${formatInt(cp.firstOrganicTop)} px · ${foldLabel(cp.firstOrganicFold).toLowerCase()}`, '', 'Distance from the top of the page to the first organic result'),
+            ? chip('First result', 'none found', 'first')
+            : chip('First result', howFarDown(cp.firstOrganicTop, cp.viewport.height), 'first', `The first regular result starts ${formatInt(cp.firstOrganicTop)} px from the top of the page`),
         );
-        bar.appendChild(chip('Organic share', formatPercent(cp.organicShare), 'share', 'Share of the first screen covered by organic results'));
+        const crowding = crowdingOf(cp.grade.letter);
         bar.appendChild(
-          chip('Click potential', `${cp.grade.letter} · estimate`, `grade-${cp.grade.letter}`, `Estimated organic click potential ${cp.grade.score}/100. Open the panel to see how it is calculated.`),
+          chip('This search:', CROWDING_LABELS[crowding].toLowerCase(), `grade-${cp.grade.letter}`, `${CROWDING_MEANING[crowding]} Room for regular results: ${cp.grade.score} out of 100 (an estimate). Open the panel to see what that means for you.`),
         );
-        const mine = cp.tracked.filter((t) => t.owner === 'mine').sort((a, b) => (a.position ?? 999) - (b.position ?? 999))[0];
-        if (mine) bar.appendChild(chip('You', `#${mine.position} · ${foldLabel(mine.fold).toLowerCase()}`, 'mine', `${mine.name}: organic result #${mine.position}`));
       }
 
       if (this.showSave) {

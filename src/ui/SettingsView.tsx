@@ -515,7 +515,7 @@ function PrivacySection() {
           />
           <span>Show the summary strip above Google results</span>
         </label>
-        <Field label="Save Click Potential snapshots" hint="Snapshots are stored on this device only.">
+        <Field label="Remember the searches I look at" hint="They fill “My keywords”. Stored on this device only.">
           <select
             value={settings.snapshots.autoSave}
             onChange={(e) => {

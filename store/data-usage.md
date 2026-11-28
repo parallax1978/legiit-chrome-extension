@@ -13,7 +13,7 @@ Two things to know before filling it in:
 |---|---|---|---|
 | Text, links and layout of Google results pages the user opens | the page, read by the content script | Snapshots (keyword, time, viewport, the location text Google prints on the page, result positions) in IndexedDB, when the panel is open or the user presses Save | Only if the user is connected to Legiit and confirms "Save to Command Center" |
 | The latest answer and cited links on an AI site | the page, when the user opens the panel there | No | Only inside a gap list the user confirms saving to Legiit |
-| Text and links of a page the user invoked the extension on | the page | Briefs in IndexedDB | Only inside a brief or a New or Noise result the user confirms sending to Legiit |
+| Text and links of a page the user invoked the extension on | the page | Briefs in IndexedDB | Only inside a brief or a Content check result the user confirms sending to Legiit |
 | Pages the user chose to scan, compare or brief | fetched by the browser after Chrome's permission prompt | A digest (title, text blocks, links) cached in IndexedDB | No |
 | Wayback Machine captures | web.archive.org | Extracted facts cached in IndexedDB | The address being looked up is sent to web.archive.org |
 | Tracked brands and competitors, agency name and logo | typed by the user, or pre-filled from their Legiit account | `chrome.storage.local` | No (they came from, or go to, the user's own Legiit account only through a confirmed save) |
@@ -30,7 +30,7 @@ There is no analytics, no advertising, no error reporting and no account of our 
 | Financial and payment information | **No** | |
 | Authentication information | **Yes** | The Legiit API token the user pastes, stored on the device and sent only to the Legiit API |
 | Personal communications | **No** | The extension does not read e-mail, messages or chats between people. It does read the question and the assistant's answer on an AI site when the user opens the panel there. *If counsel reads an AI conversation as a personal communication, answer Yes.* |
-| Location | **Yes** | Click Potential records the place name Google prints on the results page (for example "Austin, Texas") with each snapshot, because results differ by location. It is not read from the device's location services |
+| Location | **Yes** | This search records the place name Google prints on the results page (for example "Austin, Texas") with each snapshot, because results differ by location. It is not read from the device's location services |
 | Web history | **Yes** | Snapshots record the search keyword, time and result addresses of Google results pages the user viewed with the panel open or chose to save. Stored on the device |
 | User activity | **No** | No clicks, keystrokes, scrolling or mouse movement are recorded |
 | Website content | **Yes** | The text, links and layout of pages the user asks the extension to analyze |

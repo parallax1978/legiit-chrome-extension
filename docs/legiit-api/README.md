@@ -34,21 +34,21 @@ This folder is the specification. The mock server and the check are tools in the
 
 ### What the extension does
 
-Legiit Lens adds a side panel to Chrome: a panel that opens next to the page. It measures the page that is open and shows the result in five tabs. A sixth tab holds the settings. The first screen asks for an email address (endpoint 11), and then every tool works. A 6-digit code from the email connects a free Legiit account (endpoint 12). Once it is connected, the tabs get buttons that send a result to Legiit, as far as the account's plan includes them:
+Legiit Lens adds a side panel to Chrome: a panel that opens next to the page. It measures the page that is open. It opens on "Overview", which says in plain words what the page means for the user and sends nothing to Legiit. The measurements are in five tools under "Tools", and "Settings" is the third place. The first screen asks for an email address (endpoint 11), and then every tool works. A 6-digit code from the email connects a free Legiit account (endpoint 12). Once it is connected, the tools get buttons that send a result to Legiit, as far as the account's plan includes them:
 
-| Tab | What the user sees | What it sends to Legiit |
+| Tool | What the user sees | What it sends to Legiit |
 | --- | --- | --- |
-| Click Potential | On a Google results page: how far down the first normal result starts, and what fills the screen above it | A visibility snapshot (endpoint 4) |
-| Why Not Me | On a Google results page or in an AI answer: the places where a competitor is named and the user's own brand is not | A gap list (endpoint 5) |
-| Rewind | What changed on a page over time, read from the Wayback Machine | Nothing. It reads the dates of search-industry events (endpoint 9) |
-| New or Noise | Which sentences of a text say something that competing pages do not say | A content analysis (endpoint 7) |
-| Instant Brief | A client brief, written from the website of a business | A workspace (endpoint 8) |
+| This search | On a Google results page: how far down the first normal result starts, and what fills the screen above it | A visibility snapshot (endpoint 4) |
+| Who's beating me | On a Google results page or in an AI answer: the places where a competitor is named and the user's own brand is not | A gap list (endpoint 5) |
+| What changed | What changed on a page over time, read from the Wayback Machine | Nothing. It reads the dates of search-industry events (endpoint 9) |
+| Content check | Which sentences of a text say something that competing pages do not say | A content analysis (endpoint 7) |
+| Site brief | A client brief, written from the website of a business | A workspace (endpoint 8) |
 
 The Settings tab, which also opens as a page of its own, holds the token, the chosen business, the user's own brands and their competitors (endpoints 1, 2, 3 and 6). Each tab can also ask Legiit's AI to rewrite its text (endpoint 10). Words such as "business", "snapshot" and "gap" are explained in [section 14](#14-words-used-in-this-kit).
 
-<img src="images/side-panel-tabs.png" width="420" alt="The side panel on a Google results page, with its six tabs and the button Save to Command Center">
+<img src="images/side-panel-tabs.png" width="420" alt="The side panel on a Google results page, with the five tools under Tools and the button Save to Command Center">
 
-*The side panel while a Google results page is open: the five feature tabs and Settings. On the Click Potential tab, the button "Save to Command Center" starts the save of a visibility snapshot (endpoint 4).*
+*The side panel while a Google results page is open. It has three places: Overview (where it opens: a plain-words summary of the page, which sends nothing), Tools and Settings. The five tools are under Tools. In “This search”, the button "Save to Command Center" starts the save of a visibility snapshot (endpoint 4).*
 
 ## 1. What to build
 
@@ -154,8 +154,8 @@ sequenceDiagram
     U->>E: confirms
     E->>A: POST the save or AI endpoint
     A-->>E: id and link, or the text
-    Note over U,A: Open the Rewind tab
-    U->>E: opens the Rewind tab
+    Note over U,A: Open “What changed” under Tools
+    U->>E: opens “What changed” under Tools
     E->>A: GET /v1/industry-pulse
 ```
 
@@ -188,7 +188,7 @@ What causes a request:
 | has other extension pages open when the token changes | `GET /v1/session` from each of them |
 | sees the settings screen while connected | `GET /v1/businesses` |
 | chooses a business | `GET /v1/businesses/{businessId}` |
-| opens the Rewind tab while connected | `GET /v1/industry-pulse` |
+| opens “What changed” under Tools while connected | `GET /v1/industry-pulse` |
 | confirms a save or an AI rewrite | one `POST` |
 
 So a normal user causes a few requests per minute at most.
@@ -337,13 +337,13 @@ The column "The same content under a new key" needs no key. Never de-duplicate s
 | Capability | What the user gets | Endpoints behind it |
 | --- | --- | --- |
 | `businesses` | The business drop-down in Settings, and tracked brands pre-filled from the chosen business. Every save into a business needs one to be chosen | 2, 3 |
-| `visibilitySnapshots` | "Save to Command Center" on the Click Potential tab | 4 |
-| `gapLists` | "Save to Command Center" on the Why Not Me tab | 5 |
+| `visibilitySnapshots` | "Save to Command Center" in “This search” (under Tools) | 4 |
+| `gapLists` | "Save to Command Center" in “Who's beating me” (under Tools) | 5 |
 | `competitors` | "Add to Command Center" next to a competitor in Settings | 6 |
-| `contentEditor` | "Send to content editor" on the New or Noise tab | 7 |
-| `workspaces` | "Open in Command Center" on the Instant Brief tab | 8 |
-| `industryPulse` | Date shortcuts on the Rewind tab | 9 |
-| `ai` | "Rewrite with Legiit AI" on four tabs, and "Improve drafts with Legiit AI" on the Instant Brief tab | 10 |
+| `contentEditor` | "Send to content editor" in “Content check” (under Tools) | 7 |
+| `workspaces` | "Open in Command Center" in “Site brief” (under Tools) | 8 |
+| `industryPulse` | Date shortcuts in “What changed” (under Tools) | 9 |
+| `ai` | "Rewrite with Legiit AI" in four tools, and "Improve drafts with Legiit AI" in “Site brief” (under Tools) | 10 |
 
 - The smallest useful launch is `GET /v1/session` returning `"capabilities": []`. The user can connect and sees no Legiit feature. Add capabilities as endpoints go live.
 - Capabilities belong to the user: every token of a user gets the same list. Use them for plans too: leave out what the user's plan does not include.
@@ -640,12 +640,12 @@ Then open `chrome://extensions`, switch on Developer mode, choose "Load unpacked
 1. Open the side panel for the first time. It asks for an email: enter a new one and click Start. The tools open. Type the code from the email and click Verify: "Legiit connected" appears. In the extension's settings, click Disconnect, paste a token of your test account and click Connect. Your name and plan appear.
 2. Choose a business. Its brand appears under "My brands" and its competitors under "Competitors", marked "From Command Center".
 3. In Settings, under "Competitors", click "Add a competitor", type a name, then click "Add to Command Center", read the JSON, click "Send to Legiit". "Saved" appears with a link that opens the item.
-4. Open the website of any business and click the extension's icon. On the Instant Brief tab click "Build brief", then "Open in Command Center", and send. The link lands in the new workspace. With the `ai` capability on, also click "Improve drafts with Legiit AI".
-5. On the New or Noise tab choose "Pasted text" and paste a few paragraphs. Under "Compare against" choose "Pasted URLs", paste the URLs of two articles, and click "Compare"; Chrome asks once whether the extension may read those sites. Then click "Send to content editor", read the JSON, click "Send to Legiit", and open the link next to "Saved".
-6. Open the Rewind tab, enter the URL of a page that has existed for some years, and click "Look up history"; Chrome asks once whether the extension may read the Wayback Machine. Above the timeline, "Industry Pulse dates" shows the dates of your events.
-7. Open a Google results page and click the extension's icon. On the Click Potential tab click "Save to Command Center", read the JSON, click "Send to Legiit", and open the link next to "Saved".
+4. Open the website of any business and click the extension's icon. In “Site brief” (under Tools) click "Build brief", then "Open in Command Center", and send. The link lands in the new workspace. With the `ai` capability on, also click "Improve drafts with Legiit AI".
+5. In “Content check” (under Tools) choose "Pasted text" and paste a few paragraphs. Under "Compare against" choose "Pasted URLs", paste the URLs of two articles, and click "Compare"; Chrome asks once whether the extension may read those sites. Then click "Send to content editor", read the JSON, click "Send to Legiit", and open the link next to "Saved".
+6. Open “What changed” under Tools, enter the URL of a page that has existed for some years, and click "Look up history"; Chrome asks once whether the extension may read the Wayback Machine. Above the timeline, "Industry Pulse dates" shows the dates of your events.
+7. Open a Google results page and click the extension's icon. In “This search” (under Tools) click "Save to Command Center", read the JSON, click "Send to Legiit", and open the link next to "Saved".
 8. On the same tab click "Rewrite with Legiit AI". The dialog "Send to Legiit AI?" opens: read the JSON, click "Send". The summary is replaced by your model's text.
-9. Search Google for something where one of the business's competitors ranks (the competitor's name works). On the Why Not Me tab the gap list has rows: click "Save to Command Center" above it, send it, and open the link next to "Saved". Without Google: open "Paste an answer instead" on that tab and paste a text that names a competitor.
+9. Search Google for something where one of the business's competitors ranks (the competitor's name works). In “Who's beating me” (under Tools) the gap list has rows: click "Save to Command Center" above it, send it, and open the link next to "Saved". Without Google: open "Paste an answer instead" on that tab and paste a text that names a competitor.
 10. Revoke the token in Command Center. Close the side panel and open it again, or reload the settings page. It says that the token was not accepted and asks for a new one.
 11. With a token of user A, save into a business of user B (change the business id in a `curl` call). The answer is `404` `not_found`.
 
@@ -801,9 +801,9 @@ Changes in `1.0.0-draft.4`. No field, no type and no limit of a request changed:
 | Brief | A client brief the extension writes from a business's website |
 | Avatar | A short description of a typical customer |
 | Capability | A feature of the API that can be switched on per user |
-| Side panel | The panel that Chrome opens next to a page. The extension shows its tabs there |
-| Tab | One part of the side panel: Click Potential, Why Not Me, Rewind, New or Noise, Instant Brief, and Settings ("What the extension does" at the top of this guide) |
-| Scan sources | A button on the Why Not Me tab. The extension then reads the pages that a results page or an AI answer cites, to see which competitors each page names and who to contact |
+| Side panel | The panel that Chrome opens next to a page. The extension shows Overview, Tools and Settings there |
+| Tool | One of the five parts of the side panel under "Tools": This search, Who's beating me, What changed, Content check and Site brief ("What the extension does" at the top of this guide). The panel opens on "Overview", which sends nothing to Legiit; "Settings" is the third place. Until November 2026 the tools were called Click Potential, Why Not Me, Rewind, New or Noise and Instant Brief: those names are still used in the code |
+| Scan sources | A button in “Who's beating me” (under Tools). The extension then reads the pages that a results page or an AI answer cites, to see which competitors each page names and who to contact |
 | Industry Pulse | Legiit's list of dated events in the search industry, for example Google updates (endpoint 9) |
 | Token | The secret text that a user creates in Command Center and pastes into the extension. It is sent with every request |
 | Extension team | The people who built the extension and this kit: "we" in this guide |

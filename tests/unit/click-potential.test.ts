@@ -179,17 +179,21 @@ describe('Click Potential on fixtures', () => {
 
   it('explains the numbers in plain language without an AI provider', () => {
     const lines = computeClickPotential(full, matcher).explanation;
-    expect(lines[0]).toBe('The first organic result starts 1,431 px from the top of the page — below the fold, 1.8 screens down at a 1280×800 viewport.');
+    // Plain words: screens instead of pixels up front, "crowded" instead of a letter. The pixels stay in brackets.
+    expect(lines[0]).toBe('The first result starts about 2 screens down (1,431 px from the top): people scroll before they see it.');
     expect(lines).toContain('Above it: Ads, AI Overview, Local pack.');
-    expect(lines.join('\n')).toContain('BrightPath Dental is organic result #6, 2,475 px down (below the fold).');
-    expect(lines[lines.length - 1]).toMatch(/^Estimated organic click potential: F \(0\/100/);
+    expect(lines).toContain('BrightPath Dental is result #6, about 3 screens down.');
+    expect(lines[lines.length - 1]).toBe('This search is very crowded: room for regular results is 0 out of 100 (an estimate).');
+    const open = computeClickPotential(plain, matcher).explanation;
+    expect(open[0]).toBe('The first result is on the first screen (152 px from the top).');
+    expect(open[open.length - 1]).toBe('This search is open: room for regular results is 100 out of 100 (an estimate).');
     const untracked = computeClickPotential(full, new BrandMatcher({ mine: [], competitors: [] })).explanation.join('\n');
-    expect(untracked).not.toContain('tracked domains');
+    expect(untracked).not.toContain('Your site');
   });
 
   it('says so when a tracked brand is missing from the page', () => {
     const other = new BrandMatcher({ mine: [{ id: 'x', name: 'Nowhere Dental', domains: ['nowhere.example'], aliases: [] }], competitors: [] });
-    expect(computeClickPotential(plain, other).explanation).toContain('None of your tracked domains has an organic result on this page.');
+    expect(computeClickPotential(plain, other).explanation).toContain('Your site has no result on this page.');
   });
 });
 

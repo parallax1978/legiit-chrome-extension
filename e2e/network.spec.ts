@@ -36,7 +36,7 @@ async function useEverything(lens: Lens, options: { brandsAlreadyTracked?: boole
   // Google results, in every fixture state, with the strip; the panel on one of them.
   for (const url of [U.serpFull!, U.serpPlain!, U.serpFeatured!, U.serpLocal!, U.serpChurn!, U.serpHidden!, U.serpAiMode!, U.serpUnrecognised!]) await lens.open(url);
   const serp = await lens.open(U.serpFull!);
-  await expect.poll(() => lens.stripText(serp.page)).toContain('Click potential');
+  await expect.poll(() => lens.stripText(serp.page)).toContain('This search:');
   const onSerp = await lens.openPanel(serp.tabId, 'click');
   await expect(onSerp.getByTestId('history-table')).toBeVisible();
   await lens.downloadText(onSerp, () => onSerp.getByTestId('cp-export').click());

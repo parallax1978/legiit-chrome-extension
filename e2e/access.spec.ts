@@ -134,15 +134,34 @@ test.describe('access to the current tab', () => {
     expect(lens.extensionRequests()).toEqual([]);
   });
 
-  test('the panel opens on the tab that fits the page', async ({ lens }) => {
+  test('the panel opens on the Overview, and "Tools" opens the tool that fits the page', async ({ lens }) => {
     const site = await lens.open(SITE);
     const onSite = await lens.openPanel(site.tabId);
     await lens.invoke(site.page);
+    await expect(onSite.getByTestId('tab-overview')).toHaveAttribute('aria-selected', 'true');
+    await expect(onSite.getByTestId('panel-overview')).toBeVisible();
+    // The five tools are out of the way until "Tools" is opened.
+    await expect(onSite.getByTestId('tab-brief')).toHaveCount(0);
+    await onSite.getByTestId('tab-tools').click();
     await expect(onSite.getByTestId('tab-brief')).toHaveAttribute('aria-selected', 'true');
+    await expect(onSite.getByTestId('tab-brief')).toHaveText('Site brief');
+
     const serp = await lens.open(scenario.urls.serpFull!);
-    await expect((await lens.openPanel(serp.tabId)).getByTestId('tab-click')).toHaveAttribute('aria-selected', 'true');
+    const onSerp = await lens.openPanel(serp.tabId);
+    await expect(onSerp.getByTestId('tab-overview')).toHaveAttribute('aria-selected', 'true');
+    await onSerp.getByTestId('tab-tools').click();
+    await expect(onSerp.getByTestId('tab-click')).toHaveAttribute('aria-selected', 'true');
+    // The tool the user opened last is the one "Tools" comes back to.
+    await onSerp.getByTestId('tab-noise').click();
+    await onSerp.getByTestId('tab-overview').click();
+    await onSerp.getByTestId('tab-tools').click();
+    await expect(onSerp.getByTestId('tab-noise')).toHaveAttribute('aria-selected', 'true');
+
     const chat = await lens.open(scenario.urls.gemini!);
-    await expect((await lens.openPanel(chat.tabId)).getByTestId('tab-why')).toHaveAttribute('aria-selected', 'true');
+    const onChat = await lens.openPanel(chat.tabId);
+    await expect(onChat.getByTestId('tab-overview')).toHaveAttribute('aria-selected', 'true');
+    await onChat.getByTestId('tab-tools').click();
+    await expect(onChat.getByTestId('tab-why')).toHaveAttribute('aria-selected', 'true');
   });
 
   test('opens the onboarding page once, on install', async ({ lens }) => {

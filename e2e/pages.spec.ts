@@ -8,7 +8,7 @@ const bundledGooglePack = JSON.parse(readFileSync(join(ROOT, 'src/selectors/goog
 test.describe('options page', () => {
   test('tracked brands are cleaned up, saved and used straight away', async ({ lens }) => {
     const serp = await lens.open(scenario.urls.serpFull!);
-    await expect.poll(() => lens.stripText(serp.page)).toContain('Click potential');
+    await expect.poll(() => lens.stripText(serp.page)).toContain('This search:');
     expect(await lens.stripText(serp.page)).not.toContain('You #');
 
     const options = await lens.openExtensionPage('options.html');
@@ -36,7 +36,7 @@ test.describe('options page', () => {
     await expect.poll(async () => (await stored()).competitors).toMatchObject([{ name: 'Lakeside Smiles', domains: ['lakesidesmiles.example'] }]);
 
     // The results page that was already open picks the brands up without a reload.
-    await expect.poll(() => lens.stripText(serp.page)).toContain('You #6 · below the fold');
+    await expect.poll(() => lens.stripText(serp.page)).toContain('You #6 · about 3 screens down');
 
     // Still there after closing and reopening the page; removable.
     await options.reload();
@@ -104,7 +104,7 @@ test.describe('options page', () => {
     // Whatever the browser answers, every feature still has its template text and nothing is requested.
     const serp = await lens.open(scenario.urls.serpFull!);
     const panel = await lens.openPanel(serp.tabId, 'click');
-    await expect(panel.getByTestId('cp-summary')).toContainText('The first organic result starts 1,431 px from the top of the page');
+    await expect(panel.getByTestId('cp-summary')).toContainText('The first result starts about 2 screens down (1,431 px from the top)');
     expect(lens.extensionRequests()).toEqual([]);
     expect(lens.errors).toEqual([]);
   });
@@ -114,7 +114,7 @@ test.describe('onboarding page', () => {
   test('asks only for an email, and keeps what it does, reads and never sends one click away', async ({ lens }) => {
     const onboarding = await lens.openExtensionPage('onboarding.html');
     await expect(onboarding.getByTestId('onboarding')).toContainText('Shows how visible a web page or brand is in Google results and AI answers, and what explains it.');
-    for (const feature of ['Click Potential', 'Why Not Me', 'Rewind', 'New or Noise', 'Instant Brief']) await expect(onboarding.getByTestId('onboarding-does')).toContainText(feature);
+    for (const feature of ['Overview', 'This search', 'Who’s beating me', 'Content check', 'What changed', 'Site brief']) await expect(onboarding.getByTestId('onboarding-does')).toContainText(feature);
     await expect(onboarding.getByTestId('onboarding-does')).toContainText('Your email opens every tool.');
     await expect(onboarding.getByTestId('onboarding-signup')).toContainText('Enter your email to start');
     await expect(onboarding.getByTestId('signup-email')).toBeVisible();
@@ -191,7 +191,7 @@ test.describe('selector health check', () => {
 
     // A page opened afterwards is read with the override, and reads the same.
     const serp = await lens.open(scenario.urls.serpFull!);
-    await expect.poll(() => lens.stripText(serp.page)).toContain('Click potential');
+    await expect.poll(() => lens.stripText(serp.page)).toContain('This search:');
     await health.bringToFront();
     await health.getByTestId('health-run').click();
     await expect(health.getByTestId('health-report')).toContainText('2099.01.01-1');

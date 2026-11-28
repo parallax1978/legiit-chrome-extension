@@ -61,12 +61,14 @@ async function save(lens: Lens, name: string, page: Page, panel: Page): Promise<
 
 test.describe.configure({ mode: 'serial' });
 
-test('1 · Click Potential on a Google results page', async ({ lens }) => {
+test('1 · The Overview on a Google results page', async ({ lens }) => {
   await lens.trackScenarioBrands();
   const { page, tabId } = await lens.open(U.serpFull!);
-  await expect.poll(() => lens.stripText(page)).toContain('Click potential');
-  const panel = await panelFor(lens, tabId, 'click');
-  await expect(panel.getByTestId('cp-grade')).toBeVisible();
+  await expect.poll(() => lens.stripText(page)).toContain('This search:');
+  // The first screen of the panel: where the user stands, in a sentence, and what to do next.
+  const panel = await panelFor(lens, tabId, 'overview');
+  await expect(panel.getByTestId('overview-headline')).toBeVisible();
+  await expect(panel.getByTestId('keyword-row')).toBeVisible();
   await save(lens, '1-click-potential.png', page, panel);
 });
 

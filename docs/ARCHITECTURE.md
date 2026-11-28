@@ -60,29 +60,35 @@ Content-script events are accepted only when the sender's tab is on a Google Sea
 
 Without the `tabs` permission the panel never sees a tab's address by itself; it learns it from the agent's answer. The panel follows the active tab, and re-probes on navigation and when the service worker reports an invocation.
 
+## The Overview — `src/features/overview/`, `src/ui/tabs/OverviewTab.tsx`
+
+The first screen of the panel. It adds no measurement of its own: `overview.ts` turns what the five features already read into one sentence, a few facts and up to three next steps (`buildResultsOverview`, `buildAnswerOverview`, `buildPageOverview`), `words.ts` holds the plain words (screens instead of pixels, "open / crowded / very crowded" instead of the letter grade), and `keywords.ts` builds "My keywords" from the stored measurements. All three are pure and tested in `tests/unit/overview.test.ts`. The measurement of a results page is shared with "This search" through `src/ui/results-page.ts`, so the page is stored once. The links to the Legiit marketplace are in `src/config/legiit-links.ts`.
+
+In the panel the features are shown under "Tools" with names that say what they give. The code keeps their first names: Click Potential (`click`), Why Not Me (`why`), Rewind (`rewind`), New or Noise (`noise`), Instant Brief (`brief`).
+
 ## The five features
 
 Feature logic is plain TypeScript under `src/features/`, with no browser APIs, so it is unit-tested directly. The tabs in `src/ui/tabs/` connect it to the page and the UI.
 
-### A. Click Potential — `src/features/click-potential/`
+### A. This search — `src/features/click-potential/`
 
 `src/serp/parse.ts` turns the results page into `SerpData`: blocks (AI Overview, ads, local pack, featured snippet, People also ask, videos, images, shopping, forums, top stories, knowledge panel) and organic results, each with its rectangle in page coordinates. `metrics.ts` computes: where the first organic result starts, each block type's share of the first screen (union of rectangles, so overlaps are not counted twice), fold status for every organic result and tracked domain, and the grade (formula in `GRADE_METHOD`, shown in the UI, see DECISIONS D-17). `snapshot.ts` stores one record per keyword and moment (viewport, location text, positions) in IndexedDB and exports CSV.
 
-### B. Why Not Me — `src/features/why-not-me/`
+### B. Who's beating me — `src/features/why-not-me/`
 
 `presence.ts` marks, per surface, whether the user's brand and each competitor appear: AI Overview citations, organic, local pack, forums, videos on Google (including AI Mode); answer text and cited links on the AI sites (`src/answers/read.ts`). `scan.ts` picks the cited and list-style pages (at most 12), which the panel fetches after Chrome granted those sites; `analysePage` reports which competitors a page names, whether it names the user's brand, and contact, author and submission links (`src/extract/links.ts`). For AI answers, `passages.ts` finds the one or two passages of each page closest to the answer. `gap.ts` builds the sortable gap list and its CSV. "Paste the answer" (`answerFromPastedText`) covers pages whose markup is not recognised.
 
-### C. Rewind — `src/features/rewind/`
+### C. What changed — `src/features/rewind/`
 
 `cdx.ts` builds the Wayback CDX query (`output=json`, `filter=statuscode:200`, `collapse=digest`), parses it and samples at most 24 captures. `load.ts` fetches raw captures (`id_`) two at a time with shared back-off, and caches. `src/extract/page-facts.ts` reads title, meta description, canonical, meta robots, H1–H3, main-content word count, internal and external link counts, JSON-LD types and hreflang count. `diff.ts` builds the dated timeline between consecutive distinct captures, a two-date comparison, and "changes in the N days before a date".
 
-### D. New or Noise — `src/features/new-or-noise/`, `src/similarity/`
+### D. Content check — `src/features/new-or-noise/`, `src/similarity/`
 
 Main content is extracted with the bundled Readability (`src/extract/main-content.ts`) and split into sentences. `SimilarityEngine` has two implementations: `EmbeddingEngine` (worker, bundled MiniLM model) and `LexicalEngine` (stemmed word overlap). `classify.ts` labels each sentence by how many comparison pages contain a sentence above the threshold, computes the share of "only here" words, and lists points most competitors make that the page does not. If the model cannot load, the lexical engine is used and the UI says so. Highlighting on the live page is `src/content/highlighter.ts` (CSS Custom Highlight API; overlay fallback).
 
-### E. Instant Brief — `src/features/instant-brief/`
+### E. Site brief — `src/features/instant-brief/`
 
-`crawl.ts` picks up to 8 same-site navigation pages; the page agent fetches them inside the tab. `extract.ts` reads business name, phones, e-mails, addresses, service areas, services, social profiles, JSON-LD organisation data, logo, brand colours, a tone sample, testimonials and focus-keyword candidates. `issues.ts` lists on-page issues. `compose.ts` assembles the sections (Business, Offer, Customers with three draft avatars, Competitors, Search presence from saved Click Potential and Why Not Me data, Issues, Next steps). `markdown.ts` and the print page export it with the agency's name and logo.
+`crawl.ts` picks up to 8 same-site navigation pages; the page agent fetches them inside the tab. `extract.ts` reads business name, phones, e-mails, addresses, service areas, services, social profiles, JSON-LD organisation data, logo, brand colours, a tone sample, testimonials and focus-keyword candidates. `issues.ts` lists on-page issues. `compose.ts` assembles the sections (Business, Offer, Customers with three draft avatars, Competitors, Search presence from saved This search and Who's beating me data, Issues, Next steps). `markdown.ts` and the print page export it with the agency's name and logo.
 
 ## Selector packs
 

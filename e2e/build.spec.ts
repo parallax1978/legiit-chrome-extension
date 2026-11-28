@@ -281,6 +281,7 @@ test.describe('network call sites in the package', () => {
       'www.pinterest.com': 'platform label on a results page to its site; text only',
       'medium.com': 'platform label on a results page to its site; text only',
       'encrypted-tbn0.gstatic.com': 'example in a code comment: the address of a site icon on a results page',
+      'legiit.com': 'links to pages of the Legiit marketplace in the Overview; the user clicks them, the extension requests none',
       'www.': 'a string fragment used when normalising domains',
     };
     const unknown = new Map<string, string>();

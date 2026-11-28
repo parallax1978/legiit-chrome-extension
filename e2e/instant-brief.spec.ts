@@ -78,7 +78,7 @@ test.describe('Instant Brief', () => {
 
   test('lets the user add competitors by hand or pull them from an open results page', async ({ lens }) => {
     const serp = await lens.open(scenario.urls.serpLocal!);
-    await expect.poll(() => lens.stripText(serp.page)).toContain('Click potential');
+    await expect.poll(() => lens.stripText(serp.page)).toContain('This search:');
     const { page, tabId } = await lens.open(SITE);
     const panel = await lens.openPanel(tabId, 'brief');
     await lens.invoke(page);

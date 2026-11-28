@@ -206,7 +206,7 @@ test('side-panel-tabs.png · the side panel on a Google results page', async ({ 
   await expect(card).toBeInViewport({ ratio: 1 });
   await expect(panel.getByTestId('cp-header')).not.toBeInViewport();
   await expect(panel.getByTestId('cp-history')).not.toBeInViewport();
-  for (const tab of ['Click Potential', 'Why Not Me', 'Rewind', 'New or Noise', 'Instant Brief', 'Settings']) {
+  for (const tab of ['Overview', 'Tools', 'Settings', 'This search', 'Who’s beating me', 'Content check', 'What changed', 'Site brief']) {
     await expect(panel.getByRole('tab', { name: tab, exact: true })).toBeInViewport({ ratio: 1 });
   }
   await settle(panel);

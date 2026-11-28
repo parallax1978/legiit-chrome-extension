@@ -83,9 +83,14 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .brandrow .spacer { flex: 1; }
 .target { padding: 0 12px 8px; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; min-height: 22px; }
 .target .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-/* Six tabs in a 3x2 grid: all of them stay visible at side-panel width. */
+/* Three places: Overview, Tools, Settings. The five tools get a row of their own while one of them is open. */
 .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 2px; padding: 0 8px; }
-@media (min-width: 620px) { .tabs { grid-template-columns: repeat(6, auto); justify-content: start; } }
+@media (min-width: 620px) { .tabs { grid-template-columns: repeat(3, auto); justify-content: start; } }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--surface-2); }
+.tool { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.tool:hover { color: var(--text); }
+.tool[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tab { appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 6px 6px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; text-align: center; }
 .tab:hover { color: var(--text); }
 .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
@@ -143,6 +148,17 @@ label.check input { margin-top: 3px; }
 .empty { text-align: center; padding: 22px 14px; color: var(--muted); }
 .empty h3 { color: var(--text); margin-bottom: 4px; font-size: 14px; }
 
+/* ---------- Overview ---------- */
+.verdict { font-size: 18px; font-weight: 750; line-height: 1.25; padding-left: 10px; border-left: 4px solid var(--line); }
+.verdict.good { border-left-color: var(--ok); }
+.verdict.mixed { border-left-color: var(--warn); }
+.verdict.bad { border-left-color: var(--bad); }
+.verdict.neutral { border-left-color: var(--accent); }
+.facts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
+.steps > li > div + div { margin-top: 5px; }
+.steps .row { flex-wrap: wrap; gap: 6px 12px; }
+
 /* ---------- Stats and grade ---------- */
 .stat { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .stat .label { font-size: 11.5px; color: var(--muted); }
@@ -150,6 +166,10 @@ label.check input { margin-top: 3px; }
 .stat .sub { font-size: 11.5px; color: var(--muted); }
 .grade { display: flex; align-items: center; gap: 12px; }
 .grade .letter { width: 54px; height: 54px; border-radius: 12px; display: grid; place-items: center; font-size: 30px; font-weight: 800; color: #fff; flex: none; }
+.grade .crowding { border-radius: 10px; padding: 8px 10px; font-size: 15px; font-weight: 800; color: #fff; flex: none; text-align: center; min-width: 76px; }
+.grade .crowding.open { background: #17995a; }
+.grade .crowding.crowded { background: #c9890a; }
+.grade .crowding.very-crowded { background: #cc3b32; }
 .grade .letter.A, .grade .letter.B { background: #17995a; }
 .grade .letter.C { background: #c9890a; }
 .grade .letter.D, .grade .letter.F { background: #cc3b32; }

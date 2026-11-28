@@ -5,6 +5,7 @@
  * The grade is a transparent estimate, not a click-through prediction; its
  * formula is spelled out in GRADE_METHOD and docs/ARCHITECTURE.md.
  */
+import { CROWDING_LABELS, crowdingOf, howFarDown } from '@/features/overview/words';
 import type { BrandMatcher, Owner } from '@/brands/matcher';
 import { intersect, unionArea, type Rect } from '@/lib/rect';
 import { formatInt, formatPercent } from '@/lib/text';
@@ -102,11 +103,11 @@ export interface ClickPotential {
 }
 
 export const GRADE_METHOD = [
-  'Organic click potential is an estimate of how much room organic results get on the first screen. It is not a click-through-rate prediction.',
-  'Score = 100 − position penalty − displacement penalty.',
+  'How crowded a search is, is an estimate of how much room the regular (organic) results get on the first screen. It is not a prediction of clicks.',
+  'Room for regular results = 100 − position penalty − displacement penalty.',
   'Position penalty (0–60): how far down the first screen the first organic result starts, measured from the top of the results area to the bottom of the viewport. At the very top: 0. At or below the fold: 60.',
   'Displacement penalty (0–40): of the first-screen pixels covered by results, the fraction that is not organic (ads, AI Overview, local pack, featured snippet, People also ask, videos, images, shopping, forums, top stories). Knowledge panels sit beside the results and are not counted.',
-  'Grades: A 85–100, B 70–84, C 50–69, D 30–49, F below 30.',
+  'Open: 70 to 100. Crowded: 30 to 69. Very crowded: below 30. (Exports keep the letter grade this is built on: A 85–100, B 70–84, C 50–69, D 30–49, F below 30.)',
   'The measurement depends on your viewport size, zoom, location and the moment the page was read. Compare snapshots taken with the same viewport.',
 ];
 
@@ -264,44 +265,40 @@ export function explainClickPotential(cp: ClickPotential, matcher: BrandMatcher)
   if (cp.firstOrganicTop === null) {
     lines.push('No organic results were found on this page.');
   } else {
-    const screens = cp.screensToFirstOrganic ?? 0;
-    const where =
-      cp.firstOrganicFold === 'below'
-        ? `below the fold, ${screens.toFixed(1)} screens down`
-        : cp.firstOrganicFold === 'partly'
-          ? 'cut off by the bottom of the first screen'
-          : 'on the first screen';
+    const px = `${formatInt(cp.firstOrganicTop)} px from the top`;
+    const far = howFarDown(cp.firstOrganicTop, cp.viewport.height);
     lines.push(
-      `The first organic result starts ${formatInt(cp.firstOrganicTop)} px from the top of the page — ${where} at a ${cp.viewport.width}×${cp.viewport.height} viewport.`,
+      far !== 'on the first screen'
+        ? `The first result starts ${far} (${px}): people scroll before they see it.`
+        : cp.firstOrganicFold === 'partly'
+          ? `The first result is cut off by the bottom of the first screen (${px}).`
+          : `The first result is on the first screen (${px}).`,
     );
   }
   if (cp.aboveFirstOrganic.length > 0) {
     lines.push(`Above it: ${countLabels(cp.aboveFirstOrganic)}.`);
   } else if (cp.firstOrganicTop !== null) {
-    lines.push('Nothing sits above the first organic result.');
+    lines.push('Nothing sits above the first result.');
   }
   const other = cp.shares.filter((s) => s.type !== 'organic');
   lines.push(
-    `Organic results fill ${formatPercent(cp.organicShare)} of the first screen${
+    `Regular results fill ${formatPercent(cp.organicShare)} of the first screen${
       other.length > 0 ? `; ${other.map((s) => `${s.label.toLowerCase()} ${formatPercent(s.share)}`).join(', ')}` : ''
     }.`,
   );
   if (matcher.hasMine) {
     const mine = cp.tracked.filter((t) => t.owner === 'mine');
     if (mine.length === 0) {
-      lines.push('None of your tracked domains has an organic result on this page.');
+      lines.push('Your site has no result on this page.');
     } else {
       for (const t of mine) {
-        lines.push(
-          `${t.name} is organic result #${t.position}${t.top !== null ? `, ${formatInt(t.top)} px down (${foldLabel(t.fold).toLowerCase()})` : ''}.`,
-        );
+        const where = howFarDown(t.top, cp.viewport.height);
+        lines.push(`${t.name} is result #${t.position}${where ? `, ${where}` : ''}.`);
       }
     }
   }
   const rivals = cp.tracked.filter((t) => t.owner === 'competitor' && t.fold === 'above');
   if (rivals.length > 0) lines.push(`Competitors visible without scrolling: ${rivals.map((t) => `${t.name} (#${t.position})`).join(', ')}.`);
-  lines.push(
-    `Estimated organic click potential: ${cp.grade.letter} (${cp.grade.score}/100; position −${cp.grade.positionPenalty}, displacement −${cp.grade.displacementPenalty}).`,
-  );
+  lines.push(`This search is ${CROWDING_LABELS[crowdingOf(cp.grade.letter)].toLowerCase()}: room for regular results is ${cp.grade.score} out of 100 (an estimate).`);
   return lines;
 }

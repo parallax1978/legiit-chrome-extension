@@ -39,7 +39,7 @@ On an ordinary site (not Google, not an AI site):
 - [ ] Go to a different site in the same tab: the card is back.
 - [ ] "Always allow on <site>": Chrome's prompt names only that site. Accept; reload the page; the panel reads it without invoking. The site is listed in Settings and "Remove" works.
 - [ ] On `chrome://settings` and on the Chrome Web Store the card stays, with no error.
-- [ ] Select some text → right-click → "Check the selected text with New or Noise": the panel opens on New or Noise with "Selected text" chosen.
+- [ ] Select some text → right-click → "Check the selected text with Content check": the panel opens on Content check with "Selected text" chosen.
 
 ## 3. Selectors against the live sites
 
@@ -84,7 +84,18 @@ To fix a pack: `npm run dev`, load `.output/chrome-mv3-dev`, open the page, pres
 - [ ] Dark mode (OS setting): strip and panel are readable.
 - [ ] Add a brand in Settings while a results page is open: "You #n" appears on the strip without a reload.
 
-## 5. Click Potential
+## 4b. Overview (the first screen of the panel)
+
+- [ ] Open the panel on a Google results page for one of your keywords. It opens on Overview, not on a tool. The first sentence says where you are ("You are #4 for …" or "You are not on page 1 for …") and matches what you see on the page.
+- [ ] The facts under it are true for the page: where your result sits, what the AI answer says about you, who is ahead, what comes before the first result. There is no pixel, no "fold", no letter grade.
+- [ ] "What to do next" has one to three steps. Each button opens the tool that does the step; each "… on Legiit" link opens the right page of the marketplace in a new tab.
+- [ ] With no brand in Settings: the Overview asks "Which site is yours?" and does not say "you" anywhere. Type your site, Save: the first sentence changes at once.
+- [ ] "My keywords" lists every search you looked at, newest first, with your place. Search one of them again on another day after your place changed: the row shows the move (▲ or ▼). Clicking a keyword opens that search in a new tab; Lens itself never searches.
+- [ ] On ChatGPT, Gemini, Perplexity and Copilot: the first sentence says whether the answer names you.
+- [ ] On one of your own pages (after clicking the icon): it lists basic problems of the page in plain words, or says there are none.
+- [ ] "Tools" opens the tool that fits the page; after you used another tool, "Tools" comes back to that one.
+
+## 5. This search
 
 On a results page where you know roughly what to expect:
 
@@ -96,7 +107,7 @@ On a results page where you know roughly what to expect:
 - [ ] Export CSV opens cleanly in Excel and Google Sheets (accents, commas, no formulas executed).
 - [ ] The page is not a normal web search (Images, News, AI Mode): the tab explains, no error.
 
-## 6. Why Not Me
+## 6. Who's beating me
 
 - [ ] On Google: surfaces list who appears where; "Competitors, not you" is right for at least three surfaces you check by eye.
 - [ ] On each AI site: the latest answer's text and cited links are read (compare the count of cited pages with the page).
@@ -106,12 +117,12 @@ On a results page where you know roughly what to expect:
 - [ ] Gap list sorts and exports.
 - [ ] On an AI page the extension cannot read (or after the site changes): "Paste the answer instead" works.
 
-## 7. Rewind
+## 7. What changed
 
 Needs web.archive.org (not reachable from the build environment, so this was never run live):
 
 - [ ] Look up a well-archived page (a big site's product page). Captures load, at most 24 are read, a timeline appears.
-- [ ] Open Rewind on a Google results page: the address box holds your home page (or is empty without a brand in Settings), never the Google address. Typing a Google address switches the button off and says why.
+- [ ] Open What changed on a Google results page: the address box holds your home page (or is empty without a brand in Settings), never the Google address. Typing a Google address switches the button off and says why.
 - [ ] Pick one change and verify it by opening "View capture" for the two dates.
 - [ ] "Compare two dates" shows field-by-field differences.
 - [ ] "Changes in the 30 days before <date>" filters.
@@ -119,7 +130,7 @@ Needs web.archive.org (not reachable from the build environment, so this was nev
 - [ ] Look up the same page again: instant (cache).
 - [ ] If the archive rate-limits (429): the panel waits and continues, or says to try later. No tight retry loop (watch the Network tab of the panel's DevTools).
 
-## 8. New or Noise
+## 8. Content check
 
 - [ ] Open a Google results page for a keyword, then one of your articles for it; invoke the extension; "Use these results" offers that results page.
 - [ ] Compare. First run takes a few seconds (model load); the method line says "on-device sentence embeddings".
@@ -133,7 +144,7 @@ Needs web.archive.org (not reachable from the build environment, so this was nev
 - [ ] A page behind a login or a paywall among the comparison pages is reported as unreadable, the rest still compare.
 - [ ] A very long page (5,000+ words) finishes in reasonable time and the panel stays responsive (Cancel works).
 
-## 9. Instant Brief
+## 9. Site brief
 
 - [ ] On a Google results page (no business website in the tab): the tab shows a box for the website's address, filled with your own site when you have a brand in Settings. Type a client's address, click "Build brief", approve Chrome's prompt for that one site: the brief is built. It has no colours or logo (those need the site open in a tab).
 
@@ -159,7 +170,7 @@ With the mock server (until the real API exists):
 
 - [ ] Before connecting: the mock server's log shows no request at all, whatever you do in the extension.
 - [ ] Connect: user name and plan shown; choose a business; brands and competitors are pre-filled and marked "From Command Center".
-- [ ] "Save to Command Center" appears on Click Potential, the gap list, New or Noise ("Send to content editor") and the brief ("Open in Command Center").
+- [ ] "Save to Command Center" appears on This search, the gap list, Content check ("Send to content editor") and the brief ("Open in Command Center").
 - [ ] Each opens a dialog with the exact JSON. Cancel: nothing in the server log. Send: one POST whose body equals the dialog.
 - [ ] "Rewrite with Legiit AI" asks first and shows what it will send.
 - [ ] Token `limited-token`: buttons for missing features are not shown. Any other token (for example `invalid`): a clear error, nothing stored.

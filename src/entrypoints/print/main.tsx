@@ -29,7 +29,7 @@ function PrintPage() {
     return (
       <div className="page" data-testid="print-missing">
         <h1>Brief not found</h1>
-        <p>This brief is no longer stored on this device. Build it again from the Instant Brief tab.</p>
+        <p>This brief is no longer stored on this device. Build it again from “Site brief”.</p>
       </div>
     );
   }

@@ -1,4 +1,7 @@
-/** The side panel: six tabs over one target page. */
+/**
+ * The side panel over one target page. It opens on the Overview: what the page means for the user, in plain words.
+ * The five tools hold the detail and are one click away; Settings is the third place.
+ */
 import { useEffect, useState } from 'react';
 import { PRODUCT_NAME } from '@/config/constants';
 import { AI_SITES } from '@/config/sites';
@@ -8,26 +11,29 @@ import { useConnection, useTarget } from './hooks';
 import { Card, Chip, Notice } from './kit';
 import { SettingsView } from './SettingsView';
 import { SignUpForm, VerifyCode } from './SignUp';
+import type { ToolId } from '@/features/overview/overview';
 import { ClickPotentialTab } from './tabs/ClickPotentialTab';
 import { InstantBriefTab } from './tabs/InstantBriefTab';
 import { NewOrNoiseTab } from './tabs/NewOrNoiseTab';
+import { OverviewTab } from './tabs/OverviewTab';
 import { RewindTab } from './tabs/RewindTab';
 import { WhyNotMeTab } from './tabs/WhyNotMeTab';
 
-const TABS = [
-  ['click', 'Click Potential'],
-  ['why', 'Why Not Me'],
-  ['rewind', 'Rewind'],
-  ['noise', 'New or Noise'],
-  ['brief', 'Instant Brief'],
-  ['settings', 'Settings'],
-] as const;
+/** The tools, named for what the user gets from each. The ids are the ones links and tests open them by. */
+export const TOOLS: readonly (readonly [ToolId, string, string])[] = [
+  ['click', 'This search', 'What fills the results page, and where each result sits'],
+  ['why', 'Who’s beating me', 'Where competitors show up and you do not'],
+  ['noise', 'Content check', 'Whether a page says anything the pages it competes with do not'],
+  ['rewind', 'What changed', 'How a page changed over time'],
+  ['brief', 'Site brief', 'A report on a business website'],
+];
 
-type TabId = (typeof TABS)[number][0];
+type TabId = 'overview' | ToolId | 'settings';
+const isTool = (id: TabId): id is ToolId => id !== 'overview' && id !== 'settings';
 
 function initialTab(): TabId {
   const requested = new URLSearchParams(location.search).get('view');
-  return TABS.some(([id]) => id === requested) ? (requested as TabId) : 'click';
+  return requested === 'overview' || requested === 'settings' || TOOLS.some(([id]) => id === requested) ? (requested as TabId) : 'overview';
 }
 
 function TargetLine() {
@@ -55,7 +61,11 @@ function TargetLine() {
 
 export function App() {
   const [tab, setTab] = useState<TabId>(initialTab);
-  const [chosenByUser, setChosenByUser] = useState(new URLSearchParams(location.search).has('view'));
+  /** The tool "Tools" opens: the last one the user had open, else the one that fits the page. */
+  const [lastTool, setLastTool] = useState<ToolId | null>(() => {
+    const first = initialTab();
+    return isTool(first) ? first : null;
+  });
   const { access, intent } = useTarget();
   const { connection, signup } = useConnection();
   const [gate, setGate] = useState<GateState | null>(null);
@@ -71,23 +81,22 @@ export function App() {
     void currentGate(unlocked).then(setGate);
   }, [unlocked, tab]);
 
-  // Until the user picks a tab, open the one that fits the page:
-  // Google results → Click Potential, an AI answer → Why Not Me, any other page → Instant Brief.
+  // The tool that fits the page: Google results → This search, an AI answer → Who's beating me, any other page → Site brief.
   const agent = access.status === 'ready' ? access.ping.agent : null;
-  useEffect(() => {
-    if (chosenByUser || agent === null) return;
-    setTab(agent === 'ai' ? 'why' : agent === 'page' ? 'brief' : 'click');
-  }, [agent, chosenByUser]);
-
-  // "Check the selected text" from the context menu.
-  useEffect(() => {
-    if (intent?.intent === 'selection') setTab('noise');
-  }, [intent]);
+  const fittingTool: ToolId = agent === 'ai' ? 'why' : agent === 'page' ? 'brief' : 'click';
 
   const choose = (id: TabId) => {
     setTab(id);
-    setChosenByUser(true);
+    if (isTool(id)) setLastTool(id);
   };
+
+  // "Check the selected text" from the context menu.
+  useEffect(() => {
+    if (intent?.intent === 'selection') {
+      setTab('noise');
+      setLastTool('noise');
+    }
+  }, [intent]);
   const gated = gate?.gated === true && tab !== 'settings';
 
   return (
@@ -110,13 +119,26 @@ export function App() {
           )}
         </div>
         <TargetLine />
-        <div className="tabs" role="tablist" aria-label={`${PRODUCT_NAME} features`}>
-          {TABS.map(([id, label]) => (
-            <button key={id} role="tab" type="button" className="tab" aria-selected={tab === id} onClick={() => choose(id)} data-testid={`tab-${id}`}>
-              {label}
-            </button>
-          ))}
+        <div className="tabs" role="tablist" aria-label={`${PRODUCT_NAME} sections`}>
+          <button role="tab" type="button" className="tab" aria-selected={tab === 'overview'} onClick={() => choose('overview')} data-testid="tab-overview">
+            Overview
+          </button>
+          <button role="tab" type="button" className="tab" aria-selected={isTool(tab)} onClick={() => choose(lastTool ?? fittingTool)} data-testid="tab-tools">
+            Tools
+          </button>
+          <button role="tab" type="button" className="tab" aria-selected={tab === 'settings'} onClick={() => choose('settings')} data-testid="tab-settings">
+            Settings
+          </button>
         </div>
+        {isTool(tab) && (
+          <div className="tools" role="tablist" aria-label="Tools">
+            {TOOLS.map(([id, label, what]) => (
+              <button key={id} role="tab" type="button" className="tool" aria-selected={tab === id} onClick={() => choose(id)} title={what} data-testid={`tab-${id}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <main className="content" role="tabpanel" data-testid={`panel-${tab}`}>
         {gated ? (
@@ -138,6 +160,7 @@ export function App() {
                 <VerifyCode />
               </Card>
             )}
+            {tab === 'overview' && <OverviewTab onOpen={choose} />}
             {tab === 'click' && <ClickPotentialTab />}
             {tab === 'why' && <WhyNotMeTab onOpenSettings={() => choose('settings')} />}
             {tab === 'rewind' && <RewindTab />}

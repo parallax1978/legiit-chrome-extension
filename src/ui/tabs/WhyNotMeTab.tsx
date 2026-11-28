@@ -327,7 +327,7 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
         ) : (
           <Card>
             <EmptyState title="Open Google results or an AI answer" testId="wnm-empty">
-              Why Not Me works on Google results (including AI Mode) and on answers at chatgpt.com, gemini.google.com, perplexity.ai and copilot.microsoft.com.
+              This tool shows where competitors appear and you do not. It works on Google results (including AI Mode) and on answers at chatgpt.com, gemini.google.com, perplexity.ai and copilot.microsoft.com.
             </EmptyState>
           </Card>
         )}
@@ -416,7 +416,7 @@ export function WhyNotMeTab({ onOpenSettings }: { onOpenSettings: () => void }) 
       </Card>
 
       <Card
-        title={`Gap list (${rows.length})`}
+        title={`Where competitors are and you are not (${rows.length})`}
         testId="wnm-gaps"
         actions={
           rows.length > 0 ? (

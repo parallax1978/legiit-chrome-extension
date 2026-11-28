@@ -28,25 +28,28 @@ Shows how visible a web page or brand is in Google results and AI answers, and w
 Plain text, as the store shows it. No keyword lists, no testimonials, no claims about rankings.
 
 ```
-Legiit Lens shows how visible a web page or brand is in Google results and AI answers, and what explains it. It is built for SEO professionals and agencies.
+Legiit Lens shows how visible a web page or brand is in Google results and AI answers, and what explains it. It says so in plain words: where you stand, who is ahead of you, and what to do next. It is built for site owners, SEO professionals and agencies.
 
 Open a results page or an assistant's answer as you normally would. Lens reads what is on your screen and measures it. It never runs searches or prompts of its own.
 
 WHAT YOU CAN DO
 
-Click Potential
-On a search results page, see how far down the first organic listing starts, and how much of the first screen goes to the AI Overview, ads, the local pack and other blocks. Every listing and every domain you track is marked above or below the fold. An estimated grade sums it up, with the formula shown. Snapshots are kept per keyword so you can compare later, and export to CSV.
+Overview
+Open the panel on a results page and read one sentence: where you are on the page, whether the AI answer names you, who is ahead of you and how crowded the page is. Under it are up to three next steps, each with the tool that does it. Every query you look at is remembered in "My keywords", with your place and how it changes. The list is kept on your device and is updated when you look the query up again: Lens never does that for you.
 
-Why Not Me
+This search
+On a search results page, see how far down the first regular listing starts, and how much of the first screen goes to the AI Overview, ads, the local pack and other blocks. Every listing and every domain you track is marked as on the first screen or below it. An estimate of how crowded the page is (open, crowded or very crowded) sums it up, with the formula shown. Snapshots are kept per keyword so you can compare later, and export to CSV.
+
+Who's beating me
 See where competitors appear and you do not: cited sources, organic listings, the local pack, forums and videos on Google, and the answers and cited links on ChatGPT, Gemini, Perplexity and Copilot. "Scan sources" reads the cited pages (Chrome asks you first) and shows which competitors each one names, whether it names you, and who to contact. You get a sortable gap list.
 
-Rewind
+What changed
 Pick any page and see a dated timeline of how it changed, using the Internet Archive's Wayback Machine: title, description, canonical, robots, headings, word count, links and structured data. Compare any two dates, or look at what changed in the weeks before a drop.
 
-New or Noise
+Content check
 Check an article against the pages it competes with. Each sentence is marked as said by most, said by some, or only here, and you see what most competing pages cover that yours does not. The comparison runs on your device with a small bundled language model. Nothing is uploaded.
 
-Instant Brief
+Site brief
 Turn a business website into a client brief: contact details, services, service areas, tone of voice, testimonials found on the site, on-page issues, three draft customer profiles and next steps. Export as Markdown or a print-ready PDF with your agency's name and logo.
 
 PRIVACY

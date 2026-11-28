@@ -1,28 +1,28 @@
 /** A. Click Potential: how much room organic results get on the Google results page in the current tab. */
 import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   BLOCK_LABELS,
-  computeClickPotential,
-  foldLabel,
   GRADE_METHOD,
   type ClickPotential,
   type FoldStatus,
   type ShareType,
 } from '@/features/click-potential/metrics';
-import { historyCsv, keywordKey, organicCsv, toSnapshot, type SnapshotRecord } from '@/features/click-potential/snapshot';
+import { historyCsv, keywordKey, organicCsv, type SnapshotRecord } from '@/features/click-potential/snapshot';
 import { recordRun } from '@/features/shared/gating';
-import { buildSerpPresence, summarisePresence } from '@/features/why-not-me/presence';
 import { snapshotPayload } from '@/legiit/payloads';
 import { slugify } from '@/lib/sanitize';
+import { CROWDING_LABELS, CROWDING_MEANING, crowdingOf, howFarDown } from '@/features/overview/words';
 import { formatInt, formatPercent } from '@/lib/text';
-import { SerpDataSchema, type SerpData } from '@/model/schemas';
-import { sendToTab } from '@/panel/tabs';
+import type { SerpData } from '@/model/schemas';
 import { deleteKeyword, deleteSnapshot, listKeywords, listSnapshots, saveSnapshot, type KeywordSummary } from '@/storage/db';
 import { trackedBrands } from '@/storage/settings';
 import { useConnection, useSettings, useTarget } from '../hooks';
+import { useResultsPage } from '../results-page';
 import { Button, Card, Chip, EmptyState, ExtensionLink, ExternalLink, formatDateTime, Notice, Stat, type Tone } from '../kit';
 import { AccessCard, CsvButton, SaveToLegiit, Summary } from '../shared';
+
+const sentenceCase = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 export const TYPE_COLORS: Readonly<Record<ShareType, string>> = {
   organic: '#2456e6',
@@ -66,7 +66,7 @@ function MiniMap({ serp }: { serp: SerpData }) {
         ))}
       <line x1={0} x2={width} y1={height} y2={height} stroke="currentColor" strokeWidth={3} strokeDasharray="14 10" />
       <text x={width - 12} y={height - 12} textAnchor="end" fontSize={Math.round(width / 40)} fill="currentColor">
-        fold ({height} px)
+        end of the first screen
       </text>
     </svg>
   );
@@ -101,8 +101,8 @@ function HistoryTable({ snapshots, onDelete }: { snapshots: SnapshotRecord[]; on
           <tr>
             <th>When</th>
             <th>Viewport</th>
-            <th className="num">1st organic</th>
-            <th>Grade</th>
+            <th className="num">First result</th>
+            <th>Search</th>
             <th />
           </tr>
         </thead>
@@ -118,7 +118,7 @@ function HistoryTable({ snapshots, onDelete }: { snapshots: SnapshotRecord[]; on
               </td>
               <td className="num nowrap">{s.firstOrganicTop === null ? '—' : `${formatInt(s.firstOrganicTop)} px`}</td>
               <td>
-                {s.gradeLetter} <span className="muted">({s.gradeScore})</span>
+                {CROWDING_LABELS[crowdingOf(s.gradeLetter)]} <span className="muted">({s.gradeScore})</span>
               </td>
               <td>
                 <Button variant="link" small onClick={() => onDelete(s.id)} aria-label="Delete this snapshot">
@@ -204,64 +204,21 @@ function AllHistory() {
 }
 
 export function ClickPotentialTab() {
-  const { access, epoch, refresh } = useTarget();
+  const { access, refresh } = useTarget();
   const { settings, matcher } = useSettings();
   const { connection } = useConnection();
-  const [serp, setSerp] = useState<SerpData | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<SnapshotRecord[]>([]);
-  const [savedId, setSavedId] = useState<string | null>(null);
-
-  const ready = access.status === 'ready' ? access : null;
-  const onSerp = ready?.ping.agent === 'google' && ready.ping.serp;
-  const tabId = ready?.tabId ?? null;
-
-  useEffect(() => {
-    let alive = true;
-    setError(null);
-    if (!onSerp || tabId === null) {
-      setSerp(null);
-      return;
-    }
-    sendToTab(tabId, { type: 'lens:get-serp' }, SerpDataSchema).then(
-      (data) => alive && setSerp(data),
-      (e: unknown) => alive && setError(e instanceof Error ? e.message : 'Could not read the results page'),
-    );
-    return () => {
-      alive = false;
-    };
-  }, [onSerp, tabId, epoch]);
-
-  const cp = useMemo(() => (serp ? computeClickPotential(serp, matcher) : null), [serp, matcher]);
-  const snapshot = useMemo(
-    () => (serp && cp ? toSnapshot(serp, cp, matcher.isEmpty ? null : summarisePresence(buildSerpPresence(serp, matcher))) : null),
-    [serp, cp, matcher],
-  );
+  // The page is measured, and stored, by the hook the Overview uses too.
+  const { onSerp, serp, cp, snapshot, error, stored } = useResultsPage();
   const key = serp ? keywordKey(serp.keyword) : null;
 
   const reloadHistory = useCallback(async () => {
     if (key) setHistory(await listSnapshots(key));
   }, [key]);
 
-  // Save a snapshot of what is on screen (unless the user chose manual saving), then refresh the history list.
   useEffect(() => {
-    if (!snapshot || !serp?.recognised || serp.mode !== 'web' || !cp?.measured) return;
-    let alive = true;
-    void (async () => {
-      if (settings.snapshots.autoSave !== 'manual') {
-        await saveSnapshot(snapshot);
-        if (alive && savedId !== snapshot.id) {
-          setSavedId(snapshot.id);
-          void recordRun();
-        }
-      }
-      if (alive) await reloadHistory();
-    })();
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot, settings.snapshots.autoSave]);
+    void reloadHistory();
+  }, [stored, reloadHistory]);
 
   if (access.status === 'loading') return null;
 
@@ -269,11 +226,11 @@ export function ClickPotentialTab() {
     return (
       <>
         {access.status === 'no-access' ? (
-          <Notice testId="cp-not-serp">Click Potential measures Google results pages. Open a Google search in this tab to use it.</Notice>
+          <Notice testId="cp-not-serp">This tool measures a Google results page. Open a Google search in this tab to use it.</Notice>
         ) : (
           <Card>
             <EmptyState title="Open a Google results page" testId="cp-not-serp">
-              Click Potential measures the results page in the current tab: where the first organic result starts and what takes up the first screen.
+              This tool measures the results page in the current tab: where the first result starts and what takes up the first screen.
             </EmptyState>
           </Card>
         )}
@@ -299,7 +256,7 @@ export function ClickPotentialTab() {
     return (
       <Card>
         <EmptyState title="This is Google AI Mode" testId="cp-ai-mode">
-          AI Mode has no classic results to measure. Open the Why Not Me tab to see which brands and sources the answer uses.
+          AI Mode has no classic results to measure. Open “Who’s beating me” to see which brands and sources the answer uses.
         </EmptyState>
       </Card>
     );
@@ -335,16 +292,16 @@ export function ClickPotentialTab() {
           {serp.locationText ? ` · ${serp.locationText}` : ''} · {new URL(serp.url).hostname} · {formatDateTime(serp.capturedAt)}
         </div>
         <div className="grade" data-testid="cp-grade">
-          <div className={`letter ${cp.grade.letter}`}>{cp.grade.letter}</div>
+          <div className={`crowding ${crowdingOf(cp.grade.letter)}`}>{CROWDING_LABELS[crowdingOf(cp.grade.letter)]}</div>
           <div className="stack" style={{ gap: 2 }}>
             <div className="row">
-              <strong>Organic click potential</strong>
-              <Chip tone="accent" title="An estimate from layout, not a click-through-rate prediction">
+              <strong>How crowded this search is</strong>
+              <Chip tone="accent" title="An estimate from the layout of the page, not a prediction of clicks">
                 Estimate
               </Chip>
             </div>
             <div className="small muted">
-              {cp.grade.score}/100 · position −{cp.grade.positionPenalty} · displacement −{cp.grade.displacementPenalty}
+              {CROWDING_MEANING[crowdingOf(cp.grade.letter)]} Room for regular results: {cp.grade.score} out of 100.
             </div>
           </div>
         </div>
@@ -358,12 +315,12 @@ export function ClickPotentialTab() {
         </details>
         <div className="grid2">
           <Stat
-            label="First organic result"
+            label="First result"
             testId="cp-first-organic"
-            value={cp.firstOrganicTop === null ? 'none' : `${formatInt(cp.firstOrganicTop)} px`}
-            sub={cp.firstOrganicTop === null ? 'No organic results found' : `${foldLabel(cp.firstOrganicFold)} · ${(cp.screensToFirstOrganic ?? 0).toFixed(1)} screens down`}
+            value={cp.firstOrganicTop === null ? 'none' : sentenceCase(howFarDown(cp.firstOrganicTop, serp.viewport.height))}
+            sub={cp.firstOrganicTop === null ? 'No regular results found' : `${formatInt(cp.firstOrganicTop)} px from the top`}
           />
-          <Stat label="Organic share of first screen" testId="cp-organic-share" value={formatPercent(cp.organicShare, 1)} sub={`${cp.aboveFirstOrganic.length} block${cp.aboveFirstOrganic.length === 1 ? '' : 's'} above the first result`} />
+          <Stat label="Regular results on the first screen" testId="cp-organic-share" value={formatPercent(cp.organicShare, 1)} sub={`${cp.aboveFirstOrganic.length} box${cp.aboveFirstOrganic.length === 1 ? '' : 'es'} above the first result`} />
         </div>
       </Card>
 
@@ -375,7 +332,7 @@ export function ClickPotentialTab() {
       <Summary request={{ task: 'click-potential', instruction: SUMMARY_INSTRUCTIONS['click-potential'], facts: explanation, fallback: explanation }} testId="cp-summary" />
 
       {matcher.hasMine || matcher.hasCompetitors ? (
-        <Card title="Tracked brands" testId="cp-tracked">
+        <Card title="You and your competitors" testId="cp-tracked">
           {cp.tracked.length === 0 ? (
             <p className="muted">None of your tracked domains has an organic result on this page.</p>
           ) : (
@@ -385,7 +342,7 @@ export function ClickPotentialTab() {
                   <th>Brand</th>
                   <th className="num">#</th>
                   <th className="num">Top</th>
-                  <th>Fold</th>
+                  <th>On first screen</th>
                 </tr>
               </thead>
               <tbody>
@@ -397,19 +354,19 @@ export function ClickPotentialTab() {
                     <td className="num">{t.position}</td>
                     <td className="num nowrap">{t.top === null ? '—' : `${formatInt(t.top)} px`}</td>
                     <td>
-                      <Chip tone={foldTone(t.fold)}>{t.fold === 'above' ? 'Above' : t.fold === 'partly' ? 'Cut' : t.fold === 'below' ? 'Below' : '—'}</Chip>
+                      <Chip tone={foldTone(t.fold)}>{t.fold === 'above' ? 'Yes' : t.fold === 'partly' ? 'Partly' : t.fold === 'below' ? 'No' : '—'}</Chip>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-          {matcher.hasMine && mineRows.length === 0 && cp.tracked.length > 0 && <p className="small muted">Your own domains are not among the organic results on this page.</p>}
+          {matcher.hasMine && mineRows.length === 0 && cp.tracked.length > 0 && <p className="small muted">Your site has no result on this page.</p>}
         </Card>
       ) : null}
 
       <Card
-        title={`Organic results (${cp.organic.length})`}
+        title={`The results (${cp.organic.length})`}
         testId="cp-organic"
         actions={
           <div className="row">
@@ -433,7 +390,7 @@ export function ClickPotentialTab() {
                 <th className="num">#</th>
                 <th>Result</th>
                 <th className="num">Top</th>
-                <th>Fold</th>
+                <th>On first screen</th>
               </tr>
             </thead>
             <tbody>
@@ -449,7 +406,7 @@ export function ClickPotentialTab() {
                   </td>
                   <td className="num nowrap">{o.top === null ? '—' : `${formatInt(o.top)} px`}</td>
                   <td>
-                    <Chip tone={foldTone(o.fold)}>{o.fold === 'above' ? 'Above' : o.fold === 'partly' ? 'Cut' : o.fold === 'below' ? 'Below' : '—'}</Chip>
+                    <Chip tone={foldTone(o.fold)}>{o.fold === 'above' ? 'Yes' : o.fold === 'partly' ? 'Partly' : o.fold === 'below' ? 'No' : '—'}</Chip>
                   </td>
                 </tr>
               ))}

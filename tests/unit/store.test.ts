@@ -53,7 +53,7 @@ describe('store listing', () => {
   });
 
   it('promises only what the extension does', () => {
-    for (const feature of ['Click Potential', 'Why Not Me', 'Rewind', 'New or Noise', 'Instant Brief']) expect(description).toContain(feature);
+    for (const feature of ['Overview', 'This search', "Who's beating me", 'What changed', 'Content check', 'Site brief']) expect(description).toContain(feature);
     expect(description).toContain('Start with your email and every tool is ready.');
     expect(description).toContain('No analytics and no tracking.');
   });

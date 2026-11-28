@@ -27,7 +27,7 @@ const MENU_SELECTION = 'lens-check-selection';
 function createMenus(): void {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({ id: MENU_ANALYZE, title: `Analyze this page with ${PRODUCT_NAME}`, contexts: ['page'] });
-    chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Check the selected text with New or Noise', contexts: ['selection'] });
+    chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Check if the selected text says anything new', contexts: ['selection'] });
   });
 }
 

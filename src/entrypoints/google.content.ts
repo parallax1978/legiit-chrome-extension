@@ -140,7 +140,7 @@ async function start(): Promise<void> {
       let result = measure();
       // Inserting the strip shifts the results; measure again so the compensation applies.
       if (ensureStrip(result.serp)) result = measure();
-      strip?.update(result.cp, { saved, showSave: !config.autoSaveSnapshots });
+      strip?.update(result.cp, { saved, showSave: !config.autoSaveSnapshots, hasMine: matcher.hasMine });
 
       const signature = JSON.stringify([
         pageId,

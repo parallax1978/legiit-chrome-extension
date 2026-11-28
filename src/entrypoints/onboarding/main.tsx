@@ -62,19 +62,22 @@ function Onboarding() {
         <div data-testid="onboarding-does">
           <ul>
             <li>
-              <strong>Click Potential</strong> measures a Google results page: where the first organic result starts, and what takes up the first screen.
+              <strong>Overview</strong> tells you in plain words where you stand on the page you are looking at, and what to do next. It also keeps a list of your keywords and how your place in them changes.
             </li>
             <li>
-              <strong>Why Not Me</strong> shows where competitors appear and you do not, in Google results and in AI answers.
+              <strong>This search</strong> measures a Google results page: where the first result starts, and what takes up the first screen.
             </li>
             <li>
-              <strong>Rewind</strong> shows how a page changed over time, using the Wayback Machine.
+              <strong>Who’s beating me</strong> shows where competitors appear and you do not, in Google results and in AI answers.
             </li>
             <li>
-              <strong>New or Noise</strong> shows which sentences of a page say something its competitors do not.
+              <strong>Content check</strong> shows which sentences of a page say something the pages it competes with do not.
             </li>
             <li>
-              <strong>Instant Brief</strong> turns a business website into a client brief.
+              <strong>What changed</strong> shows how a page changed over time, using the Wayback Machine.
+            </li>
+            <li>
+              <strong>Site brief</strong> turns a business website into a client brief.
             </li>
           </ul>
           <p>Your email opens every tool. The code we email you connects your free Legiit account, which adds saving to Legiit Command Center.</p>
@@ -111,7 +114,7 @@ function Onboarding() {
               <strong>Google Search and four AI sites</strong>: to read the results or answer you opened there.
             </li>
             <li>
-              <strong>web.archive.org</strong>: to look up page history for Rewind.
+              <strong>web.archive.org</strong>: to look up page history for “What changed”.
             </li>
             <li>
               <strong>The Legiit API</strong>: your free Legiit account (your email, the code, and the saves you confirm).

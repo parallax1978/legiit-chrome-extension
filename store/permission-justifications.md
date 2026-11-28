@@ -5,7 +5,7 @@ For the Developer Dashboard → Privacy practices. One field per permission. Eac
 ## activeTab
 
 ```
-Lets the extension read the page in the current tab only after the user invokes it there (toolbar icon, keyboard shortcut or the "Analyze this page" context-menu item). It is used to learn the page's address (Rewind) and to read the page's text, links and styling (New or Noise, Instant Brief). Access ends when the tab leaves that site. We use activeTab so that the extension never needs standing access to all sites.
+Lets the extension read the page in the current tab only after the user invokes it there (toolbar icon, keyboard shortcut or the "Analyze this page" context-menu item). It is used to learn the page's address (What changed) and to read the page's text, links and styling (Content check, Site brief). Access ends when the tab leaves that site. We use activeTab so that the extension never needs standing access to all sites.
 ```
 
 ## scripting
@@ -29,13 +29,13 @@ The extension's main interface is a side panel that shows the analysis next to t
 ## contextMenus
 
 ```
-Adds two context-menu items: "Analyze this page with Legiit Lens" (opens the panel for the current page) and "Check the selected text with New or Noise" (analyzes the selected text). A context-menu click is one of the user gestures that grants activeTab, and it works when the toolbar icon is not pinned.
+Adds two context-menu items: "Analyze this page with Legiit Lens" (opens the panel for the current page) and "Check the selected text with Content check" (analyzes the selected text). A context-menu click is one of the user gestures that grants activeTab, and it works when the toolbar icon is not pinned.
 ```
 
 ## Host permission: web.archive.org
 
 ```
-The Rewind feature shows how a page changed over time. When the user looks up a page, the extension requests that page's capture list and archived copies from the Internet Archive's Wayback Machine (web.archive.org) and compares them on the user's device. Only the address of the page being looked up is sent.
+The What changed feature shows how a page changed over time. When the user looks up a page, the extension requests that page's capture list and archived copies from the Internet Archive's Wayback Machine (web.archive.org) and compares them on the user's device. Only the address of the page being looked up is sent.
 ```
 
 ## Host permission: lens.legiit.com
@@ -59,7 +59,7 @@ The extension shows whether the user's brand and their competitors are mentioned
 ## Optional host permissions: *://*/*
 
 ```
-Never granted at install. Three features read pages the user chooses: "Scan sources" (the pages a results page or AI answer cites), "New or Noise" (the pages competing with the user's article, and that article when the user names it by its address) and "Instant Brief" (up to eight pages of a business website the user names by its address). These sites are only known at run time, so the extension asks Chrome for those specific sites, by name, when the user starts the scan, after telling them which sites and why. The user can decline, and can remove any granted site in the extension's settings. The wildcard itself is never requested.
+Never granted at install. Three features read pages the user chooses: "Scan sources" (the pages a results page or AI answer cites), "Content check" (the pages competing with the user's article, and that article when the user names it by its address) and "Site brief" (up to eight pages of a business website the user names by its address). These sites are only known at run time, so the extension asks Chrome for those specific sites, by name, when the user starts the scan, after telling them which sites and why. The user can decline, and can remove any granted site in the extension's settings. The wildcard itself is never requested.
 ```
 
 ## Remote code
