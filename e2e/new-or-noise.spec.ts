@@ -77,6 +77,40 @@ test.describe('New or Noise (sites granted)', () => {
     expect(lens.errors.filter((e) => !e.includes('404 (Not Found)'))).toEqual([]);
   });
 
+  test('checks the user\'s own result straight from the results page', async ({ lens }) => {
+    await lens.trackScenarioBrands();
+    const serp = await lens.open(scenario.urls.serpPlain!);
+    const panel = await lens.openPanel(serp.tabId, 'noise');
+
+    // The results page is the tab: the page to check is the user's own result on it, filled in by itself.
+    await expect(panel.getByTestId('noise-address')).toHaveValue(TARGET);
+    await expect(panel.getByTestId('noise-form')).toContainText('Your result #5 on the chosen results page');
+    await expect(panel.getByTestId('noise-keyword')).toHaveValue('how often should you get your teeth cleaned');
+    // The user's own site is not one of the pages it is compared with, and it is named in what Chrome will ask.
+    await expect(panel.getByText('7 pages will be read')).toBeVisible();
+    await expect(panel.getByTestId('permission-line')).toContainText('these 8 sites');
+    await expect(panel.getByTestId('permission-line')).toContainText('to compare your page with them');
+
+    await panel.getByTestId('noise-run').click();
+    const result = panel.getByTestId('noise-result');
+    await expect(result).toBeVisible({ timeout: 60_000 });
+    await expect(panel.getByTestId('noise-checked')).toContainText('How Often Should You Get Your Teeth Cleaned');
+    await expect(panel.getByTestId('noise-checked').getByRole('link')).toHaveAttribute('href', TARGET);
+    await expect(panel.getByTestId('noise-guess-note')).toHaveCount(0);
+    // The same answer as when the page itself is the tab.
+    const only = (await panel.getByTestId('sentence-only').allInnerTexts()).map((t) => t.split('\n')[0]);
+    expect(only).toEqual(ONLY_HERE);
+    // Highlights go on a page in the tab: there is none here.
+    await expect(panel.getByTestId('noise-highlight')).toHaveCount(0);
+
+    // The page to check and the comparison pages were read, each from its own site. Nothing was asked of Google.
+    const fetched = lens.extensionRequests().map((r) => r.url);
+    expect(fetched).toContain(TARGET);
+    expect(fetched.filter((url) => /(^|\.)google\./.test(new URL(url).hostname))).toEqual([]);
+    // Two results of this page have no page behind them, as in the test above: reported in the list, not fatal.
+    await expect(panel.getByTestId('noise-pages')).toContainText('Read');
+  });
+
   test('highlights the classes on the live page without changing its DOM', async ({ lens }) => {
     await lens.open(scenario.urls.serpPlain!);
     const { page, tabId } = await lens.open(TARGET);
@@ -195,11 +229,22 @@ test.describe('New or Noise (sites granted)', () => {
   });
 
   test('says where it cannot run and what it needs', async ({ lens }) => {
-    // On a results page: this is a source, not a page to check.
+    // On a results page there is no page in the tab to check: the tool asks for the address of one, and offers
+    // only what can work there. Without a brand of the user's own it cannot fill the address in.
     const serp = await lens.open(scenario.urls.serpPlain!);
     const onSerp = await lens.openPanel(serp.tabId, 'noise');
-    await expect(onSerp.getByTestId('noise-wrong-page')).toBeVisible();
+    await expect(onSerp.getByTestId('noise-address')).toHaveValue('');
+    await expect(onSerp.getByTestId('noise-mode-address')).toBeChecked();
+    await expect(onSerp.getByTestId('noise-mode-page')).toHaveCount(0);
+    await expect(onSerp.getByTestId('noise-mode-selection')).toHaveCount(0);
     await expect(onSerp.getByTestId('noise-run')).toBeDisabled();
+    // A Google page is never a page to check, and is never requested.
+    await onSerp.getByTestId('noise-address').fill('https://www.google.com/search?q=teeth+cleaning');
+    await expect(onSerp.getByTestId('noise-form')).toContainText('A Google or AI page cannot be checked');
+    await expect(onSerp.getByTestId('noise-run')).toBeDisabled();
+    await onSerp.getByTestId('noise-address').fill('https://www.brightpathdental.example/blog/how-often-teeth-cleaning');
+    await expect(onSerp.getByTestId('noise-run')).toBeEnabled();
+    expect(lens.extensionRequests()).toEqual([]);
     await serp.page.close();
 
     // No results page open and nothing saved: the panel asks for one, or for URLs.

@@ -1,5 +1,6 @@
 /** D. New or Noise: which sentences of a page say something the competing pages do not. */
 import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
+import type { BrandMatcher } from '@/brands/matcher';
 import { useEffect, useMemo, useState } from 'react';
 import type { PageDigest } from '@/extract/digest';
 import { parseHtml } from '@/extract/html';
@@ -12,20 +13,23 @@ import { checkGuessed } from '@/features/shared/guessed-page';
 import { loadPages } from '@/features/shared/load-pages';
 import { contentEditorPayload } from '@/legiit/payloads';
 import { cutText, safeHttpUrl, slugify, stripWww } from '@/lib/sanitize';
-import { formatPercent } from '@/lib/text';
+import { formatPercent, titlesAgree } from '@/lib/text';
 import { urlKey } from '@/lib/url';
 import type { HighlightGroup } from '@/model/messages';
 import { HighlightReplySchema, PageSnapshotSchema, type AddressSource, type HighlightReply } from '@/model/schemas';
+import { isNeverRequested } from '@/net/guarded-fetch';
 import { fetchPage } from '@/net/page-fetch';
 import { requestAccess } from '@/net/permissions';
 import { findResultsPages, sendToTab } from '@/panel/tabs';
 import { getEngine } from '@/similarity/embedding-client';
 import { listKeywords, pageCache } from '@/storage/db';
-import { useConnection, useTarget, useTask } from '../hooks';
+import { useConnection, useSettings, useTarget, useTask } from '../hooks';
 import { Button, Card, Chip, EmptyState, ExternalLink, Field, formatDate, Notice, ProgressBar, Stat } from '../kit';
 import { AccessCard, CsvButton, KeepAccess, PermissionLine, SaveToLegiit, Summary } from '../shared';
 
-type Mode = 'page' | 'selection' | 'pasted';
+/** What is checked: the page in the tab, its selected text, a page named by its address, or pasted text. */
+type Mode = 'page' | 'selection' | 'address' | 'pasted';
+const MODE_LABELS: Readonly<Record<Mode, string>> = { page: 'This page', selection: 'Selected text', address: 'A page by its address', pasted: 'Pasted text' };
 const MAX_COMPARISON_PAGES = 8;
 
 interface ResultSource {
@@ -35,9 +39,11 @@ interface ResultSource {
   urls: string[];
   /** For a page whose address is a guess: the title of the result, which the page must have (see checkGuessed). */
   expect: Record<string, string>;
+  /** The user's own result on that results page, when a brand of theirs has one: the page they most likely want to check. */
+  mine: { url: string; title: string; position: number; guessed: boolean } | null;
 }
 
-type ResultRow = { url: string; title: string; address?: AddressSource; guess?: string | null };
+type ResultRow = { position: number; domain: string; url: string; title: string; address?: AddressSource; guess?: string | null };
 
 interface NoiseResult {
   report: NoiseReport;
@@ -49,6 +55,8 @@ interface NoiseResult {
   mode: Mode;
   /** When the comparison was made. */
   at: number;
+  /** Set when the page that was checked may not be the page the user meant (its address was a guess). */
+  note: string | null;
 }
 
 const CLASS_ORDER: SentenceClass[] = ['only', 'some', 'most'];
@@ -80,6 +88,17 @@ function comparablePages(organic: readonly ResultRow[]): { urls: string[]; expec
   return { urls, expect };
 }
 
+/** The first result of one of the user's own sites that has a page address, known or spelled out under its title. */
+function ownResult(organic: readonly ResultRow[], matcher: BrandMatcher): ResultSource['mine'] {
+  for (const o of organic) {
+    if (!o.domain || !matcher.matchDomain(o.domain).some((hit) => hit.owner === 'mine')) continue;
+    const address = o.address ?? 'link';
+    if (address === 'link') return { url: o.url, title: o.title, position: o.position, guessed: false };
+    if (address === 'site' && o.guess) return { url: o.guess, title: o.title, position: o.position, guessed: true };
+  }
+  return null;
+}
+
 /** "8 results", or how many of them have a page address when Google hides some. */
 function resultCount(organic: readonly ResultRow[]): string {
   const usable = comparablePages(organic).urls.length;
@@ -98,7 +117,10 @@ function parseUrlList(text: string): string[] {
 export function NewOrNoiseTab() {
   const { access, intent } = useTarget();
   const { connection } = useConnection();
+  const { matcher, settings } = useSettings();
   const [mode, setMode] = useState<Mode>('page');
+  const [addressText, setAddressText] = useState('');
+  const [addressTouched, setAddressTouched] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [keywordTouched, setKeywordTouched] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -123,6 +145,15 @@ export function NewOrNoiseTab() {
     if (intent?.intent === 'selection') setMode('selection');
   }, [intent]);
 
+  // A results page or an AI answer is not a page to check. There the tool checks a page named by its address, so
+  // that it works from the results page itself. Back on an ordinary page, it checks that page again.
+  const accessReady = access.status === 'ready';
+  useEffect(() => {
+    if (!accessReady) return;
+    setMode((current) => (!onPage && (current === 'page' || current === 'selection') ? 'address' : onPage && current === 'address' && !addressTouched ? 'page' : current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessReady, onPage]);
+
   useEffect(() => {
     if (!keywordTouched && pageTitle) setKeyword(keywordFromTitle(pageTitle));
   }, [pageTitle, keywordTouched]);
@@ -131,11 +162,11 @@ export function NewOrNoiseTab() {
   const loadSources = async () => {
     const [open, saved] = await Promise.all([findResultsPages(), listKeywords()]);
     const list: ResultSource[] = [
-      ...open.map((p) => ({ id: `tab-${p.tabId}`, label: `“${p.serp.keyword}” — open results page, ${resultCount(p.serp.organic)}`, keyword: p.serp.keyword, ...comparablePages(p.serp.organic) })),
+      ...open.map((p) => ({ id: `tab-${p.tabId}`, label: `“${p.serp.keyword}” — open results page, ${resultCount(p.serp.organic)}`, keyword: p.serp.keyword, ...comparablePages(p.serp.organic), mine: ownResult(p.serp.organic, matcher) })),
       ...saved
         .filter((k) => !open.some((p) => p.serp.keyword.toLowerCase() === k.keyword.toLowerCase()))
         .slice(0, 20)
-        .map((k) => ({ id: `snap-${k.latest.id}`, label: `“${k.keyword}” — saved ${formatDate(k.latest.takenAt)}, ${resultCount(k.latest.organic)}`, keyword: k.keyword, ...comparablePages(k.latest.organic) })),
+        .map((k) => ({ id: `snap-${k.latest.id}`, label: `“${k.keyword}” — saved ${formatDate(k.latest.takenAt)}, ${resultCount(k.latest.organic)}`, keyword: k.keyword, ...comparablePages(k.latest.organic), mine: ownResult(k.latest.organic, matcher) })),
     ];
     setSources(list);
     setSourceId((current) => {
@@ -147,37 +178,77 @@ export function NewOrNoiseTab() {
   useEffect(() => {
     void loadSources();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabId]);
+  }, [tabId, matcher]);
+
+  const source = sourceKind === 'results' ? (sources.find((s) => s.id === sourceId) ?? null) : null;
+  // Until the user types an address, the box holds their own result on the chosen results page, or else the home
+  // page of their site: the tool is ready to run as it opens.
+  const homeUrl = useMemo(() => {
+    const domain = settings.myBrands.flatMap((brand) => brand.domains).find((d) => d.trim() !== '');
+    return domain ? (safeHttpUrl(`https://${domain.trim()}/`) ?? '') : '';
+  }, [settings]);
+  const ownUrl = source?.mine?.url ?? homeUrl;
+  useEffect(() => {
+    if (!addressTouched) setAddressText(ownUrl);
+  }, [ownUrl, addressTouched]);
+  // Without a page in the tab to name the keyword, the chosen results page does.
+  const sourceKeyword = source?.keyword ?? '';
+  useEffect(() => {
+    if (!keywordTouched && !pageTitle && sourceKeyword) setKeyword(sourceKeyword);
+  }, [sourceKeyword, pageTitle, keywordTouched]);
+
+  /** The page to check in "address" mode: a web address that is not a Google or AI page. null while there is none. */
+  const typed = mode === 'address' ? safeHttpUrl(addressText.trim()) : null;
+  const checkUrl = typed && !isNeverRequested(new URL(typed).hostname) ? typed : null;
+  const checkedUrl = mode === 'address' ? checkUrl : pageUrl;
 
   const comparisonUrls = useMemo(() => {
     const all = sourceKind === 'urls' ? parseUrlList(urlText) : (sources.find((s) => s.id === sourceId)?.urls ?? []);
     let ownHost = '';
     try {
-      ownHost = pageUrl ? stripWww(new URL(pageUrl).hostname) : '';
+      ownHost = checkedUrl ? stripWww(new URL(checkedUrl).hostname) : '';
     } catch {
       ownHost = '';
     }
     // The page's own site is not a competitor.
     return all.filter((u) => !ownHost || stripWww(new URL(u).hostname) !== ownHost).slice(0, MAX_COMPARISON_PAGES);
-  }, [sourceKind, urlText, sources, sourceId, pageUrl]);
+  }, [sourceKind, urlText, sources, sourceId, checkedUrl]);
+  /** Every page that will be requested: the comparison pages, and in "address" mode the page to check. */
+  const requestedUrls = useMemo(() => (checkUrl ? [checkUrl, ...comparisonUrls] : comparisonUrls), [checkUrl, comparisonUrls]);
 
-  const needsPage = mode !== 'pasted';
-  const canRun = comparisonUrls.length > 0 && (needsPage ? onPage : pasteText.trim().length > 0) && task.status !== 'running';
+  const needsPage = mode === 'page' || mode === 'selection';
+  const hasTarget = mode === 'pasted' ? pasteText.trim().length > 0 : mode === 'address' ? checkUrl !== null : onPage;
+  const canRun = comparisonUrls.length > 0 && hasTarget && task.status !== 'running';
 
   const compare = async () => {
     setDenied(false);
     setHighlight(null);
     setHighlightError(null);
     // First thing in the click handler: this is where Chrome shows its permission prompt.
-    if (!(await requestAccess(comparisonUrls))) {
+    if (!(await requestAccess(requestedUrls))) {
       setDenied(true);
       return;
     }
     void recordRun();
     await task.run(async ({ signal, progress }) => {
       let target: SentenceUnit[];
+      let checked = { url: mode === 'pasted' ? null : pageUrl, title: mode === 'pasted' ? 'Pasted text' : pageTitle };
+      let note: string | null = null;
       if (mode === 'pasted') {
         target = textSentences(pasteText);
+      } else if (mode === 'address') {
+        if (!checkUrl) throw new Error('Type the address of the page to check.');
+        progress(0, 0, 'Reading the page to check');
+        const [page] = await loadPages([checkUrl], { fetchPage, cache: pageCache }, { signal });
+        if (!page?.ok) throw new Error(`The page to check could not be read: ${page?.error ?? 'no answer'}. Check its address, or paste its text instead.`);
+        target = contentSentences({ blocks: page.blocks });
+        checked = { url: checkUrl, title: page.title || checkUrl };
+        // The address of the user's own result can be a guess from the line under its title. The user sees the
+        // address and chose to check it, so the page is checked; when it is called something else, that is said.
+        const own = source?.mine;
+        if (own?.guessed && urlKey(own.url) === urlKey(checkUrl) && !titlesAgree(own.title, page.titles && page.titles.length > 0 ? page.titles : [page.title])) {
+          note = `Google hides the address of your result. This address comes from the line under its title, and the page there is called “${cutText(page.title || checkUrl, 90)}”. If that is not the page you meant, type its address.`;
+        }
       } else {
         if (tabId === null) throw new Error('The page is not reachable. Analyze it again.');
         progress(0, 0, 'Reading this page');
@@ -202,7 +273,7 @@ export function NewOrNoiseTab() {
       progress(0, 0, 'Loading the on-device model');
       const { engine, fallbackReason } = await getEngine();
       const report = await classifySentences(target, pages, engine, { signal, onProgress: (done, total) => progress(done, total, 'Comparing sentences') });
-      return { report, digests, fallbackReason, keyword: keyword.trim(), pageUrl: mode === 'pasted' ? null : pageUrl, pageTitle: mode === 'pasted' ? 'Pasted text' : pageTitle, mode, at: Date.now() };
+      return { report, digests, fallbackReason, keyword: keyword.trim(), pageUrl: checked.url, pageTitle: checked.title, mode, at: Date.now(), note };
     });
   };
 
@@ -234,19 +305,39 @@ export function NewOrNoiseTab() {
     <>
       <Card title="What to check" testId="noise-form">
         <div className="row" role="radiogroup" aria-label="What to check">
-          {(
-            [
-              ['page', 'This page'],
-              ['selection', 'Selected text'],
-              ['pasted', 'Pasted text'],
-            ] as const
-          ).map(([value, label]) => (
+          {/* Only what can work here is offered: on a results page there is no page in the tab to check. */}
+          {(onPage || !accessReady ? (['page', 'selection', 'address', 'pasted'] as const) : (['address', 'pasted'] as const)).map((value) => (
             <label key={value} className="row small">
               <input type="radio" name="noise-mode" checked={mode === value} onChange={() => setMode(value)} data-testid={`noise-mode-${value}`} />
-              {label}
+              {MODE_LABELS[value]}
             </label>
           ))}
         </div>
+        {mode === 'address' && (
+          <Field
+            label="Address of the page to check"
+            hint={
+              source?.mine && checkUrl && urlKey(checkUrl) === urlKey(source.mine.url)
+                ? `Your result #${source.mine.position} on the chosen results page. Type another address to check another page.`
+                : homeUrl && checkUrl && urlKey(checkUrl) === urlKey(homeUrl)
+                  ? 'The home page of your site. Type another address to check another page.'
+                  : typed && !checkUrl
+                    ? 'A Google or AI page cannot be checked. Type the address of one of your own pages.'
+                    : 'One of your own pages. It is read by your browser and compared with the results below.'
+            }
+          >
+            <input
+              type="url"
+              value={addressText}
+              onChange={(e) => {
+                setAddressText(e.target.value);
+                setAddressTouched(true);
+              }}
+              placeholder="https://example.com/your-page"
+              data-testid="noise-address"
+            />
+          </Field>
+        )}
         {needsPage &&
           (onPage ? (
             <div className="small break">
@@ -320,7 +411,7 @@ export function NewOrNoiseTab() {
             </ul>
           </details>
         )}
-        <PermissionLine urls={comparisonUrls} purpose="to compare them with your page" />
+        <PermissionLine urls={requestedUrls} purpose={checkUrl ? 'to compare your page with them' : 'to compare them with your page'} />
         <div className="row">
           <Button variant="primary" disabled={!canRun} onClick={() => void compare()} data-testid="noise-run">
             Compare
@@ -352,6 +443,16 @@ export function NewOrNoiseTab() {
             </Notice>
           )}
           <Card title="Result" testId="noise-result">
+            {result.pageUrl && (
+              <div className="small break" data-testid="noise-checked">
+                Checked: <ExternalLink href={result.pageUrl}>{result.pageTitle || result.pageUrl}</ExternalLink>
+              </div>
+            )}
+            {result.note && (
+              <Notice tone="warn" testId="noise-guess-note">
+                {result.note}
+              </Notice>
+            )}
             <div className="grid2">
               <Stat label="Words that are only here" value={formatPercent(result.report.share.only)} sub={`${result.report.words.only} of ${result.report.totalWords} words`} testId="noise-only-share" />
               <Stat label="Compared with" value={`${result.report.pagesCompared} page${result.report.pagesCompared === 1 ? '' : 's'}`} sub={`“most” = ${result.report.mostNeeds} or more`} />
@@ -373,7 +474,8 @@ export function NewOrNoiseTab() {
               Method: {result.report.engineLabel}. A competing page “says” a sentence when its closest sentence scores {result.report.threshold} or higher (cosine similarity). Said by most: more than half of the pages. Said by some: at least one. Only here: none.
             </p>
             <div className="row">
-              {result.mode !== 'pasted' && (
+              {/* Highlights go on the page in the tab: there is none for a page that was read by its address. */}
+              {(result.mode === 'page' || result.mode === 'selection') && (
                 <Button small onClick={() => void toggleHighlight()} data-testid="noise-highlight">
                   {highlight ? 'Remove highlights' : 'Highlight on the page'}
                 </Button>
@@ -384,7 +486,7 @@ export function NewOrNoiseTab() {
                   method="sendToContentEditor"
                   label="Send to content editor"
                   subject={String(result.at)}
-                  payload={() => contentEditorPayload({ targetKeyword: result.keyword, source: result.mode, pageUrl: result.pageUrl, pageTitle: result.mode === 'pasted' ? '' : result.pageTitle, capturedAt: result.at, report: result.report })}
+                  payload={() => contentEditorPayload({ targetKeyword: result.keyword, source: result.mode === 'address' ? 'page' : result.mode, pageUrl: result.pageUrl, pageTitle: result.mode === 'pasted' ? '' : result.pageTitle, capturedAt: result.at, report: result.report })}
                   send={(payload, businessId, options) => connection.client!.sendToContentEditor(businessId, payload, options)}
                 />
               )}
@@ -457,7 +559,7 @@ export function NewOrNoiseTab() {
         </>
       )}
 
-      {!result && task.status === 'idle' && !needsPage && pasteText.trim() === '' && (
+      {!result && task.status === 'idle' && mode === 'pasted' && pasteText.trim() === '' && (
         <Card>
           <EmptyState title="Paste text to check">Paste a draft or a section of a page, choose the results to compare against, then compare.</EmptyState>
         </Card>

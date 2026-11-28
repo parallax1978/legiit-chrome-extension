@@ -126,6 +126,8 @@ Needs web.archive.org (not reachable from the build environment, so this was nev
 - [ ] The "Only here" sentences really are unique; "Said by most" really are common knowledge. Spot-check five.
 - [ ] "Highlight on the page" colours sentences without breaking the page's layout, menus or forms. "Remove highlights" restores it.
 - [ ] Pasted text and pasted URLs work.
+- [ ] On the Google results page itself (do not open your article): the tab offers "A page by its address" and "Pasted text" only. With your brand in Settings, the address box holds your own result on that page, or your home page when you have none. Compare works from there, and the result names the page that was checked.
+- [ ] In that mode, type a Google address: Compare stays off and the hint says why. Nothing is requested.
 - [ ] A page behind a login or a paywall among the comparison pages is reported as unreadable, the rest still compare.
 - [ ] A very long page (5,000+ words) finishes in reasonable time and the panel stays responsive (Cancel works).
 

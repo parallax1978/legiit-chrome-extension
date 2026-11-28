@@ -349,6 +349,9 @@ Found on 27 November 2026 on a second live results page the owner saved. With Go
 
 Limits that remain: a list-style result whose line shows no path (names, or a shortened line) cannot be scanned, and the tab says how many. A site that refuses automated requests answers the scan with an error, as before.
 
+**D-94 · New or Noise works from the results page.**
+The owner opened New or Noise on a Google results page on 28 November 2026 and found a greyed-out button: the tool only checked the page in the tab, and a results page is not one. The tool now has a fourth thing it can check, "a page by its address", and on a results page or an AI answer it offers only that and pasted text. The address box fills itself: with the user's own result on the chosen results page when a brand of theirs has one (its address when known, else the address under its title), or with the home page of their site. So Compare is ready as the tab opens. The page is requested like a comparison page, from its own site, after Chrome's prompt, which now names that site too; a Google or AI address is refused in the form and by the network guard. The result names the page that was checked. When the address of the user's own result was only spelled out under its title and the page there is called something else, the comparison still runs, since the user saw the address and chose it, and a note says so. Highlights are offered only when the checked page is the page in the tab. What is saved to Legiit calls such a check `page`, with the page's address: no change to the contract. The target keyword is taken from the chosen results page when no page in the tab names one.
+
 ---
 
 ## 3. Assumptions that a person must confirm
