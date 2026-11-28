@@ -257,9 +257,9 @@ const HIDDEN_LINKS_PAGE = `<!doctype html><html><body><div id="rcnt">
     <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESone" ping="/url?sa=t&amp;url=CAESone"><h3 class="LC20lb">10 Best Dentists in Austin (2026)</h3><span class="VuuXrf">Austin Health Guide</span><cite class="qLRx3b" role="text">https://www.austinhealthguide.example<span role="text"> › best › dentists</span></cite></a></div>
     <div class="VwiC3b"><span>Our editors compared forty practices.</span></div>
   </div></div></div>
-  <div class="ULSxyf"><div class="YzCcne"><div role="heading" aria-level="2">AI Overview</div><p>Several practices in Austin are well reviewed.</p>
+  <div class="ULSxyf"><div class="YzCcne"><div role="heading" aria-level="2"><span>You said: best dentist in austin</span></div><div role="heading" aria-level="2">AI Overview</div><h3 data-ignore-copy="">AI Mode replied:</h3><p>Several practices in Austin are <mark><span data-skip-highlighting="">[Highlight start]</span>well reviewed<span data-skip-highlighting="">[Highlight end]</span></mark>.</p>
     <a href="/goto?url=CAESsrc1" aria-label="Austin Health Guide"></a><a href="/goto?url=CAESsrc2" aria-label="Texas Local Picks"></a>
-    <div class="card"><a href="/goto?url=CAESsrc3" aria-label="Dentist Reviews You Can Trust | Dental Review Hub"></a><div><img data-src="https://encrypted-tbn2.gstatic.com/faviconV2?url=https://www.dentalreviewhub.example&amp;client=AIM&amp;size=16" src="data:image/gif;base64,R0lGODlhAQABAIAAAP"></div><span>Dental Review Hub</span></div>
+    <div class="card"><a href="/goto?url=CAESsrc3" aria-label="Dentist Reviews You Can Trust | Dental Review Hub"></a><div aria-hidden="true"><div><img data-src="https://encrypted-tbn2.gstatic.com/faviconV2?url=https://www.dentalreviewhub.example&amp;client=AIM&amp;size=16" src="data:image/gif;base64,R0lGODlhAQABAIAAAP"></div><span>Dental Review Hub</span></div></div>
     <ul><li><a href="/goto?url=CAESsrc3b"></a><div><img data-src="https://encrypted-tbn2.gstatic.com/faviconV2?url=https://www.dentalreviewhub.example&amp;size=32"><div>dentalreviewhub.example</div></div></li></ul>
     <ul><li><a href="https://www.google.com/search?q=dentists"></a><div><img data-src="https://encrypted-tbn2.gstatic.com/faviconV2?url=https://www.google.com&amp;size=32"><div>Google</div></div></li></ul>
     <!--TgQPHd|||[[&quot;id-1&quot;,null,null,0,&quot;https://encrypted-tbn1.gstatic.com/faviconV2?url\\u003dhttps://www.austinhealthguide.example\\u0026client\\u003dAIM&quot;,&quot;Austin Health Guide&quot;,3,&quot;https://www.austinhealthguide.example/best/dentists-in-austin/?utm_source\\u003dx&quot;,null,null]]-->
@@ -269,6 +269,9 @@ const HIDDEN_LINKS_PAGE = `<!doctype html><html><body><div id="rcnt">
   <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="b" data-ved="b">
     <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAEStwo"><h3 class="LC20lb">Top 5 Family Dentists Compared</h3><span class="VuuXrf">Lakeside Smiles</span><cite class="qLRx3b" role="text">https://www.lakesidesmiles.example<span role="text"> › ... › Family Dentistry</span></cite></a></div>
     <div class="VwiC3b"><span>Same-week appointments.</span></div>
+  </div></div></div>
+  <div class="MjjYud"><div><div id="k04FTb"><span role="heading" aria-level="2">Sponsored results</span>
+    <div data-text-ad="1"><a href="/goto?url=CAESad2" data-pcu="https://www.capitoldentalcare.example/book"><div role="heading" aria-level="3">Capitol Dental Care – Evening Appointments</div></a><span data-dtld="capitoldentalcare.example"></span></div>
   </div></div></div>
   <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="c" data-ved="c">
     <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESthree"><h3 class="LC20lb">Which dentist do you trust in Austin?</h3><span class="VuuXrf">Forum · r/Austin</span><cite class="qLRx3b" role="text">30+ comments · 1 year ago</cite></a></div>
@@ -290,7 +293,9 @@ const HIDDEN_LINKS_PAGE = `<!doctype html><html><body><div id="rcnt">
   <div class="MjjYud"><div class="A6K0A"><div class="wHYlTd tF2Cxc" data-hveid="g" data-ved="g">
     <div class="yuRUbf"><a jsname="UWckNb" class="zReHs" href="/goto?url=CAESseven"><h3 class="LC20lb">Find a dentist near you - Help</h3><cite class="qLRx3b" role="text">https://support.google.com<span role="text"> › answer</span></cite></a></div>
   </div></div></div>
-</div></div></div></div></div></body></html>`;
+</div></div></div></div></div>
+<div class="fbar"><div><div><a role="button" href="/search?q=best+dentist+in+austin"><div><span>Austin, Texas</span></div><div> - Based on your past activity</div></a></div><update-location>Update location</update-location></div></div>
+</body></html>`;
 
 describe('a results page on which Google hides where the links lead', () => {
   // The page of the tests below has: results with an address line, one with a "More results from" link, one with
@@ -326,6 +331,20 @@ describe('a results page on which Google hides where the links lead', () => {
     expect(serp.organic.some((o) => o.title.includes('Help'))).toBe(false);
     expect(serp.organic[0]!.snippet).toBe('Our editors compared forty practices.');
     expect(parseOrNull(SerpDataSchema, JSON.parse(JSON.stringify(serp)))).not.toBeNull();
+  });
+
+  it('reads what is around the results as the live page has it: ads between results, the place, the answer', () => {
+    const serp = read();
+    // A block of ads between the organic results has no id of its own: it is found by its ad units.
+    const ads = serp.blocks.filter((b) => b.type === 'ad');
+    expect(ads.map((b) => b.items.map((i) => i.domain))).toEqual([['brightpathdental.example'], ['capitoldentalcare.example']]);
+    // Its ad is no organic result.
+    expect(serp.organic.some((o) => o.title.includes('Evening Appointments'))).toBe(false);
+    // The place Google used, from the foot of the page.
+    expect(serp.locationText).toBe('Austin, Texas');
+    // The wording of the answer: without what is there for screen readers only, and without the list of its
+    // sources, which shows each source by the name of its site.
+    expect(serp.aiAnswer?.text).toBe('Several practices in Austin are well reviewed.');
   });
 
   it('reads the sources of the AI answer from the data the page keeps for it', () => {
@@ -383,5 +402,38 @@ describe('the full results page as Google serves it when it hides the links', ()
     expect(items('forum').map((i) => [i.title, i.url, i.domain])).toEqual(
       shown.blocks.find((b) => b.type === 'forum')!.items.map((i, n) => (n === 0 ? [i.title, 'https://www.reddit.com/', 'reddit.com'] : [i.title, null, null])),
     );
+  });
+});
+
+describe('AI Mode as the live page builds a turn', () => {
+  // The markers are the ones Google uses on the live page (November 2026): a turn, the heading that repeats the
+  // question for screen readers, and the answer, whose marker is a list ("aimfl,mfl"). The content is invented.
+  const html = `<!doctype html><html><body><div id="center_col">
+    <div class="CKgc1d" data-scope-id="turn">
+      <div><span role="heading" aria-level="2"><span>You said: who is the best dentist in austin</span>who is the best dentist in austin</span></div>
+      <div data-subtree="aimc"><div>
+        <h3 data-ignore-copy="">AI Mode replied:</h3>
+        <div data-subtree="aimfl,mfl">
+          <p>Lakeside Smiles is <mark><span data-skip-highlighting="">[Highlight start]</span>often recommended<span data-skip-highlighting="">[Highlight end]</span></mark> for families.</p>
+          <ul><li>Capitol Dental Care is close to downtown.</li></ul>
+          <ul><li><a href="/goto?url=CAESm1"></a><div><img data-src="https://encrypted-tbn1.gstatic.com/faviconV2?url=https://www.austinhealthguide.example&amp;size=32"><div>austinhealthguide.example</div></div></li></ul>
+          <!--TgQPHd|||[[&quot;id-9&quot;,null,null,0,&quot;https://encrypted-tbn2.gstatic.com/faviconV2?url\\u003dhttps://www.texaslocalpicks.example&quot;,&quot;Texas Local Picks&quot;,2,&quot;https://www.texaslocalpicks.example/austin/dentists&quot;,null,null]]-->
+        </div>
+      </div></div>
+    </div>
+  </div></body></html>`;
+  const url = 'https://www.google.com/search?q=who+is+the+best+dentist+in+austin&udm=50';
+
+  it('reads the question, the wording of the answer and its sources', () => {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const serp = parseSerp(doc, getPack('google'), { ...serpEnv(doc, url), rectOf: () => null, isVisible: () => true });
+    expect(serp.mode).toBe('ai-mode');
+    expect(serp.aiAnswer).toMatchObject({ site: 'google-ai-mode', recognised: true, question: 'who is the best dentist in austin' });
+    expect(serp.aiAnswer?.text).toBe('Lakeside Smiles is often recommended for families.\nCapitol Dental Care is close to downtown.');
+    expect(serp.aiAnswer?.citations).toEqual([
+      { url: 'https://www.texaslocalpicks.example/austin/dentists', domain: 'texaslocalpicks.example', title: 'Texas Local Picks' },
+      { url: 'https://www.austinhealthguide.example/', domain: 'austinhealthguide.example', title: 'austinhealthguide.example', address: 'site' },
+    ]);
+    expect(parseOrNull(SerpDataSchema, JSON.parse(JSON.stringify(serp)))).not.toBeNull();
   });
 });

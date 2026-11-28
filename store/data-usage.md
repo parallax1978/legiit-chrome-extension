@@ -14,7 +14,7 @@ Two things to know before filling it in:
 | Text, links and layout of Google results pages the user opens | the page, read by the content script | Snapshots (keyword, time, viewport, the location text Google prints on the page, result positions) in IndexedDB, when the panel is open or the user presses Save | Only if the user is connected to Legiit and confirms "Save to Command Center" |
 | The latest answer and cited links on an AI site | the page, when the user opens the panel there | No | Only inside a gap list the user confirms saving to Legiit |
 | Text and links of a page the user invoked the extension on | the page | Briefs in IndexedDB | Only inside a brief or a New or Noise result the user confirms sending to Legiit |
-| Pages the user chose to scan or compare | fetched by the browser after Chrome's permission prompt | A digest (title, text blocks, links) cached in IndexedDB | No |
+| Pages the user chose to scan, compare or brief | fetched by the browser after Chrome's permission prompt | A digest (title, text blocks, links) cached in IndexedDB | No |
 | Wayback Machine captures | web.archive.org | Extracted facts cached in IndexedDB | The address being looked up is sent to web.archive.org |
 | Tracked brands and competitors, agency name and logo | typed by the user, or pre-filled from their Legiit account | `chrome.storage.local` | No (they came from, or go to, the user's own Legiit account only through a confirmed save) |
 | Legiit API token | pasted by the user | `chrome.storage.local`, closed to content scripts | Sent only to the Legiit API, as the request's authorisation |

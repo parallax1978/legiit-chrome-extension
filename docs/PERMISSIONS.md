@@ -91,7 +91,8 @@ Listed as optional so that a specific site can be requested at run time. Nothing
 
 - Requested in `requestAccess()` (`src/net/permissions.ts`), always as specific sites (`*://*.example.com/*`), always from a click, always after the UI named the sites and the reason (`PermissionLine`):
   - Why Not Me → "Scan sources" (`src/ui/tabs/WhyNotMeTab.tsx`)
-  - New or Noise → "Compare" (`src/ui/tabs/NewOrNoiseTab.tsx`)
+  - New or Noise → "Compare" (`src/ui/tabs/NewOrNoiseTab.tsx`): the comparison pages, and the page to check when it is named by its address
+  - Instant Brief → "Build brief" for a website named by its address (`src/ui/tabs/InstantBriefTab.tsx`): that one site. With the website in the tab, the brief is read through the tab and nothing is requested.
   - "Always allow on example.com" for the site in the current tab (`KeepAccess`)
 - Checked before every fetch in `guardedFetch()` (`chrome.permissions.contains`), and again for the final address after a redirect.
 - Listed and removable in Settings → Privacy and data (`grantedSites()`, `revokeSites()`).

@@ -118,4 +118,24 @@ test.describe('Rewind', () => {
     // Nothing is looked up until the user asks.
     expect(lens.extensionRequests()).toEqual([]);
   });
+
+  test('never starts from a results page: its address is not offered to the Wayback Machine', async ({ lens }) => {
+    // Without a brand of the user's own, the box is empty on a results page, and nothing can be looked up.
+    const serp = await lens.open(scenario.urls.serpPlain!);
+    const panel = await lens.openPanel(serp.tabId, 'rewind');
+    await expect(panel.getByTestId('rewind-url')).toHaveValue('');
+    await expect(panel.getByTestId('rewind-load')).toBeDisabled();
+    // Typed by hand, a Google address is refused with a reason.
+    await panel.getByTestId('rewind-url').fill(scenario.urls.serpPlain!);
+    await expect(panel.getByTestId('rewind-form')).toContainText('A Google or AI page has no history to read');
+    await expect(panel.getByTestId('rewind-load')).toBeDisabled();
+    await panel.close();
+
+    // With a brand of the user's own, the box starts with the home page of their site.
+    await lens.trackScenarioBrands();
+    const again = await lens.openPanel(serp.tabId, 'rewind');
+    await expect(again.getByTestId('rewind-url')).toHaveValue('https://brightpathdental.example/');
+    await expect(again.getByTestId('rewind-load')).toBeEnabled();
+    expect(lens.extensionRequests()).toEqual([]);
+  });
 });

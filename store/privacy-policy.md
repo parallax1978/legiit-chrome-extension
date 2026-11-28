@@ -22,7 +22,7 @@ This policy describes what the extension reads, what it stores, and what leaves 
 
 **Other pages, only when you ask.** On any other site the extension has no access until you click its toolbar icon, use its keyboard shortcut, or choose it from the right-click menu on that page. It then reads that page's text, links, headings and styling. Access ends when the tab leaves that site.
 
-**Pages you choose to scan or compare.** Two features read further pages: "Scan sources" reads pages cited by a results page or AI answer, and "New or Noise" reads pages that compete with yours. Before either runs, Chrome asks you to allow each site by name. Your browser fetches those pages without sending cookies. "Instant Brief" reads up to eight pages of the business website you are on.
+**Pages you choose to scan, compare or brief.** Three features read further pages: "Scan sources" reads pages cited by a results page or AI answer, "New or Noise" reads pages that compete with yours (and your own page, when you name it by its address), and "Instant Brief" reads up to eight pages of a business website you name by its address. Before any of them runs, Chrome asks you to allow each site by name. Your browser fetches those pages without sending cookies. When the business website is open in your tab, "Instant Brief" reads its pages through that tab instead.
 
 **Archived copies of a page.** When you look up a page's history, the extension requests archived copies of that page from the Internet Archive (web.archive.org).
 

@@ -1,6 +1,7 @@
 /** D. New or Noise: which sentences of a page say something the competing pages do not. */
 import { SUMMARY_INSTRUCTIONS } from '@/ai/instructions';
 import type { BrandMatcher } from '@/brands/matcher';
+import { ownHomeUrl } from '@/brands/own-site';
 import { useEffect, useMemo, useState } from 'react';
 import type { PageDigest } from '@/extract/digest';
 import { parseHtml } from '@/extract/html';
@@ -183,10 +184,7 @@ export function NewOrNoiseTab() {
   const source = sourceKind === 'results' ? (sources.find((s) => s.id === sourceId) ?? null) : null;
   // Until the user types an address, the box holds their own result on the chosen results page, or else the home
   // page of their site: the tool is ready to run as it opens.
-  const homeUrl = useMemo(() => {
-    const domain = settings.myBrands.flatMap((brand) => brand.domains).find((d) => d.trim() !== '');
-    return domain ? (safeHttpUrl(`https://${domain.trim()}/`) ?? '') : '';
-  }, [settings]);
+  const homeUrl = useMemo(() => ownHomeUrl(settings.myBrands), [settings]);
   const ownUrl = source?.mine?.url ?? homeUrl;
   useEffect(() => {
     if (!addressTouched) setAddressText(ownUrl);
@@ -378,7 +376,15 @@ export function NewOrNoiseTab() {
         {sourceKind === 'results' ? (
           sources.length === 0 ? (
             <Notice testId="noise-no-results">
-              Open a Google results page for your keyword in another tab, then{' '}
+              {/* A link the user clicks: the search opens in their own tab, like any search they type. */}
+              {keyword.trim() ? (
+                <>
+                  No Google results page is open for this keyword. <ExternalLink href={`https://www.google.com/search?q=${encodeURIComponent(keyword.trim())}`}>Search Google for “{cutText(keyword.trim(), 60)}”</ExternalLink> in a new tab, come back to this
+                  tab, then{' '}
+                </>
+              ) : (
+                <>Type your keyword above, open a Google results page for it in another tab, then </>
+              )}
               <Button variant="link" onClick={() => void loadSources()}>
                 look again
               </Button>

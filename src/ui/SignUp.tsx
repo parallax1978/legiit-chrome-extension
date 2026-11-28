@@ -107,6 +107,9 @@ export function VerifyCode() {
         </button>
       </div>
       {resent && <p className="small muted" data-testid="verify-resent">A new code is on its way.</p>}
+      <p className="small muted" data-testid="verify-help">
+        No email after a minute? Look in your spam folder, or send a new code. The tools work in the meantime.
+      </p>
     </form>
   );
 }

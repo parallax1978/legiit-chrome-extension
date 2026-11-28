@@ -47,6 +47,8 @@ export interface CollectOptions {
    * footnote numbers are not part of the answer's wording.
    */
   skipLinkCards?: boolean;
+  /** Skip every element this says yes to, with all that is in it. */
+  skip?: (el: Element) => boolean;
 }
 
 function isLinkCard(el: Element): boolean {
@@ -82,6 +84,7 @@ export function collectBlocks(root: Node, options: CollectOptions = { skipChrome
     if (options.skipChrome && CHROME_TAGS.has(tag)) return;
     if (el.getAttribute('aria-hidden') === 'true' || el.hasAttribute('hidden')) return;
     if (options.skipLinkCards && isLinkCard(el)) return;
+    if (options.skip?.(el)) return;
     const isBlock = BLOCK.has(tag);
     if (!isBlock) {
       for (const child of Array.from(el.childNodes)) visit(child);
@@ -105,8 +108,8 @@ export function collectBlocks(root: Node, options: CollectOptions = { skipChrome
 }
 
 /** Text of an element with one line per block, for answer and overview bodies. */
-export function blockText(root: Node, maxBlocks = 400, skipLinkCards = false): string {
-  return collectBlocks(root, { skipChrome: false, maxBlocks, skipLinkCards })
+export function blockText(root: Node, maxBlocks = 400, skipLinkCards = false, skip?: (el: Element) => boolean): string {
+  return collectBlocks(root, { skipChrome: false, maxBlocks, skipLinkCards, skip })
     .map((b) => b.text)
     .join('\n');
 }

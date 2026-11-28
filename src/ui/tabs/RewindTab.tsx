@@ -7,9 +7,10 @@ import { DEFAULT_SAMPLE_SIZE, loadCaptureFacts, loadCaptureIndex, sampleCaptures
 import { recordRun } from '@/features/shared/gating';
 import type { IndustryPulseEvent } from '@/legiit/types';
 import { safeHttpUrl } from '@/lib/sanitize';
-import { guardedFetch } from '@/net/guarded-fetch';
+import { ownHomeUrl } from '@/brands/own-site';
+import { guardedFetch, isSourcePage } from '@/net/guarded-fetch';
 import { rewindCache } from '@/storage/db';
-import { useConnection, useTarget, useTask } from '../hooks';
+import { useConnection, useSettings, useTarget, useTask } from '../hooks';
 import { Button, Card, Chip, EmptyState, ExternalLink, Field, Notice, ProgressBar } from '../kit';
 import { AccessCard, Summary } from '../shared';
 
@@ -160,12 +161,19 @@ export function RewindTab() {
   const [pulse, setPulse] = useState<IndustryPulseEvent[]>([]);
   const task = useTask<RewindResult>();
 
-  const pageUrl = access.status === 'ready' ? access.ping.url : null;
+  const { settings } = useSettings();
+  const tabUrl = access.status === 'ready' ? access.ping.url : null;
+  // A results page or an AI answer has no history worth reading, and its address holds what the user searched for:
+  // it is never offered to the Wayback Machine. There the box starts with the home page of the user's own site.
+  const onSource = tabUrl !== null && isSourcePage(tabUrl);
+  const pageUrl = onSource ? ownHomeUrl(settings.myBrands) || null : tabUrl;
   useEffect(() => {
     // Follow the tab until the user has loaded or typed something else.
-    if (pageUrl && task.status === 'idle') setUrl(pageUrl);
+    if (task.status !== 'idle') return;
+    if (pageUrl) setUrl(pageUrl);
+    else if (onSource) setUrl((current) => (isSourcePage(current) ? '' : current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageUrl]);
+  }, [pageUrl, onSource]);
 
   const pulseClient = can('getIndustryPulse') ? connection.client : null;
   useEffect(() => {
@@ -185,7 +193,7 @@ export function RewindTab() {
 
   const lookUp = (forceRefresh = false) => {
     const target = safeHttpUrl(url.trim());
-    if (!target) return;
+    if (!target || isSourcePage(target)) return;
     void recordRun();
     void task.run(async ({ signal, progress }) => {
       progress(0, 0, 'Asking the Wayback Machine');
@@ -204,12 +212,22 @@ export function RewindTab() {
     return Number.isNaN(date) ? result.timeline : changesBefore(result.timeline, date, filterDays);
   }, [result, filterDate, filterDays]);
   const explanation = result ? explainTimeline(result.timeline, result.captures.length) : [];
-  const validUrl = safeHttpUrl(url.trim()) !== null;
+  const typedSource = isSourcePage(url.trim());
+  const validUrl = safeHttpUrl(url.trim()) !== null && !typedSource;
 
   return (
     <>
       <Card title="Page history" testId="rewind-form">
-        <Field label="Page address">
+        <Field
+          label="Page address"
+          hint={
+            typedSource
+              ? 'A Google or AI page has no history to read. Type the address of a page.'
+              : onSource
+                ? 'Any page: yours or a competitor’s. Type its address to see how it changed.'
+                : undefined
+          }
+        >
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/page" data-testid="rewind-url" />
         </Field>
         <div className="row">

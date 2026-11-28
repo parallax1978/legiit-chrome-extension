@@ -595,13 +595,24 @@ function itemsFor(block: FoundBlock, pack: SelectorPack, pageUrl: string, serpHo
   }
 }
 
-const ANSWER_CHROME = /^(show (more|less)|learn more|generative ai is experimental\.?.*|ai responses may include mistakes\.?.*|feedback|share|export)$/i;
+const ANSWER_CHROME =
+  /^(show (more|less)|learn more|generative ai is experimental\.?.*|ai responses may include mistakes\.?.*|feedback|share|export|ai overview|ai mode replied:?|you said:.*|my ad center|why this ad\??)$/i;
+/**
+ * Words that are on the page for screen readers only and are no part of the answer: the markers around a
+ * highlighted passage ("[Highlight start]") and the labels of a turn ("AI Mode replied:"). Google marks both.
+ */
+const notAnswerWording = (el: Element): boolean => el.hasAttribute('data-skip-highlighting') || el.hasAttribute('data-ignore-copy');
 
-/** Answer wording only: no label line ("AI Overview"), buttons, source cards or disclaimers. */
+/** A line that is only the name of a site ("example.com", or "Google"): an entry of the list of sources, not wording. */
+const SITE_NAME_LINE = /^(?:(?:[\p{L}\p{N}-]+\.)+[\p{L}]{2,24}|google)$/iu;
+
+/** Answer wording only: no label line ("AI Overview"), buttons, source cards, disclaimers or screen-reader labels. */
 function answerText(el: Element, max: number): string {
-  const lines = blockText(el, 400, true)
+  const lines = blockText(el, 400, true, notAnswerWording)
     .split('\n')
-    .filter((line) => !ANSWER_CHROME.test(line.trim()));
+    .map((line) => line.replace(/\s*\[Highlight (start|end)\]\s*/gi, ' ').trim())
+    // A line without a letter or a digit is what was left around a button: a lone full stop.
+    .filter((line) => /[\p{L}\p{N}]/u.test(line) && !ANSWER_CHROME.test(line) && !SITE_NAME_LINE.test(line));
   // The first line of an AI Overview is its label; a real first sentence is longer than that.
   if (lines.length > 1 && (lines[0] ?? '').length <= 40 && !/[.!?]$/.test(lines[0] ?? '')) lines.shift();
   return cleanMultiline(lines.join('\n'), max);
@@ -615,6 +626,16 @@ function toCitations(items: readonly SerpItem[]): Citation[] {
   return out;
 }
 
+/**
+ * The question of a turn as the user typed it. On the page it stands twice in one heading, once for screen readers
+ * with a label ("You said: best dentist") and once to be seen: "You said: best dentistbest dentist".
+ */
+function spokenQuestion(text: string): string {
+  const said = text.replace(/^you said:\s*/i, '').trim();
+  const half = said.length / 2;
+  return Number.isInteger(half) && half > 0 && said.slice(0, half) === said.slice(half) ? said.slice(0, half).trim() : said;
+}
+
 function readAiMode(doc: Document, pack: SelectorPack, env: ParseEnv, serpHost: string, keyword: string): AnswerData {
   const answers = resolve(doc, pack, 'aiModeAnswer').elements;
   const latest = answers[answers.length - 1] ?? null;
@@ -624,7 +645,7 @@ function readAiMode(doc: Document, pack: SelectorPack, env: ParseEnv, serpHost: 
     for (const q of questions) {
       // Last question that comes before the latest answer in document order.
       if (q.compareDocumentPosition(latest) & 4 /* DOCUMENT_POSITION_FOLLOWING */) {
-        question = cleanText(q.textContent ?? '', 2000) || question;
+        question = spokenQuestion(cleanText(q.textContent ?? '', 2000)) || question;
       }
     }
   }

@@ -111,6 +111,7 @@ On a results page where you know roughly what to expect:
 Needs web.archive.org (not reachable from the build environment, so this was never run live):
 
 - [ ] Look up a well-archived page (a big site's product page). Captures load, at most 24 are read, a timeline appears.
+- [ ] Open Rewind on a Google results page: the address box holds your home page (or is empty without a brand in Settings), never the Google address. Typing a Google address switches the button off and says why.
 - [ ] Pick one change and verify it by opening "View capture" for the two dates.
 - [ ] "Compare two dates" shows field-by-field differences.
 - [ ] "Changes in the 30 days before <date>" filters.
@@ -126,12 +127,15 @@ Needs web.archive.org (not reachable from the build environment, so this was nev
 - [ ] The "Only here" sentences really are unique; "Said by most" really are common knowledge. Spot-check five.
 - [ ] "Highlight on the page" colours sentences without breaking the page's layout, menus or forms. "Remove highlights" restores it.
 - [ ] Pasted text and pasted URLs work.
+- [ ] On your article with no Google results page open: the notice offers "Search Google for …". The link opens the search in a new tab; back on the article, the results page is offered.
 - [ ] On the Google results page itself (do not open your article): the tab offers "A page by its address" and "Pasted text" only. With your brand in Settings, the address box holds your own result on that page, or your home page when you have none. Compare works from there, and the result names the page that was checked.
 - [ ] In that mode, type a Google address: Compare stays off and the hint says why. Nothing is requested.
 - [ ] A page behind a login or a paywall among the comparison pages is reported as unreadable, the rest still compare.
 - [ ] A very long page (5,000+ words) finishes in reasonable time and the panel stays responsive (Cancel works).
 
 ## 9. Instant Brief
+
+- [ ] On a Google results page (no business website in the tab): the tab shows a box for the website's address, filled with your own site when you have a brand in Settings. Type a client's address, click "Build brief", approve Chrome's prompt for that one site: the brief is built. It has no colours or logo (those need the site open in a tab).
 
 On two or three real small-business sites:
 

@@ -75,6 +75,12 @@ export function isNeverRequested(host: string): boolean {
   return isGoogleNavHost(h) || isGoogleInfraHost(h) || isGoogleSearchHost(h) || aiSiteForHost(h) !== null;
 }
 
+/** True for the address of such a page: a source the extension reads on screen, never a page to look up or to check. */
+export function isSourcePage(address: string): boolean {
+  const safe = safeHttpUrl(address.trim());
+  return safe !== null && isNeverRequested(new URL(safe).hostname);
+}
+
 /** Throws unless `url` is allowed for `purpose`. Exported for tests. */
 export function assertAllowed(url: string, purpose: FetchPurpose): URL {
   const safe = safeHttpUrl(url);

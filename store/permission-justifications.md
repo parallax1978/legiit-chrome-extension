@@ -59,7 +59,7 @@ The extension shows whether the user's brand and their competitors are mentioned
 ## Optional host permissions: *://*/*
 
 ```
-Never granted at install. Two features read pages the user chooses: "Scan sources" (the pages a results page or AI answer cites) and "New or Noise" (the pages competing with the user's article). These sites are only known at run time, so the extension asks Chrome for those specific sites, by name, when the user starts the scan, after telling them which sites and why. The user can decline, and can remove any granted site in the extension's settings. The wildcard itself is never requested.
+Never granted at install. Three features read pages the user chooses: "Scan sources" (the pages a results page or AI answer cites), "New or Noise" (the pages competing with the user's article, and that article when the user names it by its address) and "Instant Brief" (up to eight pages of a business website the user names by its address). These sites are only known at run time, so the extension asks Chrome for those specific sites, by name, when the user starts the scan, after telling them which sites and why. The user can decline, and can remove any granted site in the extension's settings. The wildcard itself is never requested.
 ```
 
 ## Remote code

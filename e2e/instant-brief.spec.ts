@@ -149,10 +149,14 @@ test.describe('Instant Brief', () => {
     await panel.getByTestId('brief-build').click();
     await expect(panel.getByTestId('brief-saved')).toContainText('BrightPath Dental');
 
-    // On a Google results page there is no business site to read.
+    // On a Google results page there is no business site in the tab: the tab asks for the address of one.
     const serp = await lens.open(scenario.urls.serpPlain!);
     const other = await lens.openPanel(serp.tabId, 'brief');
-    await expect(other.getByTestId('brief-wrong-page')).toBeVisible();
+    await expect(other.getByTestId('brief-address')).toHaveValue('');
+    await expect(other.getByTestId('brief-build')).toBeDisabled();
+    // A Google page is no business website, and is never requested.
+    await other.getByTestId('brief-address').fill(scenario.urls.serpPlain!);
+    await expect(other.getByTestId('brief-form')).toContainText('A Google or AI page is not a business website');
     await expect(other.getByTestId('brief-build')).toBeDisabled();
     // The saved brief is still listed there, and a missing brief id on the print page is handled.
     await expect(other.getByTestId('brief-saved')).toContainText('BrightPath Dental');
@@ -173,5 +177,36 @@ test.describe('Instant Brief', () => {
     await expect(panel.getByTestId('brief-customers').locator('h3')).toHaveCount(3);
     // The only console line is Chrome's own note about that 404, in the page's console. Nothing from the extension.
     expect(lens.errors).toEqual(['[console] https://plain.example/hello: Failed to load resource: the server responded with a status of 404 (Not Found)']);
+  });
+});
+
+test.describe('Instant Brief by address (site granted)', () => {
+  test.use({ grantFixtureSites: true });
+
+  test('builds a brief for a website named by its address, from a results page', async ({ lens }) => {
+    await lens.trackScenarioBrands();
+    const serp = await lens.open(scenario.urls.serpPlain!);
+    const panel = await lens.openPanel(serp.tabId, 'brief');
+
+    // No business website is in the tab. The box starts with the user's own site; any address can be typed.
+    await expect(panel.getByTestId('brief-address')).toHaveValue('https://brightpathdental.example/');
+    await panel.getByTestId('brief-address').fill(SITE);
+    await expect(panel.getByTestId('permission-line')).toContainText('brightpathdental.example');
+    await expect(panel.getByTestId('permission-line')).toContainText('for this brief');
+    await panel.getByTestId('brief-build').click();
+
+    // The same brief as when the site is the tab: the same pages are read.
+    const result = panel.getByTestId('brief-result');
+    await expect(result).toContainText('BrightPath Dental');
+    await expect(result).toContainText('7 pages read');
+    await expect(panel.getByTestId('brief-business')).toContainText('(512) 555-0142');
+    await expect(panel.getByTestId('brief-offer')).toContainText('Teeth whitening');
+    await expect(panel.getByTestId('brief-saved')).toContainText('BrightPath Dental');
+
+    // Every request went to that one site, without cookies. Nothing was asked of Google.
+    const fetched = lens.extensionRequests();
+    expect(fetched.length).toBeGreaterThan(3);
+    expect([...new Set(fetched.map((r) => new URL(r.url).hostname))]).toEqual(['www.brightpathdental.example']);
+    expect(lens.errors).toEqual([]);
   });
 });
